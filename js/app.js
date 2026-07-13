@@ -333,7 +333,7 @@ class FormApp {
     if (!navContent) return;
 
     const backBtn = showBack
-      ? `<button class="nav-pill-btn" onclick="app.showMenu()" aria-label="Volver al menú" title="Volver al menú">${Icons.svg('chevronLeft', { size: 18 })}</button>`
+      ? `<button class="nav-pill-btn" onclick="app.showMenu()" aria-label="Volver al menú" title="Volver al menú">${Icons.svg('home', { size: 18 })}</button>`
       : '';
 
     navContent.innerHTML = `

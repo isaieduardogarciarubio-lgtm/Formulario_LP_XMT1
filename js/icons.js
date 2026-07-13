@@ -7,6 +7,7 @@ const Icons = (() => {
   const PATHS = {
     // Marca / navegación
     grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    home: '<path d="M3 10v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V10"/><path d="M3 10l9-7 9 7"/><path d="M10 15h4v6h-4z"/>',
     chevronLeft: '<path d="M15 6l-6 6 6 6"/>',
     chevronRight: '<path d="M9 6l6 6-6 6"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
