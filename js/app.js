@@ -332,16 +332,11 @@ class FormApp {
     const navContent = document.getElementById('navbar_content');
     if (!navContent) return;
 
-    const backBtn = showBack
-      ? `<button class="nav-pill-btn" onclick="app.showMenu()" aria-label="Volver al menú" title="Volver al menú">${Icons.svg('home', { size: 18 })}</button>`
-      : '';
-
-    navContent.innerHTML = `
-      <div class="nav-pill-group">
-        ${backBtn}
-        <span class="nav-pill-label">${title}</span>
-      </div>
-    `;
+    if (showBack) {
+      navContent.innerHTML = `<button class="nav-pill-btn" onclick="app.showMenu()" aria-label="Volver al menú" title="Volver al menú">${Icons.svg('home', { size: 18 })}</button>`;
+    } else {
+      navContent.innerHTML = '';
+    }
   }
 }
 
