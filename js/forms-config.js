@@ -7,7 +7,7 @@ const FORMS_CONFIG = {
     id: 'contact_form',
     title: 'Formulario de Contacto',
     description: 'Recopila información de contacto de clientes',
-    icon: '📋',
+    icon: 'clipboard',
     fields: [
       {
         id: 'name',
@@ -73,7 +73,7 @@ const FORMS_CONFIG = {
     id: 'survey_form',
     title: 'Encuesta de Satisfacción',
     description: 'Evalúa la satisfacción del cliente con nuestros servicios',
-    icon: '⭐',
+    icon: 'star',
     fields: [
       {
         id: 'respondent_name',

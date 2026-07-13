@@ -9,8 +9,14 @@
   <body>
     <div class="app-container">
       <nav class="navbar">
-        <div id="navbar_content">
-          <span class="navbar-brand">📊 Generador de CSV</span>
+        <div class="navbar-inner">
+          <div class="navbar-brand">
+            <svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            </svg>
+            <span>Generador de CSV</span>
+          </div>
+          <div id="navbar_content" class="navbar-content"></div>
         </div>
       </nav>
 
@@ -18,6 +24,7 @@
     </div>
 
     <!-- Scripts -->
+    <script src="js/icons.js"></script>
     <script src="js/forms-config.js"></script>
     <script src="js/csv-engine.js"></script>
     <script src="js/form-engine.js"></script>

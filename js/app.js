@@ -12,7 +12,6 @@ class FormApp {
   }
 
   init() {
-    this.attachMenuListeners();
     this.showMenu();
   }
 
@@ -28,8 +27,8 @@ class FormApp {
     content.className = 'content';
     content.innerHTML = `
       <div class="text-center">
-        <h2 style="margin-bottom: 2rem; color: var(--color-primary);">Generador de CSV</h2>
-        <p style="margin-bottom: 2rem; color: var(--color-text-secondary);">
+        <h2 style="margin-bottom: 0.75rem; color: var(--color-primary);">Generador de CSV</h2>
+        <p style="margin-bottom: 1rem; color: var(--color-text-secondary);">
           Selecciona un formulario para comenzar
         </p>
       </div>
@@ -43,7 +42,8 @@ class FormApp {
       const card = document.createElement('div');
       card.className = 'form-card';
       card.innerHTML = `
-        <div class="form-card-title">${form.icon} ${form.title}</div>
+        <div class="form-card-icon">${Icons.svg(form.icon, { size: 22 })}</div>
+        <div class="form-card-title">${form.title}</div>
         <div class="form-card-desc">${form.description}</div>
         <div class="form-card-meta">${form.fields.length} campos</div>
       `;
@@ -54,7 +54,7 @@ class FormApp {
     content.appendChild(grid);
     app.appendChild(content);
 
-    this.updateNavbar('Menú Principal');
+    this.updateNavbar('Menú Principal', false);
   }
 
   /**
@@ -63,7 +63,7 @@ class FormApp {
   showFormPage(formId) {
     const formConfig = getFormConfig(formId);
     if (!formConfig) {
-      alert('Formulario no encontrado');
+      this.showAlert('Formulario no encontrado', 'error');
       return;
     }
 
@@ -81,10 +81,12 @@ class FormApp {
     const formSection = document.createElement('div');
     formSection.className = 'card';
     formSection.style.maxWidth = '600px';
+    formSection.style.margin = '0 auto var(--spacing-md)';
 
     const formTitle = document.createElement('h3');
     formTitle.style.marginBottom = 'var(--spacing-lg)';
-    formTitle.innerHTML = `${formConfig.icon} ${formConfig.title}`;
+    formTitle.innerHTML = `${Icons.svg(formConfig.icon, { size: 20, className: 'text-primary' })} <span>${formConfig.title}</span>`;
+    formTitle.querySelector('.icon').style.color = 'var(--color-primary)';
     formSection.appendChild(formTitle);
 
     const formContainer = document.createElement('div');
@@ -93,13 +95,12 @@ class FormApp {
 
     // Botones
     const buttonGroup = document.createElement('div');
-    buttonGroup.style.display = 'flex';
-    buttonGroup.style.gap = 'var(--spacing-md)';
+    buttonGroup.className = 'flex-row';
     buttonGroup.style.marginTop = 'var(--spacing-lg)';
 
     const submitBtn = document.createElement('button');
     submitBtn.className = 'btn btn-primary btn-block';
-    submitBtn.textContent = 'Agregar Registro';
+    submitBtn.innerHTML = `${Icons.svg('plus', { size: 18 })}<span>Agregar Registro</span>`;
     submitBtn.addEventListener('click', (e) => {
       e.preventDefault();
       this.addRecord();
@@ -107,7 +108,7 @@ class FormApp {
 
     const resetBtn = document.createElement('button');
     resetBtn.className = 'btn btn-secondary';
-    resetBtn.textContent = 'Limpiar Formulario';
+    resetBtn.innerHTML = `${Icons.svg('refresh', { size: 18 })}<span>Limpiar</span>`;
     resetBtn.addEventListener('click', (e) => {
       e.preventDefault();
       this.currentFormEngine.resetForm();
@@ -127,26 +128,29 @@ class FormApp {
 
       const recordsTitle = document.createElement('h3');
       recordsTitle.style.marginBottom = 'var(--spacing-md)';
-      recordsTitle.textContent = `Registros Acumulados (${this.records.length})`;
+      recordsTitle.innerHTML = `${Icons.svg('clipboard', { size: 18 })} <span>Registros Acumulados</span> <span class="form-card-meta" style="margin-left:auto">${this.records.length}</span>`;
+      recordsTitle.style.display = 'flex';
+      recordsTitle.style.alignItems = 'center';
       recordsSection.appendChild(recordsTitle);
 
-      const table = this.renderRecordsTable();
-      recordsSection.appendChild(table);
+      const tableWrap = document.createElement('div');
+      tableWrap.className = 'records-table-wrap';
+      tableWrap.appendChild(this.renderRecordsTable());
+      recordsSection.appendChild(tableWrap);
 
       // Botones de acción
       const actionButtonGroup = document.createElement('div');
-      actionButtonGroup.style.display = 'flex';
-      actionButtonGroup.style.gap = 'var(--spacing-md)';
+      actionButtonGroup.className = 'flex-row';
       actionButtonGroup.style.marginTop = 'var(--spacing-lg)';
 
       const exportBtn = document.createElement('button');
       exportBtn.className = 'btn btn-primary btn-block';
-      exportBtn.textContent = '📥 Descargar CSV';
+      exportBtn.innerHTML = `${Icons.svg('download', { size: 18 })}<span>Descargar CSV</span>`;
       exportBtn.addEventListener('click', () => this.exportToCSV());
 
       const clearBtn = document.createElement('button');
       clearBtn.className = 'btn btn-secondary btn-block';
-      clearBtn.textContent = 'Limpiar Todo';
+      clearBtn.innerHTML = `${Icons.svg('trash', { size: 18 })}<span>Limpiar Todo</span>`;
       clearBtn.addEventListener('click', () => {
         if (confirm('¿Estás seguro? Se perderán todos los registros.')) {
           this.records = [];
@@ -163,7 +167,7 @@ class FormApp {
       const emptyState = document.createElement('div');
       emptyState.className = 'empty-state';
       emptyState.innerHTML = `
-        <div class="empty-state-icon">📭</div>
+        <div class="empty-state-icon">${Icons.svg('inbox', { size: 28 })}</div>
         <p>Aún no hay registros. Completa el formulario y haz click en "Agregar Registro".</p>
       `;
       content.appendChild(emptyState);
@@ -175,7 +179,7 @@ class FormApp {
     this.currentFormEngine.render('form_container');
 
     // Actualizar navbar
-    this.updateNavbar(formConfig.title);
+    this.updateNavbar(formConfig.title, true);
   }
 
   /**
@@ -184,14 +188,14 @@ class FormApp {
   addRecord() {
     const data = this.currentFormEngine.getFormData();
     if (!data) {
-      alert('Por favor completa todos los campos requeridos.');
+      this.showAlert('Por favor completa todos los campos requeridos.', 'error');
       return;
     }
 
     // Validar que al menos un campo no esté vacío
     const hasData = Object.values(data).some((v) => v.trim() !== '');
     if (!hasData) {
-      alert('Por favor completa al menos un campo.');
+      this.showAlert('Por favor completa al menos un campo.', 'error');
       return;
     }
 
@@ -242,7 +246,7 @@ class FormApp {
     // Columna de acciones
     const thAction = document.createElement('th');
     thAction.textContent = 'Acciones';
-    thAction.style.width = '100px';
+    thAction.style.width = '80px';
     headerRow.appendChild(thAction);
 
     thead.appendChild(headerRow);
@@ -262,11 +266,13 @@ class FormApp {
         row.appendChild(td);
       });
 
-      // Botón de eliminación
+      // Botón de eliminación (icono cápsula)
       const tdAction = document.createElement('td');
       const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'btn btn-secondary btn-sm action-btn';
-      deleteBtn.textContent = '🗑️ Borrar';
+      deleteBtn.className = 'btn btn-secondary btn-sm btn-icon-only';
+      deleteBtn.setAttribute('aria-label', 'Borrar registro');
+      deleteBtn.title = 'Borrar registro';
+      deleteBtn.innerHTML = Icons.svg('trash', { size: 16 });
       deleteBtn.addEventListener('click', () => this.deleteRecord(index));
       tdAction.appendChild(deleteBtn);
       row.appendChild(tdAction);
@@ -284,57 +290,58 @@ class FormApp {
   exportToCSV() {
     const result = CSVEngine.exportAndDownload(this.records, this.currentForm);
     if (result.success) {
-      this.showAlert('CSV descargado exitosamente ✓', 'success');
-      // Opcional: limpiar registros después de exportar
-      // this.records = [];
-      // this.showFormPage(this.currentForm.id);
+      this.showAlert('CSV descargado exitosamente', 'success');
     } else {
       this.showAlert(`Error: ${result.error}`, 'error');
     }
   }
 
   /**
-   * Muestra una alerta temporal
+   * Muestra una alerta temporal con icono
    */
   showAlert(message, type = 'info') {
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type}`;
-    alert.textContent = message;
-    alert.style.position = 'fixed';
-    alert.style.top = 'var(--spacing-md)';
-    alert.style.right = 'var(--spacing-md)';
-    alert.style.maxWidth = '400px';
-    alert.style.zIndex = '9999';
+    const iconByType = {
+      success: 'checkCircle',
+      error: 'alertCircle',
+      info: 'infoCircle',
+    };
 
-    document.body.appendChild(alert);
+    const alertEl = document.createElement('div');
+    alertEl.className = `alert alert-${type}`;
+    alertEl.style.position = 'fixed';
+    alertEl.style.top = 'calc(var(--spacing-md) + 64px)';
+    alertEl.style.right = 'var(--spacing-md)';
+    alertEl.style.maxWidth = '380px';
+    alertEl.style.zIndex = '9999';
+    alertEl.innerHTML = `
+      <span class="alert-icon">${Icons.svg(iconByType[type] || 'infoCircle', { size: 16 })}</span>
+      <span>${message}</span>
+    `;
+
+    document.body.appendChild(alertEl);
 
     setTimeout(() => {
-      alert.remove();
+      alertEl.remove();
     }, 3000);
   }
 
   /**
-   * Actualiza el navbar con el título actual
+   * Actualiza el navbar con el título actual (cápsula central + acción de volver)
    */
-  updateNavbar(title) {
+  updateNavbar(title, showBack) {
     const navContent = document.getElementById('navbar_content');
-    if (navContent) {
-      navContent.innerHTML = `
-        <span class="navbar-brand">${title}</span>
-        <div class="navbar-actions">
-          <button class="btn btn-secondary btn-sm" onclick="app.showMenu()">
-            ← Volver al Menú
-          </button>
-        </div>
-      `;
-    }
-  }
+    if (!navContent) return;
 
-  /**
-   * Adjunta listeners a elementos del menú
-   */
-  attachMenuListeners() {
-    // Se hace dinámicamente al renderizar
+    const backBtn = showBack
+      ? `<button class="nav-pill-btn" onclick="app.showMenu()" aria-label="Volver al menú" title="Volver al menú">${Icons.svg('chevronLeft', { size: 18 })}</button>`
+      : '';
+
+    navContent.innerHTML = `
+      <div class="nav-pill-group">
+        ${backBtn}
+        <span class="nav-pill-label">${title}</span>
+      </div>
+    `;
   }
 }
 
