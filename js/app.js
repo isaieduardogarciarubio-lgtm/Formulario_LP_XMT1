@@ -108,6 +108,10 @@ class FormApp {
     if (formConfig.catalogUrl) {
       app.innerHTML = `<div class="content"><div class="step-support">Cargando catálogo...</div></div>`;
       catalogIndex = await this.loadCatalog(formConfig.catalogUrl);
+      if (!catalogIndex) {
+        this.showCatalogError(formConfig);
+        return;
+      }
     }
 
     app.innerHTML = '';
@@ -142,8 +146,8 @@ class FormApp {
 
   /**
    * Descarga y parsea el catálogo Destino → Docas desde un CSV estático.
-   * Si falla, degrada con elegancia: los campos de destino/doca siguen
-   * aceptando texto libre, solo sin sugerencias en la lista desplegable.
+   * Retorna null si falla (el llamador debe mostrar una pantalla de error/reintento,
+   * ya que sin catálogo no hay opciones válidas para elegir).
    */
   async loadCatalog(url) {
     if (this.catalogCache[url]) return this.catalogCache[url];
@@ -174,9 +178,39 @@ class FormApp {
       this.catalogCache[url] = index;
       return index;
     } catch (err) {
-      this.showAlert('No se pudo cargar el catálogo. Puedes escribir destino y doca manualmente.', 'error');
-      return {};
+      return null;
     }
+  }
+
+  /**
+   * Pantalla de error cuando el catálogo no pudo descargarse, con reintento.
+   */
+  showCatalogError(formConfig) {
+    this.setHeader({
+      leftIcon: 'arrowLeft',
+      leftAction: () => this.showMenu(),
+    });
+
+    const app = document.getElementById('app');
+    app.innerHTML = '';
+
+    const content = document.createElement('div');
+    content.className = 'content';
+    content.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">${Icons.svg('alertCircle', { size: 28 })}</div>
+        <p>No se pudo cargar el catálogo. Revisa tu conexión e intenta de nuevo.</p>
+      </div>
+    `;
+
+    const retryBtn = document.createElement('button');
+    retryBtn.className = 'btn btn-primary btn-block';
+    retryBtn.style.marginTop = 'var(--spacing-lg)';
+    retryBtn.innerHTML = `${Icons.svg('refresh', { size: 18 })}<span>Reintentar</span>`;
+    retryBtn.addEventListener('click', () => this.startCapture(formConfig.id));
+    content.appendChild(retryBtn);
+
+    app.appendChild(content);
   }
 
   /**

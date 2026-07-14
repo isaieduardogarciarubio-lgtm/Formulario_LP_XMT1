@@ -23,13 +23,13 @@ const FORMS_CONFIG = {
       {
         id: 'destino',
         label: '¿Cuál es el destino?',
-        type: 'destino_combo',
+        type: 'destino_picker',
         required: true,
       },
       {
         id: 'doca',
         label: '¿Cuál es la doca?',
-        type: 'doca_combo',
+        type: 'doca_picker',
         required: true,
       },
     ],

@@ -2,8 +2,9 @@
  * Motor de flujo de captura — una pregunta por pantalla (Single-Task Focus)
  * Basado en la Guía de Diseño UX/UI: Minimalismo Oscuro (Sección 1.1)
  * Soporta campos de texto/select/textarea, 'scanner' (QR/barras),
- * 'destino_combo' y 'doca_combo' (input + lista desplegable, permiten
- * escribir libremente o elegir), usados por el log Auditoría - Destino / Doca.
+ * 'destino_picker' y 'doca_picker' (buscador + lista fija; el texto solo
+ * filtra, solo se avanza eligiendo una opción), usados por el log
+ * Auditoría - Destino / Doca.
  */
 
 class FormEngine {
@@ -92,11 +93,11 @@ class FormEngine {
       this.renderScannerStep(field);
       return;
     }
-    if (field.type === 'destino_combo') {
+    if (field.type === 'destino_picker') {
       this.renderDestinoStep(field);
       return;
     }
-    if (field.type === 'doca_combo') {
+    if (field.type === 'doca_picker') {
       this.renderDocaStep(field);
       return;
     }
@@ -438,8 +439,8 @@ class FormEngine {
   }
 
   /* ======================================================================
-     Combo genérico: input de texto libre + lista desplegable de opciones.
-     Usado por destino_combo y doca_combo.
+     Selector de lista (destino_picker / doca_picker): el texto solo filtra,
+     únicamente se puede avanzar eligiendo una fila de la lista (Sección 3.4).
      ====================================================================== */
 
   isNum(s) {
@@ -451,173 +452,111 @@ class FormEngine {
   }
 
   /**
-   * Conecta un <input> con su lista desplegable de sugerencias.
-   * @param {HTMLInputElement} input
-   * @param {HTMLElement} listEl
-   * @param {{getOptions:(q:string)=>string[], renderRow:(opt:string)=>string, onPick:(opt:string)=>void}} cfg
+   * Pantalla genérica de selección: buscador + lista fija de opciones.
+   * Tocar una opción la elige y avanza inmediatamente.
+   * @param {{options:string[], renderMeta?:(opt:string)=>string, placeholder:string, onPick:(opt:string)=>void}} cfg
    */
-  attachCombo(input, listEl, { getOptions, renderRow, onPick }) {
-    const close = () => listEl.classList.remove('open');
+  renderPickerStep(field, { options, renderMeta, placeholder, onPick }) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'step-input-wrap picker-search';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'step-input';
+    input.placeholder = placeholder;
+    searchWrap.appendChild(input);
+    screen.appendChild(searchWrap);
+
+    const list = document.createElement('div');
+    list.className = 'picker-list';
+    screen.appendChild(list);
+
+    const support = document.createElement('div');
+    support.className = 'step-support';
+    screen.appendChild(support);
+
+    this.container.appendChild(screen);
+
+    this.currentInput = input;
+    this.errorTargetEl = searchWrap;
+    this.supportEl = support;
+
     const renderList = () => {
-      const options = getOptions(input.value.trim()).slice(0, 80);
-      listEl.innerHTML = '';
+      const query = input.value.trim().toLowerCase();
+      const matches = query ? options.filter((o) => o.toLowerCase().includes(query)) : options;
+      list.innerHTML = '';
+
       if (!options.length) {
         const empty = document.createElement('div');
-        empty.className = 'combo-empty';
-        empty.textContent = 'Sin coincidencias. Puedes escribir el valor directamente.';
-        listEl.appendChild(empty);
+        empty.className = 'picker-empty';
+        empty.textContent = 'No hay opciones disponibles en el catálogo.';
+        list.appendChild(empty);
         return;
       }
-      options.forEach((opt) => {
+
+      if (!matches.length) {
+        const empty = document.createElement('div');
+        empty.className = 'picker-empty';
+        empty.textContent = 'Sin coincidencias.';
+        list.appendChild(empty);
+        return;
+      }
+
+      matches.slice(0, 200).forEach((opt) => {
         const row = document.createElement('button');
         row.type = 'button';
-        row.className = 'combo-opt';
-        row.innerHTML = renderRow(opt);
-        // evita que el blur del input cierre la lista antes del click
-        row.addEventListener('mousedown', (e) => e.preventDefault());
-        row.addEventListener('click', () => {
-          onPick(opt);
-          close();
-        });
-        listEl.appendChild(row);
+        row.className = 'picker-opt';
+        const meta = renderMeta ? `<span class="picker-opt-meta">${renderMeta(opt)}</span>` : '';
+        row.innerHTML = `<span>${opt}</span>${meta}`;
+        row.addEventListener('click', () => onPick(opt));
+        list.appendChild(row);
       });
     };
 
-    input.addEventListener('focus', () => {
-      listEl.classList.add('open');
-      renderList();
-    });
     input.addEventListener('input', () => {
-      listEl.classList.add('open');
+      this.clearError();
       renderList();
     });
-    input.addEventListener('blur', () => setTimeout(close, 150));
-  }
+    renderList();
 
-  /* ======================================================================
-     Campo destino_combo (escribir o elegir desde el catálogo)
-     ====================================================================== */
-
-  renderDestinoStep(field) {
-    this.container.innerHTML = '';
-
-    const screen = document.createElement('div');
-    screen.className = 'step-screen';
-
-    screen.appendChild(this.buildProgress());
-
-    const h1 = document.createElement('h1');
-    h1.className = 'step-question';
-    h1.textContent = field.label;
-    screen.appendChild(h1);
-
-    const inputWrap = document.createElement('div');
-    inputWrap.className = 'step-input-wrap combo-wrap';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'step-input';
-    input.placeholder = 'Escribe o elige un destino';
-    input.value = this.values.destino || '';
-    inputWrap.appendChild(input);
-
-    const list = document.createElement('div');
-    list.className = 'combo-list';
-    inputWrap.appendChild(list);
-
-    screen.appendChild(inputWrap);
-
-    const support = document.createElement('div');
-    support.className = 'step-support';
-    screen.appendChild(support);
-
-    this.container.appendChild(screen);
-
-    this.currentInput = input;
-    this.inputWrapEl = inputWrap;
-    this.errorTargetEl = inputWrap;
-    this.supportEl = support;
-
-    const destinos = Object.keys(this.getDestinoIndex()).sort((a, b) => a.localeCompare(b, 'es'));
-
-    this.attachCombo(input, list, {
-      getOptions: (q) => {
-        const query = q.toLowerCase();
-        return query ? destinos.filter((d) => d.toLowerCase().includes(query)) : destinos;
-      },
-      renderRow: (destino) => {
-        const docaCount = (this.getDestinoIndex()[destino] || []).length;
-        return `<span class="combo-opt-label">${destino}</span><span class="combo-opt-meta">${docaCount} doca${docaCount === 1 ? '' : 's'}</span>`;
-      },
-      onPick: (destino) => {
-        input.value = destino;
-        this.clearError();
-      },
-    });
-
-    input.addEventListener('input', () => this.clearError());
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        this.next();
-      }
-    });
-
-    this.renderActions(field);
+    this.actionsEl = null; // los pasos de selección no usan la barra flotante estándar
     setTimeout(() => input.focus(), 60);
   }
 
-  /* ======================================================================
-     Campo doca_combo (escribir o elegir; dependiente del destino elegido)
-     ====================================================================== */
+  renderDestinoStep(field) {
+    const destinos = Object.keys(this.getDestinoIndex()).sort((a, b) => a.localeCompare(b, 'es'));
+
+    this.renderPickerStep(field, {
+      options: destinos,
+      placeholder: 'Buscar destino...',
+      renderMeta: (destino) => {
+        const count = (this.getDestinoIndex()[destino] || []).length;
+        return `${count} doca${count === 1 ? '' : 's'}`;
+      },
+      onPick: (destino) => {
+        // Si cambian el destino ya elegido, la doca previa deja de ser válida
+        if (this.values.destino && this.values.destino !== destino) {
+          delete this.values.doca;
+          delete this.values.resultado;
+        }
+        this.values.destino = destino;
+        this.advance();
+      },
+    });
+  }
 
   renderDocaStep(field) {
-    this.container.innerHTML = '';
-
-    const screen = document.createElement('div');
-    screen.className = 'step-screen';
-
-    screen.appendChild(this.buildProgress());
-
-    const h1 = document.createElement('h1');
-    h1.className = 'step-question';
-    h1.textContent = field.label;
-    screen.appendChild(h1);
-
-    const hint = document.createElement('div');
-    hint.className = 'doca-hint';
-    hint.innerHTML = 'Si la doca es numérica: <b class="ok">Sin incidencia</b>. Si no: <b class="bad">Erróneo</b>.';
-    screen.appendChild(hint);
-
-    const inputWrap = document.createElement('div');
-    inputWrap.className = 'step-input-wrap combo-wrap';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'step-input';
-    input.placeholder = 'Escribe o elige una doca';
-    input.value = this.values.doca || '';
-    inputWrap.appendChild(input);
-
-    const list = document.createElement('div');
-    list.className = 'combo-list';
-    inputWrap.appendChild(list);
-
-    screen.appendChild(inputWrap);
-
-    const preview = document.createElement('div');
-    preview.className = 'doca-preview';
-    screen.appendChild(preview);
-
-    const support = document.createElement('div');
-    support.className = 'step-support';
-    screen.appendChild(support);
-
-    this.container.appendChild(screen);
-
-    this.currentInput = input;
-    this.inputWrapEl = inputWrap;
-    this.errorTargetEl = inputWrap;
-    this.supportEl = support;
-
     const docas = (this.getDestinoIndex()[this.values.destino] || []).slice().sort((a, b) => {
       const an = this.isNum(a);
       const bn = this.isNum(b);
@@ -627,45 +566,15 @@ class FormEngine {
       return a.localeCompare(b, 'es');
     });
 
-    const updatePreview = () => {
-      const value = input.value.trim();
-      if (!value) {
-        preview.className = 'doca-preview';
-        preview.textContent = '';
-        return;
-      }
-      const ok = this.isNum(value);
-      preview.className = 'doca-preview ' + (ok ? 'ok' : 'bad');
-      preview.textContent = `Doca ${value} — ${ok ? 'Sin incidencia' : 'Erróneo'}`;
-    };
-
-    this.attachCombo(input, list, {
-      getOptions: (q) => {
-        const query = q.toLowerCase();
-        return query ? docas.filter((d) => d.toLowerCase().includes(query)) : docas;
-      },
-      renderRow: (doca) => `<span class="combo-opt-label">${doca}</span>`,
+    this.renderPickerStep(field, {
+      options: docas,
+      placeholder: 'Buscar doca...',
       onPick: (doca) => {
-        input.value = doca;
-        this.clearError();
-        updatePreview();
+        this.values.doca = doca;
+        this.values.resultado = this.isNum(doca) ? 'Sin incidencia' : 'Erroneo';
+        this.advance();
       },
     });
-
-    input.addEventListener('input', () => {
-      this.clearError();
-      updatePreview();
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        this.next();
-      }
-    });
-    updatePreview();
-
-    this.renderActions(field);
-    setTimeout(() => input.focus(), 60);
   }
 
   /* ====================================================================== */
