@@ -1,35 +1,21 @@
 /* ==========================================================================
-   Nocturne Design System — MercadoLibre Dark Theme
-   Inspirado en Atlas/Andes: cápsulas (pill shapes), layout continuo sin
-   divisores, superficies de vidrio (glass) con blur, acento amarillo Meli.
+   OLED Minimalist Progressive — Guía de Diseño UX/UI v2.0
+   Minimalismo oscuro, mobile-first, flujos de una sola pregunta por pantalla.
    ========================================================================== */
 
 :root {
-  /* Color */
-  --color-primary: #FFD100;
-  --color-primary-dark: #E6BC00;
-  --color-primary-ink: #1a1500;
+  /* Paleta OLED True Dark */
+  --color-bg: #000000;
+  --color-surface: #1c1c1e;
+  --color-surface-hover: #2c2c2e;
+  --color-text-primary: #ffffff;
+  --color-text-muted: #8e8e93;
+  --color-error: #ff453a;
+  --color-border: #2c2c2e;
 
-  --color-bg: #121214;
-  --color-bg-elevated: #1c1c1f;
-  --color-bg-glass: rgba(28, 28, 31, 0.6);
-  --color-bg-glass-strong: rgba(20, 20, 23, 0.72);
-  --color-surface: rgba(255, 255, 255, 0.04);
-  --color-surface-hover: rgba(255, 255, 255, 0.07);
-
-  --color-text: #f2f2f3;
-  --color-text-secondary: #9a9aa2;
-  --color-border: rgba(255, 255, 255, 0.09);
-  --color-border-strong: rgba(255, 255, 255, 0.16);
-
-  --color-success: #3ac97a;
-  --color-error: #ff5d5d;
-  --color-info: #4da3ff;
-
-  /* Forma: cápsulas */
-  --radius-capsule: 999px;
+  /* Forma */
+  --radius-pill: 9999px;
   --radius-card: 20px;
-  --radius-sm: 12px;
 
   /* Espaciado */
   --spacing-xs: 4px;
@@ -38,10 +24,10 @@
   --spacing-lg: 24px;
   --spacing-xl: 32px;
 
-  /* Elevación */
-  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.28);
-  --shadow-pill: 0 2px 10px rgba(0, 0, 0, 0.3);
-  --blur-glass: blur(20px) saturate(180%);
+  /* Tipografía (26pt / 14pt) */
+  --font-h1: 1.75rem;
+  --font-body: 0.95rem;
+  --font-button: 0.95rem;
 }
 
 * {
@@ -58,15 +44,10 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
-  color: var(--color-text);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
   line-height: 1.5;
   min-height: 100vh;
-  /* Fondo con profundidad: da algo visible detrás del blur del navbar */
-  background:
-    radial-gradient(760px 420px at 15% -10%, rgba(255, 209, 0, 0.09), transparent 60%),
-    radial-gradient(900px 500px at 110% 10%, rgba(77, 163, 255, 0.08), transparent 55%),
-    var(--color-bg);
-  background-attachment: fixed;
 }
 
 .icon {
@@ -85,103 +66,59 @@ body {
   flex-direction: column;
 }
 
-/* Navbar: superficie de vidrio, flotante, sin líneas divisoras rígidas */
 .navbar {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: var(--color-bg-glass-strong);
-  backdrop-filter: var(--blur-glass);
-  -webkit-backdrop-filter: var(--blur-glass);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
 }
 
 .navbar-inner {
-  max-width: 1100px;
+  max-width: 640px;
   margin: 0 auto;
   padding: var(--spacing-md) var(--spacing-lg);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
-  flex-wrap: wrap;
+  min-height: 32px;
 }
 
-.navbar-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
+.navbar-title {
   font-size: 1rem;
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 
-.navbar-brand .icon {
-  color: var(--color-primary);
-}
-
-.navbar-content {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
-/* Botonera cápsula (segmented pill group), centrada al estilo Atlas */
-.nav-pill-group {
-  display: inline-flex;
-  align-items: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-capsule);
-  padding: var(--spacing-xs);
-  gap: var(--spacing-xs);
-}
-
-.nav-pill-btn {
+/* Icono de navegación superior: sin fondo, minimalista (Sección 4) */
+.icon-btn-plain {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-capsule);
-  background: var(--color-surface);
-  color: var(--color-text);
+  width: 40px;
+  height: 40px;
+  margin: -8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  transition: opacity 0.15s ease;
 }
 
-.nav-pill-btn .icon {
-  display: block;
-}
-
-.nav-pill-btn:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
-  transform: translateY(-1px);
-}
-
-.nav-pill-label {
-  padding: var(--spacing-xs) var(--spacing-md) var(--spacing-xs) var(--spacing-sm);
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--color-text);
-  white-space: nowrap;
+.icon-btn-plain:hover {
+  opacity: 0.7;
 }
 
 .content {
   flex: 1;
   width: 100%;
-  max-width: 1100px;
+  max-width: 640px;
   margin: 0 auto;
   padding: var(--spacing-lg);
 }
 
-/* Mobile first */
 @media (max-width: 768px) {
   .navbar-inner {
     padding: var(--spacing-sm) var(--spacing-md);
@@ -193,17 +130,17 @@ body {
 }
 
 /* ==========================================================================
-   Botones — cápsulas (pill shape) en toda la jerarquía
+   Botones — Sección 3.1 / 3.2
    ========================================================================== */
 
 .btn {
-  padding: var(--spacing-sm) var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
   border: none;
-  border-radius: var(--radius-capsule);
-  font-size: 0.95rem;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-button);
   font-weight: 600;
   cursor: pointer;
-  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s ease, background 0.2s ease, opacity 0.2s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -212,29 +149,31 @@ body {
   line-height: 1;
 }
 
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .btn .icon {
   flex-shrink: 0;
 }
 
 .btn-primary {
-  background: var(--color-primary);
-  color: var(--color-primary-ink);
-  box-shadow: var(--shadow-pill);
+  background: var(--color-text-primary);
+  color: #000000;
 }
 
-.btn-primary:hover {
-  background: var(--color-primary-dark);
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.85;
   transform: translateY(-1px);
 }
 
 .btn-secondary {
   background: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border-strong);
-  backdrop-filter: blur(8px);
+  color: var(--color-text-primary);
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background: var(--color-surface-hover);
   transform: translateY(-1px);
 }
@@ -255,18 +194,14 @@ body {
 }
 
 /* ==========================================================================
-   Cards — superficies de vidrio con radio grande (capsule-inspired)
+   Cards — superficies contenedoras (color-surface)
    ========================================================================== */
 
 .card {
-  background: var(--color-bg-glass);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   border-radius: var(--radius-card);
   padding: var(--spacing-lg);
   margin-bottom: var(--spacing-md);
-  box-shadow: var(--shadow-card);
 }
 
 .card h3 {
@@ -276,66 +211,117 @@ body {
 }
 
 /* ==========================================================================
-   Formularios
+   Flujo de captura: una pregunta por pantalla (Sección 1.1 / 1.2)
    ========================================================================== */
 
-.form-group {
-  margin-bottom: var(--spacing-lg);
+.step-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+  padding-top: var(--spacing-lg);
+  padding-bottom: 120px;
 }
 
-.form-label {
-  display: block;
-  margin-bottom: var(--spacing-sm);
+.step-progress {
+  font-size: 0.8rem;
   font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--color-text);
+  color: var(--color-text-muted);
+  letter-spacing: 0.03em;
+  margin-bottom: var(--spacing-md);
 }
 
-.form-label.required::after {
-  content: ' *';
-  color: var(--color-primary);
+.step-question {
+  font-size: var(--font-h1);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-xl);
 }
 
-.form-input,
-.form-select {
+.step-input-wrap {
+  margin-bottom: var(--spacing-sm);
+}
+
+.step-input {
   width: 100%;
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-capsule);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.95rem;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  border: none;
+  border-bottom: 2px solid var(--color-text-primary);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-h1);
+  font-weight: 600;
+  padding: var(--spacing-sm) 0 var(--spacing-md);
+  transition: border-color 0.15s ease;
 }
 
-.form-textarea {
-  width: 100%;
-  padding: var(--spacing-md) var(--spacing-lg);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.95rem;
-  resize: vertical;
-  min-height: 100px;
-  transition: border-color 0.2s ease, background 0.2s ease;
+.step-input::placeholder {
+  color: var(--color-text-muted);
+  font-weight: 400;
 }
 
-.form-input:focus,
-.form-select:focus,
-.form-textarea:focus {
+.step-input:focus {
   outline: none;
-  border-color: var(--color-primary);
-  background: var(--color-surface-hover);
-  box-shadow: 0 0 0 3px rgba(255, 209, 0, 0.14);
+  caret-color: var(--color-text-primary);
 }
 
-.form-select {
+.step-input-wrap.error .step-input {
+  border-bottom-color: var(--color-error);
+}
+
+textarea.step-input {
+  resize: vertical;
+  min-height: 96px;
+}
+
+select.step-input {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%239a9aa2' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding-right: 40px;
+  background-position: right 4px center;
+  padding-right: var(--spacing-xl);
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.step-input-wrap.shake {
+  animation: shake 0.2s ease;
+}
+
+.step-support {
+  min-height: 1.2em;
+  font-size: var(--font-body);
+  color: var(--color-text-muted);
+}
+
+.step-support.error {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+/* Zona flotante de acciones ancladas sobre el teclado (Sección 1.2) */
+.step-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg) calc(var(--spacing-md) + env(safe-area-inset-bottom));
+  background: var(--color-bg);
+}
+
+.step-actions .btn-primary {
+  margin-left: auto;
 }
 
 /* ==========================================================================
@@ -344,7 +330,7 @@ body {
 
 .records-table-wrap {
   overflow-x: auto;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-card);
 }
 
 .records-table {
@@ -362,7 +348,7 @@ body {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
 }
 
 .records-table td {
@@ -371,17 +357,13 @@ body {
 }
 
 .records-table tbody tr td:first-child {
-  border-top-left-radius: var(--radius-sm);
-  border-bottom-left-radius: var(--radius-sm);
+  border-top-left-radius: var(--spacing-sm);
+  border-bottom-left-radius: var(--spacing-sm);
 }
 
 .records-table tbody tr td:last-child {
-  border-top-right-radius: var(--radius-sm);
-  border-bottom-right-radius: var(--radius-sm);
-}
-
-.records-table tbody tr {
-  transition: background 0.15s ease;
+  border-top-right-radius: var(--spacing-sm);
+  border-bottom-right-radius: var(--spacing-sm);
 }
 
 .records-table tbody tr:hover td {
@@ -393,36 +375,32 @@ body {
 }
 
 /* ==========================================================================
-   Grilla de formularios (menú)
+   Grilla de formularios (menú) — selección atómica única (Sección 1.1)
    ========================================================================== */
 
 .forms-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
   margin-top: var(--spacing-lg);
 }
 
 .form-card {
-  background: var(--color-bg-glass);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface);
   border-radius: var(--radius-card);
   padding: var(--spacing-lg);
   cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.15s ease, transform 0.15s ease;
   text-decoration: none;
   color: inherit;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: var(--spacing-md);
 }
 
 .form-card:hover {
-  border-color: rgba(255, 209, 0, 0.4);
-  box-shadow: 0 10px 28px rgba(255, 209, 0, 0.12);
-  transform: translateY(-3px);
+  background: var(--color-surface-hover);
+  transform: translateY(-2px);
 }
 
 .form-card-icon {
@@ -431,32 +409,43 @@ body {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-capsule);
-  background: rgba(255, 209, 0, 0.12);
-  color: var(--color-primary);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+.form-card-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .form-card-title {
   font-size: 1.05rem;
   font-weight: 700;
-  color: var(--color-text);
+  color: var(--color-text-primary);
 }
 
 .form-card-desc {
   font-size: 0.88rem;
-  color: var(--color-text-secondary);
-  flex: 1;
+  color: var(--color-text-muted);
 }
 
 .form-card-meta {
   display: inline-flex;
   align-self: flex-start;
   padding: var(--spacing-xs) var(--spacing-md);
-  border-radius: var(--radius-capsule);
-  background: var(--color-surface);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-xs);
+}
+
+.form-card-arrow {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
 }
 
 /* ==========================================================================
@@ -466,7 +455,7 @@ body {
 .empty-state {
   text-align: center;
   padding: var(--spacing-xl);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
 }
 
 .empty-state-icon {
@@ -475,27 +464,24 @@ body {
   justify-content: center;
   width: 64px;
   height: 64px;
-  border-radius: var(--radius-capsule);
+  border-radius: var(--radius-pill);
   background: var(--color-surface);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   margin-bottom: var(--spacing-md);
 }
 
 /* ==========================================================================
-   Mensajes / alertas — cápsula con badge de icono
+   Mensajes / alertas
    ========================================================================== */
 
 .alert {
   padding: var(--spacing-sm) var(--spacing-lg) var(--spacing-sm) var(--spacing-sm);
-  border-radius: var(--radius-capsule);
+  border-radius: var(--radius-pill);
   margin-bottom: var(--spacing-md);
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  background: var(--color-bg-glass-strong);
-  backdrop-filter: var(--blur-glass);
-  -webkit-backdrop-filter: var(--blur-glass);
-  box-shadow: var(--shadow-card);
+  background: var(--color-surface);
   font-size: 0.9rem;
   font-weight: 500;
 }
@@ -506,35 +492,32 @@ body {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--radius-capsule);
+  border-radius: var(--radius-pill);
   flex-shrink: 0;
 }
 
 .alert-success {
-  border: 1px solid rgba(58, 201, 122, 0.3);
-  color: var(--color-text);
+  color: var(--color-text-primary);
 }
 .alert-success .alert-icon {
-  background: rgba(58, 201, 122, 0.16);
-  color: var(--color-success);
+  background: rgba(52, 199, 89, 0.16);
+  color: #34c759;
 }
 
 .alert-error {
-  border: 1px solid rgba(255, 93, 93, 0.3);
-  color: var(--color-text);
+  color: var(--color-text-primary);
 }
 .alert-error .alert-icon {
-  background: rgba(255, 93, 93, 0.16);
+  background: rgba(255, 69, 58, 0.16);
   color: var(--color-error);
 }
 
 .alert-info {
-  border: 1px solid rgba(77, 163, 255, 0.3);
-  color: var(--color-text);
+  color: var(--color-text-primary);
 }
 .alert-info .alert-icon {
-  background: rgba(77, 163, 255, 0.16);
-  color: var(--color-info);
+  background: rgba(10, 132, 255, 0.16);
+  color: #0a84ff;
 }
 
 /* ==========================================================================
@@ -551,7 +534,7 @@ body {
 .mb-2 { margin-bottom: var(--spacing-md); }
 
 .text-muted {
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
 }
 
 .hidden {
@@ -564,7 +547,6 @@ body {
   flex-wrap: wrap;
 }
 
-/* Scrollbar personalizado */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -575,10 +557,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: var(--radius-capsule);
+  background: var(--color-surface-hover);
+  border-radius: var(--radius-pill);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
+  background: var(--color-text-muted);
 }

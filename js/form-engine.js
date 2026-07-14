@@ -1,117 +1,192 @@
 /**
- * Motor de renderizado dinámico de formularios
- * Convierte una configuración en HTML interactivo
+ * Motor de flujo de captura — una pregunta por pantalla (Single-Task Focus)
+ * Basado en la Guía de Diseño UX/UI: Minimalismo Oscuro (Sección 1.1)
  */
 
 class FormEngine {
-  constructor(formConfig) {
+  constructor(formConfig, { onComplete, onCancel } = {}) {
     this.formConfig = formConfig;
-    this.formElement = null;
+    this.onComplete = onComplete;
+    this.onCancel = onCancel;
+    this.stepIndex = 0;
+    this.values = {};
+    this.container = null;
+    this.currentInput = null;
   }
 
-  /**
-   * Renderiza un campo según su tipo
-   */
-  renderField(field) {
-    const group = document.createElement('div');
-    group.className = 'form-group';
+  get currentField() {
+    return this.formConfig.fields[this.stepIndex];
+  }
 
-    // Label
-    const label = document.createElement('label');
-    label.className = 'form-label' + (field.required ? ' required' : '');
-    label.setAttribute('for', field.id);
-    label.textContent = field.label;
-    group.appendChild(label);
+  get isLastStep() {
+    return this.stepIndex === this.formConfig.fields.length - 1;
+  }
 
-    // Input según tipo
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.stepIndex = 0;
+    this.values = {};
+    this.renderStep();
+  }
+
+  renderStep() {
+    const field = this.currentField;
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    const progress = document.createElement('div');
+    progress.className = 'step-progress';
+    progress.textContent = `${this.stepIndex + 1} / ${this.formConfig.fields.length}`;
+    screen.appendChild(progress);
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'step-input-wrap';
+
+    const input = this.buildInput(field);
+    input.value = this.values[field.id] || '';
+    inputWrap.appendChild(input);
+    screen.appendChild(inputWrap);
+
+    const support = document.createElement('div');
+    support.className = 'step-support';
+    screen.appendChild(support);
+
+    this.container.appendChild(screen);
+
+    this.currentInput = input;
+    this.inputWrapEl = inputWrap;
+    this.supportEl = support;
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && field.type !== 'textarea') {
+        e.preventDefault();
+        this.next();
+      }
+    });
+
+    input.addEventListener('input', () => this.clearError());
+
+    this.renderActions(field);
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  buildInput(field) {
     let input;
 
     if (field.type === 'select') {
       input = document.createElement('select');
-      input.className = 'form-select';
+      input.className = 'step-input';
       field.options.forEach((option) => {
-        const optElement = document.createElement('option');
-        optElement.value = option.value;
-        optElement.textContent = option.label;
-        input.appendChild(optElement);
+        const optEl = document.createElement('option');
+        optEl.value = option.value;
+        optEl.textContent = option.label;
+        input.appendChild(optEl);
       });
     } else if (field.type === 'textarea') {
       input = document.createElement('textarea');
-      input.className = 'form-textarea';
+      input.className = 'step-input';
       input.placeholder = field.placeholder || '';
+      input.rows = 3;
     } else {
       input = document.createElement('input');
       input.type = field.type;
-      input.className = 'form-input';
+      input.className = 'step-input';
       input.placeholder = field.placeholder || '';
-
       if (field.min !== undefined) input.min = field.min;
       if (field.max !== undefined) input.max = field.max;
     }
 
     input.id = field.id;
     input.name = field.id;
-    input.required = field.required;
-
-    group.appendChild(input);
-    return group;
+    return input;
   }
 
-  /**
-   * Renderiza todo el formulario
-   */
-  render(containerId) {
-    const container = document.getElementById(containerId);
-    if (!container) {
-      console.error(`Container ${containerId} no encontrado`);
+  renderActions(field) {
+    const actions = document.createElement('div');
+    actions.className = 'step-actions';
+
+    if (!field.required) {
+      const skipBtn = document.createElement('button');
+      skipBtn.type = 'button';
+      skipBtn.className = 'btn btn-secondary';
+      skipBtn.textContent = 'Omitir';
+      skipBtn.addEventListener('click', () => this.skip());
+      actions.appendChild(skipBtn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'btn btn-primary';
+    nextBtn.innerHTML = this.isLastStep
+      ? `<span>Agregar Registro</span>${Icons.svg('check', { size: 16 })}`
+      : `<span>Continuar</span>${Icons.svg('arrowRight', { size: 16 })}`;
+    nextBtn.addEventListener('click', () => this.next());
+
+    actions.appendChild(nextBtn);
+    this.container.appendChild(actions);
+  }
+
+  showError(message) {
+    this.inputWrapEl.classList.add('error');
+    this.supportEl.textContent = message;
+    this.supportEl.classList.add('error');
+
+    this.inputWrapEl.classList.remove('shake');
+    void this.inputWrapEl.offsetWidth; // reinicia la animación
+    this.inputWrapEl.classList.add('shake');
+  }
+
+  clearError() {
+    this.inputWrapEl.classList.remove('error');
+    this.supportEl.textContent = '';
+    this.supportEl.classList.remove('error');
+  }
+
+  next() {
+    const field = this.currentField;
+    const value = this.currentInput.value.trim();
+
+    if (field.required && !value) {
+      this.showError('Este campo es obligatorio.');
       return;
     }
 
-    // Crear formulario
-    this.formElement = document.createElement('form');
-    this.formElement.id = `form_${this.formConfig.id}`;
-    this.formElement.className = 'form-container';
-
-    // Renderizar campos
-    this.formConfig.fields.forEach((field) => {
-      this.formElement.appendChild(this.renderField(field));
-    });
-
-    container.appendChild(this.formElement);
+    this.values[field.id] = value;
+    this.advance();
   }
 
-  /**
-   * Valida el formulario y retorna los datos si es válido
-   */
-  getFormData() {
-    if (!this.formElement.checkValidity()) {
-      // Los navegadores muestran su propia validación, pero también podemos retornar null
-      return null;
-    }
-
-    const formData = new FormData(this.formElement);
-    const data = {};
-
-    this.formConfig.fields.forEach((field) => {
-      data[field.id] = formData.get(field.id) || '';
-    });
-
-    return data;
+  skip() {
+    this.values[this.currentField.id] = '';
+    this.advance();
   }
 
-  /**
-   * Resetea el formulario
-   */
-  resetForm() {
-    if (this.formElement) {
-      this.formElement.reset();
+  advance() {
+    if (this.isLastStep) {
+      this.finish();
+    } else {
+      this.stepIndex++;
+      this.renderStep();
     }
   }
 
-  /**
-   * Obtiene la instancia del elemento form HTML
-   */
-  getFormElement() {
-    return this.formElement;
+  back() {
+    if (this.stepIndex === 0) {
+      if (this.onCancel) this.onCancel();
+      return;
+    }
+    this.stepIndex--;
+    this.renderStep();
+  }
+
+  finish() {
+    if (this.onComplete) this.onComplete({ ...this.values });
   }
 }
