@@ -2,193 +2,51 @@
  * Configuración de formularios
  * Cada formulario define sus campos y las columnas del CSV resultante
  */
+
+/**
+ * Catálogo Destino → Docas válidas para el log "Auditoría - Destino / Doca".
+ * Edita este arreglo con los destinos y docas reales de tu operación.
+ * `docas` acepta varios valores separados por punto y coma (ej. "1;2;3;A").
+ */
+const CATALOGO_DESTINO_DOCA = [
+  { destino: 'Andén 1', docas: '1;2;3;4' },
+  { destino: 'Andén 2', docas: '5;6;7;8' },
+  { destino: 'Rack A', docas: 'A1;A2;A3' },
+];
+
 const FORMS_CONFIG = {
-  contact_form: {
-    id: 'contact_form',
-    title: 'Formulario de Contacto',
-    description: 'Recopila información de contacto de clientes',
-    icon: 'clipboard',
+  destino_doca: {
+    id: 'destino_doca',
+    title: 'Auditoría - Destino / Doca',
+    description: 'Escanea HU, valida destino y doca',
+    icon: 'scan',
     fields: [
       {
-        id: 'name',
-        label: 'Nombre Completo',
-        type: 'text',
-        required: true,
-        placeholder: 'Juan Pérez García',
-      },
-      {
-        id: 'email',
-        label: 'Correo Electrónico',
-        type: 'email',
-        required: true,
-        placeholder: 'juan@example.com',
-      },
-      {
-        id: 'phone',
-        label: 'Teléfono',
-        type: 'tel',
-        required: false,
-        placeholder: '+52 55 1234 5678',
-      },
-      {
-        id: 'company',
-        label: 'Empresa',
-        type: 'text',
-        required: false,
-        placeholder: 'Acme Corp',
-      },
-      {
-        id: 'country',
-        label: 'País',
-        type: 'select',
-        required: true,
-        options: [
-          { value: '', label: 'Selecciona un país' },
-          { value: 'MX', label: 'México' },
-          { value: 'CO', label: 'Colombia' },
-          { value: 'AR', label: 'Argentina' },
-          { value: 'CL', label: 'Chile' },
-          { value: 'BR', label: 'Brasil' },
-        ],
-      },
-      {
-        id: 'message',
-        label: 'Mensaje',
-        type: 'textarea',
-        required: true,
-        placeholder: 'Escribe tu mensaje aquí...',
-      },
-    ],
-    csvColumns: [
-      { field: 'name', header: 'Nombre' },
-      { field: 'email', header: 'Correo' },
-      { field: 'phone', header: 'Teléfono' },
-      { field: 'company', header: 'Empresa' },
-      { field: 'country', header: 'País' },
-      { field: 'message', header: 'Mensaje' },
-    ],
-  },
-
-  survey_form: {
-    id: 'survey_form',
-    title: 'Encuesta de Satisfacción',
-    description: 'Evalúa la satisfacción del cliente con nuestros servicios',
-    icon: 'star',
-    fields: [
-      {
-        id: 'respondent_name',
-        label: 'Nombre del Encuestado',
-        type: 'text',
-        required: true,
-        placeholder: 'María López',
-      },
-      {
-        id: 'survey_date',
-        label: 'Fecha de la Encuesta',
-        type: 'date',
-        required: true,
-      },
-      {
-        id: 'service_rating',
-        label: 'Calificación del Servicio (1-5)',
-        type: 'number',
-        required: true,
-        min: 1,
-        max: 5,
-        placeholder: '5',
-      },
-      {
-        id: 'product_quality',
-        label: 'Calidad del Producto',
-        type: 'select',
-        required: true,
-        options: [
-          { value: '', label: 'Selecciona una opción' },
-          { value: 'excellent', label: 'Excelente' },
-          { value: 'good', label: 'Bueno' },
-          { value: 'fair', label: 'Regular' },
-          { value: 'poor', label: 'Malo' },
-        ],
-      },
-      {
-        id: 'recommend',
-        label: '¿Recomendarías nuestro servicio?',
-        type: 'select',
-        required: true,
-        options: [
-          { value: '', label: 'Selecciona una opción' },
-          { value: 'yes', label: 'Sí' },
-          { value: 'no', label: 'No' },
-          { value: 'maybe', label: 'Quizás' },
-        ],
-      },
-      {
-        id: 'feedback',
-        label: 'Comentarios Adicionales',
-        type: 'textarea',
-        required: false,
-        placeholder: 'Cuéntanos qué podemos mejorar...',
-      },
-    ],
-    csvColumns: [
-      { field: 'respondent_name', header: 'Nombre' },
-      { field: 'survey_date', header: 'Fecha' },
-      { field: 'service_rating', header: 'Calificación' },
-      { field: 'product_quality', header: 'Calidad del Producto' },
-      { field: 'recommend', header: '¿Recomendaría?' },
-      { field: 'feedback', header: 'Comentarios' },
-    ],
-  },
-
-  // Formulario con un campo escaneable entre campos manuales (modo B)
-  inventory_form: {
-    id: 'inventory_form',
-    title: 'Registro de Inventario',
-    description: 'Escanea el código del producto y captura cantidad',
-    icon: 'clipboard',
-    fields: [
-      {
-        id: 'product_code',
-        label: 'Escanea el código del producto',
+        id: 'hu',
+        label: '¿Cuál es el HU?',
         type: 'scanner',
         required: true,
-        placeholder: 'Código del producto',
+        placeholder: 'Ej. HU123456789',
       },
       {
-        id: 'quantity',
-        label: '¿Cuántas unidades?',
-        type: 'number',
+        id: 'destino',
+        label: '¿Cuál es el destino?',
+        type: 'destino_select',
         required: true,
-        min: 0,
-        placeholder: '10',
       },
       {
-        id: 'location',
-        label: 'Ubicación / Estante',
-        type: 'text',
-        required: false,
-        placeholder: 'A-12',
+        id: 'doca',
+        label: '¿Cuál es la doca?',
+        type: 'doca_chips',
+        required: true,
       },
     ],
     csvColumns: [
-      { field: 'product_code', header: 'Código' },
-      { field: 'quantity', header: 'Cantidad' },
-      { field: 'location', header: 'Ubicación' },
-    ],
-  },
-
-  // Modo de escaneo rápido: cada código detectado = un registro (modo A)
-  rapid_scan: {
-    id: 'rapid_scan',
-    title: 'Escaneo Rápido',
-    description: 'Escanea muchos códigos seguidos, cada uno se guarda como registro',
-    icon: 'qr',
-    mode: 'rapid',
-    scanColumn: { field: 'code', header: 'Código' },
-    csvColumns: [
-      { field: 'code', header: 'Código' },
-      { field: 'format', header: 'Tipo' },
-      { field: 'scanned_at', header: 'Fecha/Hora' },
+      { field: 'ts', header: 'Fecha/Hora' },
+      { field: 'hu', header: 'HU' },
+      { field: 'destino', header: 'Destino' },
+      { field: 'doca', header: 'Doca' },
+      { field: 'resultado', header: 'Resultado' },
     ],
   },
 };
