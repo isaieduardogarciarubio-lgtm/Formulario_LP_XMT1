@@ -12,6 +12,8 @@ class FormEngine {
     this.values = {};
     this.container = null;
     this.currentInput = null;
+    this.actionsEl = null;
+    this.handleViewportChange = this.repositionActions.bind(this);
   }
 
   get currentField() {
@@ -26,7 +28,34 @@ class FormEngine {
     this.container = document.getElementById(containerId);
     this.stepIndex = 0;
     this.values = {};
+    this.bindViewportTracking();
     this.renderStep();
+  }
+
+  /**
+   * El teclado nativo no siempre reduce el layout viewport (position: fixed
+   * queda anclado bajo el teclado). Usamos Visual Viewport API para
+   * desplazar la barra de acciones y mantenerla siempre visible sobre él.
+   */
+  bindViewportTracking() {
+    if (!window.visualViewport || this.viewportBound) return;
+    this.viewportBound = true;
+    window.visualViewport.addEventListener('resize', this.handleViewportChange);
+    window.visualViewport.addEventListener('scroll', this.handleViewportChange);
+  }
+
+  repositionActions() {
+    if (!this.actionsEl || !window.visualViewport) return;
+    const vv = window.visualViewport;
+    const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    this.actionsEl.style.transform = keyboardInset > 0 ? `translateY(-${keyboardInset}px)` : '';
+  }
+
+  destroy() {
+    if (!window.visualViewport || !this.viewportBound) return;
+    window.visualViewport.removeEventListener('resize', this.handleViewportChange);
+    window.visualViewport.removeEventListener('scroll', this.handleViewportChange);
+    this.viewportBound = false;
   }
 
   renderStep() {
@@ -132,6 +161,8 @@ class FormEngine {
 
     actions.appendChild(nextBtn);
     this.container.appendChild(actions);
+    this.actionsEl = actions;
+    this.repositionActions();
   }
 
   showError(message) {

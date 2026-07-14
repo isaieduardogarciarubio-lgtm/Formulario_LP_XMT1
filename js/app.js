@@ -39,6 +39,7 @@ class FormApp {
    * (pantalla de una sola acción: elegir un formulario)
    */
   showMenu() {
+    this.destroyCurrentFormEngine();
     this.setHeader({ title: 'Generador de CSV' });
 
     const app = document.getElementById('app');
@@ -85,6 +86,7 @@ class FormApp {
       return;
     }
 
+    this.destroyCurrentFormEngine();
     this.currentForm = formConfig;
 
     const app = document.getElementById('app');
@@ -110,6 +112,16 @@ class FormApp {
   }
 
   /**
+   * Libera los listeners de Visual Viewport del paso de captura anterior
+   */
+  destroyCurrentFormEngine() {
+    if (this.currentFormEngine) {
+      this.currentFormEngine.destroy();
+      this.currentFormEngine = null;
+    }
+  }
+
+  /**
    * Se ejecuta al completar todas las preguntas de un formulario
    */
   handleRecordComplete(data) {
@@ -122,6 +134,7 @@ class FormApp {
    * Pantalla de resumen: registros acumulados + acciones (exportar / agregar otro)
    */
   showRecordsPage() {
+    this.destroyCurrentFormEngine();
     this.setHeader({
       leftIcon: 'arrowLeft',
       leftAction: () => this.showMenu(),
