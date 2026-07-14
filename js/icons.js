@@ -33,6 +33,9 @@ const Icons = (() => {
     alertCircle: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16" r="0.75" fill="currentColor" stroke="none"/>',
     infoCircle: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r="0.75" fill="currentColor" stroke="none"/>',
     inbox: '<path d="M4 12h4l1.5 3h5L16 12h4"/><path d="M6 5h12l2 7v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6z"/>',
+
+    // Acciones
+    trash: '<path d="M19 6H5M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M10 10v4M14 10v4"/>',
   };
 
   /**

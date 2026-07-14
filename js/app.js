@@ -507,7 +507,8 @@ class FormApp {
       const tdAction = document.createElement('td');
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'btn btn-secondary btn-sm';
-      deleteBtn.textContent = 'Borrar';
+      deleteBtn.innerHTML = Icons.svg('trash', { size: 18 });
+      deleteBtn.title = 'Eliminar registro';
       deleteBtn.addEventListener('click', () => this.deleteRecord(index));
       tdAction.appendChild(deleteBtn);
       row.appendChild(tdAction);
