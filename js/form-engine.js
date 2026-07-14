@@ -583,7 +583,23 @@ class FormEngine {
     return this.currentInput ? this.currentInput.value.trim() : '';
   }
 
+  /**
+   * Vibración táctil breve (Vibration API). Silenciosamente ignorada en
+   * navegadores sin soporte (ej. iOS Safari) o si el usuario la bloqueó.
+   */
+  vibrate(pattern) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {
+        /* no-op */
+      }
+    }
+  }
+
   showError(message) {
+    this.vibrate(20);
+
     if (!this.errorTargetEl) return;
     this.errorTargetEl.classList.add('error');
     this.supportEl.textContent = message;
@@ -632,6 +648,7 @@ class FormEngine {
   }
 
   advance() {
+    this.vibrate(10);
     if (this.isLastStep) {
       this.finish();
     } else {

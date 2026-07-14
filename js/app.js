@@ -8,13 +8,60 @@ class FormApp {
     this.currentForm = null;
     this.currentFormEngine = null;
     this.lastDestino = null; // destino de la última captura (se mantiene fijo entre capturas)
-    this.records = []; // Registros acumulados en la sesión
+    this.recordsByForm = {}; // registros acumulados en la sesión, por formId (persisten hasta descargar/limpiar)
     this.catalogCache = {}; // catálogos ya descargados, por catalogUrl
+
+    // Guard de historial: intercepta el botón/gesto "atrás" del sistema
+    // (Android) para navegar dentro de la app en vez de salir del navegador.
+    this._screen = 'menu';
+    this._inSubScreen = false;
+    window.addEventListener('popstate', () => this.handleHardwareBack());
+    history.replaceState({ screen: 'menu' }, '', '');
+
     this.init();
   }
 
   init() {
     this.showMenu();
+  }
+
+  /**
+   * Registros acumulados de un formulario (persisten en memoria hasta que
+   * el usuario los descargue o los limpie explícitamente)
+   */
+  getRecords(formId) {
+    if (!this.recordsByForm[formId]) this.recordsByForm[formId] = [];
+    return this.recordsByForm[formId];
+  }
+
+  /**
+   * Asegura que exista una entrada extra en el historial mientras estemos
+   * fuera del menú, para que el botón "atrás" del sistema navegue dentro
+   * de la app en vez de cerrarla.
+   */
+  ensureBackGuard() {
+    if (!this._inSubScreen) {
+      history.pushState({ guard: true }, '', '');
+      this._inSubScreen = true;
+    }
+  }
+
+  /**
+   * Se ejecuta cuando el usuario usa el botón/gesto "atrás" del sistema.
+   */
+  handleHardwareBack() {
+    if (this.currentFormEngine) {
+      this.currentFormEngine.back();
+    } else {
+      this.showMenu();
+    }
+
+    if (this._screen !== 'menu') {
+      history.pushState({ guard: true }, '', '');
+      this._inSubScreen = true;
+    } else {
+      this._inSubScreen = false;
+    }
   }
 
   /**
@@ -43,6 +90,8 @@ class FormApp {
   showMenu() {
     this.destroyCurrentFormEngine();
     this.lastDestino = null;
+    this._screen = 'menu';
+    this._inSubScreen = false;
     this.setHeader({ title: 'Generador de CSV' });
 
     const app = document.getElementById('app');
@@ -76,7 +125,83 @@ class FormApp {
     });
 
     content.appendChild(grid);
+    content.appendChild(this.renderSavedLogsSection());
     app.appendChild(content);
+  }
+
+  /**
+   * Sección "Registros Guardados": acceso rápido para ver cada log sin
+   * llenar uno nuevo, y descarga masiva de todos los logs con datos.
+   */
+  renderSavedLogsSection() {
+    const wrap = document.createElement('div');
+
+    const formsWithRecords = getAllForms().filter((f) => this.getRecords(f.id).length > 0);
+    if (!formsWithRecords.length) return wrap;
+
+    const section = document.createElement('div');
+    section.className = 'card';
+    section.style.marginTop = 'var(--spacing-lg)';
+
+    const sectionTitle = document.createElement('h3');
+    sectionTitle.style.marginBottom = 'var(--spacing-md)';
+    sectionTitle.textContent = 'Registros Guardados';
+    section.appendChild(sectionTitle);
+
+    formsWithRecords.forEach((form) => {
+      const row = document.createElement('div');
+      row.className = 'saved-log-row';
+      row.innerHTML = `
+        <div class="saved-log-info">
+          <div class="saved-log-title">${form.title}</div>
+          <div class="saved-log-count">${this.getRecords(form.id).length} registro${this.getRecords(form.id).length === 1 ? '' : 's'}</div>
+        </div>
+      `;
+      const viewBtn = document.createElement('button');
+      viewBtn.className = 'btn btn-secondary btn-sm';
+      viewBtn.textContent = 'Ver';
+      viewBtn.addEventListener('click', () => this.viewRecords(form.id));
+      row.appendChild(viewBtn);
+      section.appendChild(row);
+    });
+
+    const downloadAllBtn = document.createElement('button');
+    downloadAllBtn.className = 'btn btn-primary btn-block';
+    downloadAllBtn.style.marginTop = 'var(--spacing-md)';
+    downloadAllBtn.innerHTML = `${Icons.svg('arrowDown', { size: 18 })}<span>Descargar Todos los Logs</span>`;
+    downloadAllBtn.addEventListener('click', () => this.downloadAllLogs(formsWithRecords));
+    section.appendChild(downloadAllBtn);
+
+    wrap.appendChild(section);
+    return wrap;
+  }
+
+  /**
+   * Va directo a ver los registros de un formulario, sin iniciar una captura.
+   */
+  viewRecords(formId) {
+    this.currentForm = getFormConfig(formId);
+    this.showRecordsPage();
+  }
+
+  /**
+   * Descarga un CSV por cada log con registros (columnas distintas por log,
+   * así que no se combinan en un solo archivo). Se espacían las descargas
+   * para evitar que el navegador bloquee las descargas múltiples.
+   */
+  downloadAllLogs(forms) {
+    if (!forms.length) return;
+
+    this.showAlert(`Descargando ${forms.length} log${forms.length === 1 ? '' : 's'}...`, 'success');
+
+    forms.forEach((form, index) => {
+      setTimeout(() => {
+        const result = CSVEngine.exportAndDownload(this.getRecords(form.id), form);
+        if (!result.success) {
+          this.showAlert(`Error al descargar "${form.title}": ${result.error}`, 'error');
+        }
+      }, index * 400);
+    });
   }
 
   /**
@@ -92,13 +217,8 @@ class FormApp {
     }
 
     this.destroyCurrentFormEngine();
-
-    // Al cambiar de tipo de formulario, reiniciamos los registros acumulados
-    if (this.recordsFormId !== formId) {
-      this.records = [];
-      this.recordsFormId = formId;
-      this.lastDestino = null;
-    }
+    this._screen = 'capture';
+    this.ensureBackGuard();
     this.currentForm = formConfig;
 
     const app = document.getElementById('app');
@@ -186,6 +306,8 @@ class FormApp {
    * Pantalla de error cuando el catálogo no pudo descargarse, con reintento.
    */
   showCatalogError(formConfig) {
+    this._screen = 'catalog-error';
+    this.ensureBackGuard();
     this.setHeader({
       leftIcon: 'arrowLeft',
       leftAction: () => this.showMenu(),
@@ -236,8 +358,9 @@ class FormApp {
       this.lastDestino = data.destino;
     }
 
-    this.records.push(data);
-    this.showAlert(`Registro agregado (total: ${this.records.length})`, 'success');
+    const records = this.getRecords(this.currentForm.id);
+    records.push(data);
+    this.showAlert(`Registro agregado (total: ${records.length})`, 'success');
     this.showRecordsPage();
   }
 
@@ -246,6 +369,8 @@ class FormApp {
    */
   showRecordsPage() {
     this.destroyCurrentFormEngine();
+    this._screen = 'records';
+    this.ensureBackGuard();
     this.setHeader({
       leftIcon: 'arrowLeft',
       leftAction: () => this.showMenu(),
@@ -263,13 +388,15 @@ class FormApp {
     title.textContent = this.currentForm.title;
     content.appendChild(title);
 
-    if (this.records.length > 0) {
+    const records = this.getRecords(this.currentForm.id);
+
+    if (records.length > 0) {
       const recordsSection = document.createElement('div');
       recordsSection.className = 'card';
 
       const recordsTitle = document.createElement('h3');
       recordsTitle.style.marginBottom = 'var(--spacing-md)';
-      recordsTitle.innerHTML = `<span>Registros Acumulados</span> <span class="form-card-meta" style="margin-left:auto">${this.records.length}</span>`;
+      recordsTitle.innerHTML = `<span>Registros Acumulados</span> <span class="form-card-meta" style="margin-left:auto">${records.length}</span>`;
       recordsTitle.style.display = 'flex';
       recordsTitle.style.alignItems = 'center';
       recordsSection.appendChild(recordsTitle);
@@ -301,7 +428,7 @@ class FormApp {
       clearBtn.innerHTML = `<span>Limpiar Todo</span>`;
       clearBtn.addEventListener('click', () => {
         if (confirm('¿Estás seguro? Se perderán todos los registros.')) {
-          this.records = [];
+          this.recordsByForm[this.currentForm.id] = [];
           this.showRecordsPage();
         }
       });
@@ -335,7 +462,7 @@ class FormApp {
    */
   deleteRecord(index) {
     if (confirm('¿Eliminar este registro?')) {
-      this.records.splice(index, 1);
+      this.getRecords(this.currentForm.id).splice(index, 1);
       this.showAlert('Registro eliminado', 'success');
       this.showRecordsPage();
     }
@@ -366,7 +493,7 @@ class FormApp {
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
-    this.records.forEach((record, index) => {
+    this.getRecords(this.currentForm.id).forEach((record, index) => {
       const row = document.createElement('tr');
 
       this.currentForm.csvColumns.forEach((col) => {
@@ -396,7 +523,7 @@ class FormApp {
    * Exporta registros a CSV
    */
   exportToCSV() {
-    const result = CSVEngine.exportAndDownload(this.records, this.currentForm);
+    const result = CSVEngine.exportAndDownload(this.getRecords(this.currentForm.id), this.currentForm);
     if (result.success) {
       this.showAlert('CSV descargado exitosamente', 'success');
     } else {
