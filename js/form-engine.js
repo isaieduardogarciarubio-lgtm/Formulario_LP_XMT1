@@ -2,17 +2,18 @@
  * Motor de flujo de captura — una pregunta por pantalla (Single-Task Focus)
  * Basado en la Guía de Diseño UX/UI: Minimalismo Oscuro (Sección 1.1)
  * Soporta campos de texto/select/textarea, 'scanner' (QR/barras),
- * 'destino_select' (lista buscable) y 'doca_chips' (cápsulas dependientes
- * del destino elegido), usados por el log Auditoría - Destino / Doca.
+ * 'destino_combo' y 'doca_combo' (input + lista desplegable, permiten
+ * escribir libremente o elegir), usados por el log Auditoría - Destino / Doca.
  */
 
 class FormEngine {
-  constructor(formConfig, { onComplete, onCancel, initialValues, autoAdvanceFields } = {}) {
+  constructor(formConfig, { onComplete, onCancel, initialValues, autoAdvanceFields, catalogIndex } = {}) {
     this.formConfig = formConfig;
     this.onComplete = onComplete;
     this.onCancel = onCancel;
     this.initialValues = initialValues || {};
     this.autoAdvanceFields = autoAdvanceFields || [];
+    this.catalogIndex = catalogIndex || {};
     this.stepIndex = 0;
     this.values = {};
     this.container = null;
@@ -91,11 +92,11 @@ class FormEngine {
       this.renderScannerStep(field);
       return;
     }
-    if (field.type === 'destino_select') {
+    if (field.type === 'destino_combo') {
       this.renderDestinoStep(field);
       return;
     }
-    if (field.type === 'doca_chips') {
+    if (field.type === 'doca_combo') {
       this.renderDocaStep(field);
       return;
     }
@@ -437,28 +438,68 @@ class FormEngine {
   }
 
   /* ======================================================================
-     Campo destino_select (lista buscable desde CATALOGO_DESTINO_DOCA)
+     Combo genérico: input de texto libre + lista desplegable de opciones.
+     Usado por destino_combo y doca_combo.
      ====================================================================== */
 
-  getDestinoIndex() {
-    if (this._destinoIndex) return this._destinoIndex;
-    const map = {};
-    (typeof CATALOGO_DESTINO_DOCA !== 'undefined' ? CATALOGO_DESTINO_DOCA : []).forEach((row) => {
-      const destino = String(row.destino || '').trim();
-      if (!destino) return;
-      const docas = String(row.docas || '')
-        .split(';')
-        .map((d) => d.trim())
-        .filter(Boolean);
-      map[destino] = docas;
-    });
-    this._destinoIndex = map;
-    return map;
+  isNum(s) {
+    return /^[0-9]+$/.test(String(s).trim());
   }
+
+  getDestinoIndex() {
+    return this.catalogIndex || {};
+  }
+
+  /**
+   * Conecta un <input> con su lista desplegable de sugerencias.
+   * @param {HTMLInputElement} input
+   * @param {HTMLElement} listEl
+   * @param {{getOptions:(q:string)=>string[], renderRow:(opt:string)=>string, onPick:(opt:string)=>void}} cfg
+   */
+  attachCombo(input, listEl, { getOptions, renderRow, onPick }) {
+    const close = () => listEl.classList.remove('open');
+    const renderList = () => {
+      const options = getOptions(input.value.trim()).slice(0, 80);
+      listEl.innerHTML = '';
+      if (!options.length) {
+        const empty = document.createElement('div');
+        empty.className = 'combo-empty';
+        empty.textContent = 'Sin coincidencias. Puedes escribir el valor directamente.';
+        listEl.appendChild(empty);
+        return;
+      }
+      options.forEach((opt) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'combo-opt';
+        row.innerHTML = renderRow(opt);
+        // evita que el blur del input cierre la lista antes del click
+        row.addEventListener('mousedown', (e) => e.preventDefault());
+        row.addEventListener('click', () => {
+          onPick(opt);
+          close();
+        });
+        listEl.appendChild(row);
+      });
+    };
+
+    input.addEventListener('focus', () => {
+      listEl.classList.add('open');
+      renderList();
+    });
+    input.addEventListener('input', () => {
+      listEl.classList.add('open');
+      renderList();
+    });
+    input.addEventListener('blur', () => setTimeout(close, 150));
+  }
+
+  /* ======================================================================
+     Campo destino_combo (escribir o elegir desde el catálogo)
+     ====================================================================== */
 
   renderDestinoStep(field) {
     this.container.innerHTML = '';
-    this.actionsEl = null;
 
     const screen = document.createElement('div');
     screen.className = 'step-screen';
@@ -471,17 +512,19 @@ class FormEngine {
     screen.appendChild(h1);
 
     const inputWrap = document.createElement('div');
-    inputWrap.className = 'step-input-wrap';
+    inputWrap.className = 'step-input-wrap combo-wrap';
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'step-input';
-    input.placeholder = 'Buscar destino...';
+    input.placeholder = 'Escribe o elige un destino';
+    input.value = this.values.destino || '';
     inputWrap.appendChild(input);
-    screen.appendChild(inputWrap);
 
     const list = document.createElement('div');
-    list.className = 'destino-list';
-    screen.appendChild(list);
+    list.className = 'combo-list';
+    inputWrap.appendChild(list);
+
+    screen.appendChild(inputWrap);
 
     const support = document.createElement('div');
     support.className = 'step-support';
@@ -496,59 +539,36 @@ class FormEngine {
 
     const destinos = Object.keys(this.getDestinoIndex()).sort((a, b) => a.localeCompare(b, 'es'));
 
-    const renderList = (query) => {
-      const q = (query || '').trim().toLowerCase();
-      const matches = q ? destinos.filter((d) => d.toLowerCase().includes(q)) : destinos;
-      list.innerHTML = '';
+    this.attachCombo(input, list, {
+      getOptions: (q) => {
+        const query = q.toLowerCase();
+        return query ? destinos.filter((d) => d.toLowerCase().includes(query)) : destinos;
+      },
+      renderRow: (destino) => {
+        const docaCount = (this.getDestinoIndex()[destino] || []).length;
+        return `<span class="combo-opt-label">${destino}</span><span class="combo-opt-meta">${docaCount} doca${docaCount === 1 ? '' : 's'}</span>`;
+      },
+      onPick: (destino) => {
+        input.value = destino;
+        this.clearError();
+      },
+    });
 
-      if (!destinos.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-state';
-        empty.textContent = 'No hay destinos configurados en el catálogo.';
-        list.appendChild(empty);
-        return;
+    input.addEventListener('input', () => this.clearError());
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.next();
       }
+    });
 
-      if (!matches.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-state';
-        empty.textContent = 'Sin coincidencias.';
-        list.appendChild(empty);
-        return;
-      }
-
-      matches.forEach((destino) => {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'destino-row';
-        const docaCount = this.getDestinoIndex()[destino].length;
-        row.innerHTML = `
-          <span class="destino-row-name">${destino}</span>
-          <span class="destino-row-meta">${docaCount} doca${docaCount === 1 ? '' : 's'}</span>
-        `;
-        row.addEventListener('click', () => {
-          this.values.destino = destino;
-          this.values.doca = '';
-          this.values.resultado = '';
-          this.advance();
-        });
-        list.appendChild(row);
-      });
-    };
-
-    input.addEventListener('input', () => renderList(input.value));
-    renderList('');
-
+    this.renderActions(field);
     setTimeout(() => input.focus(), 60);
   }
 
   /* ======================================================================
-     Campo doca_chips (cápsulas dependientes del destino elegido)
+     Campo doca_combo (escribir o elegir; dependiente del destino elegido)
      ====================================================================== */
-
-  isNum(s) {
-    return /^[0-9]+$/.test(String(s).trim());
-  }
 
   renderDocaStep(field) {
     this.container.innerHTML = '';
@@ -563,14 +583,25 @@ class FormEngine {
     h1.textContent = field.label;
     screen.appendChild(h1);
 
-    const chipsWrap = document.createElement('div');
-    chipsWrap.className = 'chips';
-    screen.appendChild(chipsWrap);
-
     const hint = document.createElement('div');
     hint.className = 'doca-hint';
     hint.innerHTML = 'Si la doca es numérica: <b class="ok">Sin incidencia</b>. Si no: <b class="bad">Erróneo</b>.';
     screen.appendChild(hint);
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'step-input-wrap combo-wrap';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'step-input';
+    input.placeholder = 'Escribe o elige una doca';
+    input.value = this.values.doca || '';
+    inputWrap.appendChild(input);
+
+    const list = document.createElement('div');
+    list.className = 'combo-list';
+    inputWrap.appendChild(list);
+
+    screen.appendChild(inputWrap);
 
     const preview = document.createElement('div');
     preview.className = 'doca-preview';
@@ -582,11 +613,12 @@ class FormEngine {
 
     this.container.appendChild(screen);
 
-    this.errorTargetEl = chipsWrap;
+    this.currentInput = input;
+    this.inputWrapEl = inputWrap;
+    this.errorTargetEl = inputWrap;
     this.supportEl = support;
 
-    const docas = this.getDestinoIndex()[this.values.destino] || [];
-    const sorted = docas.slice().sort((a, b) => {
+    const docas = (this.getDestinoIndex()[this.values.destino] || []).slice().sort((a, b) => {
       const an = this.isNum(a);
       const bn = this.isNum(b);
       if (an && bn) return Number(a) - Number(b);
@@ -596,52 +628,49 @@ class FormEngine {
     });
 
     const updatePreview = () => {
-      if (!this.values.doca) {
+      const value = input.value.trim();
+      if (!value) {
         preview.className = 'doca-preview';
         preview.textContent = '';
         return;
       }
-      const ok = this.isNum(this.values.doca);
-      this.values.resultado = ok ? 'Sin incidencia' : 'Erroneo';
+      const ok = this.isNum(value);
       preview.className = 'doca-preview ' + (ok ? 'ok' : 'bad');
-      preview.textContent = `Doca ${this.values.doca} — ${this.values.resultado === 'Sin incidencia' ? 'Sin incidencia' : 'Erróneo'}`;
+      preview.textContent = `Doca ${value} — ${ok ? 'Sin incidencia' : 'Erróneo'}`;
     };
 
-    const renderChips = () => {
-      chipsWrap.innerHTML = '';
-      if (!sorted.length) {
-        const empty = document.createElement('div');
-        empty.className = 'empty-state';
-        empty.textContent = 'Este destino no tiene docas configuradas.';
-        chipsWrap.appendChild(empty);
-        return;
+    this.attachCombo(input, list, {
+      getOptions: (q) => {
+        const query = q.toLowerCase();
+        return query ? docas.filter((d) => d.toLowerCase().includes(query)) : docas;
+      },
+      renderRow: (doca) => `<span class="combo-opt-label">${doca}</span>`,
+      onPick: (doca) => {
+        input.value = doca;
+        this.clearError();
+        updatePreview();
+      },
+    });
+
+    input.addEventListener('input', () => {
+      this.clearError();
+      updatePreview();
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.next();
       }
-      sorted.forEach((doca) => {
-        const num = this.isNum(doca);
-        const chip = document.createElement('button');
-        chip.type = 'button';
-        chip.className =
-          'chip' + (num ? '' : ' alpha') + (this.values.doca === doca ? ' selected' : '');
-        chip.textContent = doca;
-        chip.addEventListener('click', () => {
-          this.values.doca = doca;
-          this.clearError();
-          renderChips();
-          updatePreview();
-        });
-        chipsWrap.appendChild(chip);
-      });
-    };
-
-    renderChips();
+    });
     updatePreview();
+
     this.renderActions(field);
+    setTimeout(() => input.focus(), 60);
   }
 
   /* ====================================================================== */
 
-  readCurrentValue(field) {
-    if (field.type === 'doca_chips') return this.values.doca || '';
+  readCurrentValue() {
     return this.currentInput ? this.currentInput.value.trim() : '';
   }
 
@@ -666,14 +695,25 @@ class FormEngine {
 
   next() {
     const field = this.currentField;
-    const value = this.readCurrentValue(field);
+    const value = this.readCurrentValue();
 
     if (field.required && !value) {
       this.showError('Este campo es obligatorio.');
       return;
     }
 
-    if (field.type !== 'doca_chips') this.values[field.id] = value;
+    // Si cambian el destino ya elegido, la doca previa deja de ser válida
+    if (field.id === 'destino' && this.values.destino && this.values.destino !== value) {
+      delete this.values.doca;
+      delete this.values.resultado;
+    }
+
+    this.values[field.id] = value;
+
+    if (field.id === 'doca') {
+      this.values.resultado = this.isNum(value) ? 'Sin incidencia' : 'Erroneo';
+    }
+
     this.advance();
   }
 

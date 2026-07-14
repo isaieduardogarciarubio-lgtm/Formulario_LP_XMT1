@@ -63,6 +63,67 @@ class CSVEngine {
   }
 
   /**
+   * Parsea texto CSV (soporta comillas, comas y saltos de línea dentro de campos).
+   * Ignora el BOM UTF-8 si está presente. Retorna { headers, records }.
+   */
+  static parseCSV(text) {
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field);
+        field = '';
+      } else if (c === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else if (c === '\r') {
+        // ignorar, el \n siguiente cierra la fila
+      } else {
+        field += c;
+      }
+    }
+    if (field.length || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+
+    const nonEmpty = rows.filter((r) => r.some((cell) => String(cell).trim().length));
+    if (!nonEmpty.length) return { headers: [], records: [] };
+
+    const headers = nonEmpty[0].map((h) => String(h).trim());
+    const records = nonEmpty.slice(1).map((r) => {
+      const obj = {};
+      headers.forEach((h, idx) => {
+        obj[h] = String(r[idx] != null ? r[idx] : '').trim();
+      });
+      return obj;
+    });
+
+    return { headers, records };
+  }
+
+  /**
    * Descarga un CSV al navegador
    * @param {string} csvContent - Contenido del CSV (incluyendo BOM)
    * @param {string} filename - Nombre del archivo (sin extensión .csv)

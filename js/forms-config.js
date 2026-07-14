@@ -3,23 +3,15 @@
  * Cada formulario define sus campos y las columnas del CSV resultante
  */
 
-/**
- * Catálogo Destino → Docas válidas para el log "Auditoría - Destino / Doca".
- * Edita este arreglo con los destinos y docas reales de tu operación.
- * `docas` acepta varios valores separados por punto y coma (ej. "1;2;3;A").
- */
-const CATALOGO_DESTINO_DOCA = [
-  { destino: 'Andén 1', docas: '1;2;3;4' },
-  { destino: 'Andén 2', docas: '5;6;7;8' },
-  { destino: 'Rack A', docas: 'A1;A2;A3' },
-];
-
 const FORMS_CONFIG = {
   destino_doca: {
     id: 'destino_doca',
     title: 'Auditoría - Destino / Doca',
     description: 'Escanea HU, valida destino y doca',
     icon: 'scan',
+    // Catálogo Destino → Docas válidas. Edita este archivo con los destinos
+    // y docas reales de tu operación (columna Doca: valores separados por ";").
+    catalogUrl: 'data/catalogo_destino_doca.csv',
     fields: [
       {
         id: 'hu',
@@ -31,13 +23,13 @@ const FORMS_CONFIG = {
       {
         id: 'destino',
         label: '¿Cuál es el destino?',
-        type: 'destino_select',
+        type: 'destino_combo',
         required: true,
       },
       {
         id: 'doca',
         label: '¿Cuál es la doca?',
-        type: 'doca_chips',
+        type: 'doca_combo',
         required: true,
       },
     ],

@@ -9,6 +9,7 @@ class FormApp {
     this.currentFormEngine = null;
     this.lastDestino = null; // destino de la última captura (se mantiene fijo entre capturas)
     this.records = []; // Registros acumulados en la sesión
+    this.catalogCache = {}; // catálogos ya descargados, por catalogUrl
     this.init();
   }
 
@@ -83,7 +84,7 @@ class FormApp {
    * Si se repite el mismo formulario destino_doca, el destino de la última
    * captura se mantiene fijo y ese paso se salta automáticamente.
    */
-  startCapture(formId) {
+  async startCapture(formId) {
     const formConfig = getFormConfig(formId);
     if (!formConfig) {
       this.showAlert('Formulario no encontrado', 'error');
@@ -103,6 +104,13 @@ class FormApp {
     const app = document.getElementById('app');
     app.innerHTML = '';
 
+    let catalogIndex = {};
+    if (formConfig.catalogUrl) {
+      app.innerHTML = `<div class="content"><div class="step-support">Cargando catálogo...</div></div>`;
+      catalogIndex = await this.loadCatalog(formConfig.catalogUrl);
+    }
+
+    app.innerHTML = '';
     const container = document.createElement('div');
     container.id = 'step_container';
     app.appendChild(container);
@@ -119,6 +127,7 @@ class FormApp {
       onCancel: () => this.showMenu(),
       initialValues,
       autoAdvanceFields,
+      catalogIndex,
     });
 
     this.setHeader({
@@ -129,6 +138,45 @@ class FormApp {
     });
 
     this.currentFormEngine.render('step_container');
+  }
+
+  /**
+   * Descarga y parsea el catálogo Destino → Docas desde un CSV estático.
+   * Si falla, degrada con elegancia: los campos de destino/doca siguen
+   * aceptando texto libre, solo sin sugerencias en la lista desplegable.
+   */
+  async loadCatalog(url) {
+    if (this.catalogCache[url]) return this.catalogCache[url];
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      const { headers, records } = CSVEngine.parseCSV(text);
+
+      const destinoCol = headers.find((h) => h.trim().toLowerCase() === 'destino');
+      const docaCol = headers.find((h) => h.trim().toLowerCase() === 'doca');
+      if (!destinoCol || !docaCol) {
+        throw new Error('El catálogo no tiene las columnas esperadas (Destino / Doca)');
+      }
+
+      const index = {};
+      records.forEach((r) => {
+        const destino = (r[destinoCol] || '').trim();
+        if (!destino) return;
+        const docas = String(r[docaCol] || '')
+          .split(';')
+          .map((d) => d.trim())
+          .filter(Boolean);
+        index[destino] = docas;
+      });
+
+      this.catalogCache[url] = index;
+      return index;
+    } catch (err) {
+      this.showAlert('No se pudo cargar el catálogo. Puedes escribir destino y doca manualmente.', 'error');
+      return {};
+    }
   }
 
   /**

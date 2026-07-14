@@ -290,8 +290,7 @@ select.step-input {
   80% { transform: translateX(4px); }
 }
 
-.step-input-wrap.shake,
-.chips.shake {
+.step-input-wrap.shake {
   animation: shake 0.2s ease;
 }
 
@@ -595,72 +594,65 @@ select.step-input {
   color: var(--color-text-muted);
 }
 
-/* Campo destino_select: lista buscable */
-.destino-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-md);
+/* Combo genérico (destino_combo / doca_combo): input + lista desplegable,
+   permite escribir libremente o elegir una sugerencia */
+.combo-wrap {
+  position: relative;
 }
 
-.destino-row {
+.combo-list {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: var(--spacing-sm);
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 10;
+}
+
+.combo-list.open {
+  display: block;
+}
+
+.combo-opt {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-md);
   width: 100%;
   padding: var(--spacing-md);
-  background: var(--color-surface);
-  border-radius: var(--radius-card);
   text-align: left;
-  transition: background 0.15s ease;
+  color: var(--color-text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-bg);
 }
 
-.destino-row:hover {
+.combo-opt:last-child {
+  border-bottom: none;
+}
+
+.combo-opt:hover {
   background: var(--color-surface-hover);
 }
 
-.destino-row-name {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-}
-
-.destino-row-meta {
+.combo-opt-meta {
   font-size: 0.75rem;
+  font-weight: 500;
   color: var(--color-text-muted);
   flex-shrink: 0;
 }
 
-/* Campo doca_chips: cápsulas dependientes del destino elegido */
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-md);
-}
-
-.chip {
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  color: var(--color-text-primary);
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.chip.alpha {
-  color: #ffb27a;
-}
-
-.chip.selected {
-  background: rgba(52, 199, 89, 0.16);
-  color: #5ed694;
-}
-
-.chip.alpha.selected {
-  background: rgba(255, 69, 58, 0.16);
-  color: #ff8a8b;
+.combo-empty {
+  padding: var(--spacing-md);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  text-align: center;
 }
 
 .doca-hint {
