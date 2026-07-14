@@ -449,6 +449,214 @@ select.step-input {
 }
 
 /* ==========================================================================
+   Escáner QR / código de barras
+   ========================================================================== */
+
+.scanner-body {
+  margin-top: var(--spacing-md);
+}
+
+.scanner-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 60vh;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #0a0a0a;
+}
+
+.scanner-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Mira: recuadro con esquinas resaltadas */
+.scanner-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 66%;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.scanner-frame::before,
+.scanner-frame::after {
+  content: '';
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #ffffff;
+}
+.scanner-frame::before {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 12px;
+}
+.scanner-frame::after {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 12px;
+}
+
+.scanner-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  animation: scanline 2s ease-in-out infinite;
+}
+
+@keyframes scanline {
+  0%, 100% { top: 12%; }
+  50% { top: 88%; }
+}
+
+.scanner-torch {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.scanner-torch.active {
+  background: var(--color-text-primary);
+  color: #000000;
+}
+
+/* Resultado detectado (confirmar por tap) */
+.scanner-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl) var(--spacing-lg);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  min-height: 200px;
+  justify-content: center;
+}
+
+.scanner-result-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-pill);
+  background: rgba(52, 199, 89, 0.16);
+  color: #34c759;
+  margin-bottom: var(--spacing-xs);
+}
+
+.scanner-result-label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.scanner-result-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+.scanner-result-format {
+  display: inline-flex;
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+/* Modo escaneo rápido */
+.rapid-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: var(--spacing-md);
+}
+
+.rapid-count {
+  display: inline-flex;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.rapid-actions .btn-secondary {
+  flex: 0 0 auto;
+}
+.rapid-actions .btn-primary {
+  margin-left: auto;
+}
+
+/* Overlay de confirmación sobre el escaneo rápido */
+.rapid-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--spacing-lg);
+  padding-bottom: calc(var(--spacing-lg) + env(safe-area-inset-bottom));
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.rapid-confirm-card {
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl) var(--spacing-lg);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+}
+
+.rapid-confirm-actions {
+  display: flex;
+  gap: var(--spacing-md);
+  width: 100%;
+  margin-top: var(--spacing-md);
+}
+
+.rapid-confirm-actions .btn {
+  flex: 1;
+}
+
+/* ==========================================================================
    Estado vacío
    ========================================================================== */
 

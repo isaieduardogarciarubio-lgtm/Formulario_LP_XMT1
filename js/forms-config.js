@@ -139,6 +139,58 @@ const FORMS_CONFIG = {
       { field: 'feedback', header: 'Comentarios' },
     ],
   },
+
+  // Formulario con un campo escaneable entre campos manuales (modo B)
+  inventory_form: {
+    id: 'inventory_form',
+    title: 'Registro de Inventario',
+    description: 'Escanea el código del producto y captura cantidad',
+    icon: 'clipboard',
+    fields: [
+      {
+        id: 'product_code',
+        label: 'Escanea el código del producto',
+        type: 'scanner',
+        required: true,
+        placeholder: 'Código del producto',
+      },
+      {
+        id: 'quantity',
+        label: '¿Cuántas unidades?',
+        type: 'number',
+        required: true,
+        min: 0,
+        placeholder: '10',
+      },
+      {
+        id: 'location',
+        label: 'Ubicación / Estante',
+        type: 'text',
+        required: false,
+        placeholder: 'A-12',
+      },
+    ],
+    csvColumns: [
+      { field: 'product_code', header: 'Código' },
+      { field: 'quantity', header: 'Cantidad' },
+      { field: 'location', header: 'Ubicación' },
+    ],
+  },
+
+  // Modo de escaneo rápido: cada código detectado = un registro (modo A)
+  rapid_scan: {
+    id: 'rapid_scan',
+    title: 'Escaneo Rápido',
+    description: 'Escanea muchos códigos seguidos, cada uno se guarda como registro',
+    icon: 'qr',
+    mode: 'rapid',
+    scanColumn: { field: 'code', header: 'Código' },
+    csvColumns: [
+      { field: 'code', header: 'Código' },
+      { field: 'format', header: 'Tipo' },
+      { field: 'scanned_at', header: 'Fecha/Hora' },
+    ],
+  },
 };
 
 /**

@@ -7,6 +7,8 @@ class FormApp {
   constructor() {
     this.currentForm = null;
     this.currentFormEngine = null;
+    this.rapidScanner = null;
+    this.lastScan = null; // guardia anti-duplicados { code, ts }
     this.records = []; // Registros acumulados en la sesión
     this.init();
   }
@@ -87,7 +89,19 @@ class FormApp {
     }
 
     this.destroyCurrentFormEngine();
+
+    // Al cambiar de tipo de formulario, reiniciamos los registros acumulados
+    if (this.recordsFormId !== formId) {
+      this.records = [];
+      this.recordsFormId = formId;
+    }
     this.currentForm = formConfig;
+
+    // Modo escaneo rápido: pantalla dedicada de captura por cámara
+    if (formConfig.mode === 'rapid') {
+      this.showRapidScan();
+      return;
+    }
 
     const app = document.getElementById('app');
     app.innerHTML = '';
@@ -112,13 +126,226 @@ class FormApp {
   }
 
   /**
-   * Libera los listeners de Visual Viewport del paso de captura anterior
+   * Libera recursos del paso de captura anterior (viewport y cámara)
    */
   destroyCurrentFormEngine() {
     if (this.currentFormEngine) {
       this.currentFormEngine.destroy();
       this.currentFormEngine = null;
     }
+    this.stopRapidScanner();
+  }
+
+  stopRapidScanner() {
+    if (this.rapidScanner) {
+      this.rapidScanner.stop();
+      this.rapidScanner = null;
+    }
+  }
+
+  /* ======================================================================
+     Modo escaneo rápido — cada código detectado = un registro (modo A)
+     ====================================================================== */
+
+  async showRapidScan() {
+    this.setHeader({
+      leftIcon: 'arrowLeft',
+      leftAction: () => this.showMenu(),
+      rightIcon: 'close',
+      rightAction: () => this.showMenu(),
+    });
+
+    const app = document.getElementById('app');
+    app.innerHTML = '';
+
+    const content = document.createElement('div');
+    content.className = 'content rapid-scan';
+    content.innerHTML = `
+      <div class="scanner-body">
+        <div class="scanner-viewport">
+          <video class="scanner-video" playsinline muted></video>
+          <div class="scanner-frame"><span class="scanner-line"></span></div>
+        </div>
+      </div>
+      <div class="rapid-status">
+        <span class="rapid-count" id="rapid_count">0 escaneados</span>
+      </div>
+      <div class="step-support" id="rapid_support">Apunta al código. Cada lectura se guarda como un registro.</div>
+    `;
+    app.appendChild(content);
+
+    this.rapidCountEl = document.getElementById('rapid_count');
+    this.rapidSupportEl = document.getElementById('rapid_support');
+    this.updateRapidCount();
+
+    // Zona de acciones flotante
+    const actions = document.createElement('div');
+    actions.className = 'step-actions rapid-actions';
+
+    const manualBtn = document.createElement('button');
+    manualBtn.type = 'button';
+    manualBtn.className = 'btn btn-secondary';
+    manualBtn.innerHTML = `${Icons.svg('keyboard', { size: 16 })}<span>Manual</span>`;
+    manualBtn.addEventListener('click', () => this.rapidManualEntry());
+
+    const doneBtn = document.createElement('button');
+    doneBtn.type = 'button';
+    doneBtn.className = 'btn btn-primary';
+    doneBtn.innerHTML = `<span>Ver registros</span>${Icons.svg('arrowRight', { size: 16 })}`;
+    doneBtn.addEventListener('click', () => this.showRecordsPage());
+
+    actions.appendChild(manualBtn);
+    actions.appendChild(doneBtn);
+    app.appendChild(actions);
+    this.rapidActionsEl = actions;
+
+    if (!ScannerEngine.isSupported()) {
+      this.setRapidSupport('Tu navegador no permite usar la cámara. Usa "Manual".', true);
+      return;
+    }
+
+    const video = content.querySelector('.scanner-video');
+    this.rapidScanner = new ScannerEngine();
+    try {
+      await this.rapidScanner.start(video, (text, format) => this.onRapidDetected(text, format));
+      this.maybeAddRapidTorch();
+    } catch (err) {
+      const msg =
+        err && err.name === 'NotAllowedError'
+          ? 'Permiso de cámara denegado. Usa "Manual".'
+          : 'No se pudo abrir la cámara. Usa "Manual".';
+      this.setRapidSupport(msg, true);
+    }
+  }
+
+  maybeAddRapidTorch() {
+    if (!this.rapidScanner || !this.rapidScanner.hasTorch()) return;
+    const viewport = document.querySelector('.rapid-scan .scanner-viewport');
+    if (!viewport) return;
+    const torchBtn = document.createElement('button');
+    torchBtn.type = 'button';
+    torchBtn.className = 'scanner-torch';
+    torchBtn.setAttribute('aria-label', 'Linterna');
+    torchBtn.innerHTML = Icons.svg('flash', { size: 20 });
+    let on = false;
+    torchBtn.addEventListener('click', async () => {
+      on = !on;
+      const ok = await this.rapidScanner.setTorch(on);
+      torchBtn.classList.toggle('active', ok && on);
+    });
+    viewport.appendChild(torchBtn);
+  }
+
+  onRapidDetected(text, format) {
+    if (!text) return;
+
+    // Guardia anti-duplicados: mismo código en menos de 2.5s se ignora
+    const now = Date.now();
+    if (this.lastScan && this.lastScan.code === text && now - this.lastScan.ts < 2500) {
+      return;
+    }
+
+    if (this.rapidScanner) this.rapidScanner.pause();
+    if (navigator.vibrate) navigator.vibrate(60);
+
+    this.showRapidConfirm(text, format);
+  }
+
+  /**
+   * Overlay de confirmación por tap antes de guardar (decisión de UX)
+   */
+  showRapidConfirm(text, format) {
+    const existing = document.querySelector('.rapid-confirm');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'rapid-confirm';
+    overlay.innerHTML = `
+      <div class="rapid-confirm-card">
+        <div class="scanner-result-badge">${Icons.svg('checkCircle', { size: 22 })}</div>
+        <div class="scanner-result-label">Código detectado</div>
+        <div class="scanner-result-value"></div>
+        ${format ? `<div class="scanner-result-format">${this.formatLabel(format)}</div>` : ''}
+        <div class="rapid-confirm-actions"></div>
+      </div>
+    `;
+    overlay.querySelector('.scanner-result-value').textContent = text;
+
+    const actionsRow = overlay.querySelector('.rapid-confirm-actions');
+
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'btn btn-secondary';
+    retryBtn.innerHTML = `${Icons.svg('refresh', { size: 16 })}<span>Descartar</span>`;
+    retryBtn.addEventListener('click', () => {
+      overlay.remove();
+      if (this.rapidScanner) this.rapidScanner.resume();
+    });
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn btn-primary';
+    saveBtn.innerHTML = `${Icons.svg('check', { size: 16 })}<span>Guardar</span>`;
+    saveBtn.addEventListener('click', () => {
+      this.saveRapidRecord(text, format);
+      overlay.remove();
+      if (this.rapidScanner) this.rapidScanner.resume();
+    });
+
+    actionsRow.appendChild(retryBtn);
+    actionsRow.appendChild(saveBtn);
+    document.getElementById('app').appendChild(overlay);
+  }
+
+  saveRapidRecord(text, format) {
+    this.lastScan = { code: text, ts: Date.now() };
+    const record = {
+      code: text,
+      format: this.formatLabel(format),
+      scanned_at: new Date().toLocaleString('es-MX'),
+    };
+    this.records.push(record);
+    this.updateRapidCount();
+    this.setRapidSupport(`Guardado: ${text}`, false);
+  }
+
+  rapidManualEntry() {
+    const code = prompt('Escribe el código manualmente:');
+    if (code && code.trim()) {
+      this.saveRapidRecord(code.trim(), null);
+    }
+  }
+
+  updateRapidCount() {
+    if (this.rapidCountEl) {
+      this.rapidCountEl.textContent = `${this.records.length} escaneado${this.records.length === 1 ? '' : 's'}`;
+    }
+  }
+
+  setRapidSupport(message, isError) {
+    if (!this.rapidSupportEl) return;
+    this.rapidSupportEl.textContent = message;
+    this.rapidSupportEl.classList.toggle('error', !!isError);
+  }
+
+  formatLabel(format) {
+    if (!format) return 'Manual';
+    const labels = {
+      qr_code: 'QR',
+      ean_13: 'EAN-13',
+      ean_8: 'EAN-8',
+      upc_a: 'UPC-A',
+      upc_e: 'UPC-E',
+      code_128: 'Code 128',
+      code_39: 'Code 39',
+      code_93: 'Code 93',
+      codabar: 'Codabar',
+      itf: 'ITF',
+      data_matrix: 'Data Matrix',
+      pdf417: 'PDF417',
+      aztec: 'Aztec',
+    };
+    return labels[format] || format;
   }
 
   /**
