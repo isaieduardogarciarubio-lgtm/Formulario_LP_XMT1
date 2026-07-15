@@ -3,6 +3,13 @@
    Minimalismo oscuro, mobile-first, flujos de una sola pregunta por pantalla.
    ========================================================================== */
 
+@font-face {
+  font-family: 'Proxima Nova';
+  src: url('../data/proximanovabold.otf') format('opentype');
+  font-weight: bold;
+  font-display: swap;
+}
+
 :root {
   /* Paleta OLED True Dark */
   --color-bg: #000000;
@@ -98,6 +105,7 @@ body {
 }
 
 .navbar-title {
+  font-family: 'Proxima Nova', sans-serif;
   font-size: 1rem;
   font-weight: 700;
   color: var(--color-text-primary);
