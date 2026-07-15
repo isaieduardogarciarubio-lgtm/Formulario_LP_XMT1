@@ -92,7 +92,7 @@ class FormApp {
     this.lastDestino = null;
     this._screen = 'menu';
     this._inSubScreen = false;
-    this.setHeader({ title: 'Generador de CSV' });
+    this.setHeader({ title: 'Auditorías XMT1' });
 
     const app = document.getElementById('app');
     app.innerHTML = '';
