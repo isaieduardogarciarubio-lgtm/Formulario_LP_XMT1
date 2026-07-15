@@ -563,11 +563,16 @@
 <script>
   // ==========================================================================
   // GridClient
+  // Contrato real de la API de State Buckets de Grid: el payload va bajo la
+  // clave "state" (no "data"), y la respuesta trae "updated_at" en el nivel
+  // superior (no anidado). Si Grid ya inyectó window.GRID.states (plataforma
+  // real), lo usamos directo; si no, replicamos el mismo contrato a mano.
   // ==========================================================================
   class GridClient {
     constructor(docId) {
       this.docId = docId;
       this.baseUrl = location.origin;
+      this._updatedAtByName = {};
     }
 
     async getMe() {
@@ -582,29 +587,50 @@
     }
 
     async getStateBucket(name) {
+      if (window.GRID && window.GRID.states) {
+        try {
+          const body = await window.GRID.states.get(name);
+          return body.state ?? null;
+        } catch (e) {
+          if (e && (e.status === 404 || e.error === 'not_found')) return null;
+          console.error(`getStateBucket ${name}:`, e);
+          return null;
+        }
+      }
+
       try {
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
           credentials: 'include',
         });
         if (res.status === 404) return null;
         if (!res.ok) throw new Error(`${res.status}`);
-        const data = await res.json();
-        return data.data || null;
+        const body = await res.json();
+        this._updatedAtByName[name] = body.updated_at || '';
+        return body.state ?? null;
       } catch (e) {
         console.error(`getStateBucket ${name}:`, e);
         return null;
       }
     }
 
-    async setStateBucket(name, data, ifUpdatedAt = null) {
-      try {
-        const body = { data };
-        if (ifUpdatedAt) body.if_updated_at = ifUpdatedAt;
+    async setStateBucket(name, data) {
+      if (window.GRID && window.GRID.states) {
+        try {
+          await window.GRID.states.set(name, data);
+          return { ok: true };
+        } catch (e) {
+          if (e && (e.status === 409 || e.error === 'conflict')) return { conflict: true };
+          console.error(`setStateBucket ${name}:`, e);
+          return null;
+        }
+      }
 
+      try {
+        const ifUpdatedAt = this._updatedAtByName[name] || '';
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({ state: data, if_updated_at: ifUpdatedAt }),
           credentials: 'include',
         });
 
@@ -613,8 +639,9 @@
           return { conflict: true };
         }
         if (!res.ok) throw new Error(`${res.status}`);
-        const result = await res.json();
-        return result;
+        const body = await res.json();
+        this._updatedAtByName[name] = body.updated_at || '';
+        return { ok: true };
       } catch (e) {
         console.error(`setStateBucket ${name}:`, e);
         return null;
@@ -702,13 +729,13 @@
 
     async handleCsvFile(file) {
       const text = await file.text();
-      const lines = text.split('\n').filter(l => l.trim());
-      if (lines.length < 2) {
+      const { headers, records: rawRecords } = parseCSV(text);
+
+      if (rawRecords.length === 0) {
         this.showAlert('uploadAlert', 'error', 'CSV vacío');
         return;
       }
 
-      const headers = lines[0].split(',').map(h => h.trim());
       const logType = detectLogTypeFromHeaders(headers);
 
       if (!logType) {
@@ -716,17 +743,7 @@
         return;
       }
 
-      const records = [];
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
-        const record = {};
-        headers.forEach((h, idx) => {
-          record[this.headerToFieldId(h)] = values[idx] || '';
-        });
-        record.ts = new Date().toISOString();
-        records.push(record);
-      }
-
+      const records = rawRecords.map(raw => mapRowToRecord(raw, logType));
       await this.addRecords(logType, records);
     }
 
@@ -747,23 +764,10 @@
           if (!this.logs.hasOwnProperty(logType)) continue;
 
           const csvText = await file.async('string');
-          const lines = csvText.split('\n').filter(l => l.trim());
-          if (lines.length < 2) continue;
+          const { headers, records: rawRecords } = parseCSV(csvText);
+          if (rawRecords.length === 0) continue;
 
-          const headers = lines[0].split(',').map(h => h.trim());
-          const records = [];
-
-          for (let i = 1; i < lines.length; i++) {
-            const values = lines[i].split(',').map(v => v.trim());
-            const record = {};
-            headers.forEach((h, idx) => {
-              const fieldId = this.headerToFieldId(h);
-              const value = values[idx] || '';
-              record[fieldId] = value;
-            });
-            record.ts = new Date().toISOString();
-            records.push(record);
-          }
+          const records = rawRecords.map(raw => mapRowToRecord(raw, logType));
 
           // Process photos
           const fotoFolder = content.folder(`${folderName}/fotos`);
@@ -797,7 +801,7 @@
     async addRecords(logType, newRecords) {
       const bucket = `${logType}_master`;
       const existing = await this.gridClient.getStateBucket(bucket);
-      const records = existing?.records || [];
+      const records = existing?.records ? [...existing.records] : [];
 
       for (const record of newRecords) {
         const isDuplicate = records.some(
@@ -812,11 +816,15 @@
         }
       }
 
-      const updated_at = existing?.updated_at;
-      const result = await this.gridClient.setStateBucket(bucket, { version: 1, records }, updated_at);
+      const result = await this.gridClient.setStateBucket(bucket, { version: 1, records });
 
       if (result?.conflict) {
         setTimeout(() => this.addRecords(logType, newRecords), 500 + Math.random() * 500);
+        return;
+      }
+
+      if (!result) {
+        this.showAlert('uploadAlert', 'error', `No se pudo guardar en ${logType} (ver consola)`);
         return;
       }
 
@@ -922,9 +930,26 @@
       container.appendChild(card);
     }
 
+    countByField(records, field) {
+      const counts = {};
+      records.forEach(r => {
+        const key = (r[field] || '').toString().trim() || '(sin dato)';
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      return counts;
+    }
+
     renderCharts(records) {
       const container = document.getElementById('charts-grid');
       container.innerHTML = '';
+
+      if (typeof Plotly === 'undefined') {
+        const warn = document.createElement('div');
+        warn.className = 'empty-state';
+        warn.textContent = 'Plotly no está disponible en este entorno.';
+        container.appendChild(warn);
+        return;
+      }
 
       if (this.currentLog === 'destino_doca') {
         this.renderResultadoChart(container, records);
@@ -943,10 +968,7 @@
       div.className = 'chart-container';
       container.appendChild(div);
 
-      const counts = {};
-      records.forEach(r => {
-        counts[r.resultado] = (counts[r.resultado] || 0) + 1;
-      });
+      const counts = this.countByField(records, 'resultado');
 
       const data = [{
         labels: Object.keys(counts),
@@ -972,10 +994,7 @@
       div.className = 'chart-container';
       container.appendChild(div);
 
-      const counts = {};
-      records.forEach(r => {
-        counts[r.situacion] = (counts[r.situacion] || 0) + 1;
-      });
+      const counts = this.countByField(records, 'situacion');
 
       const data = [{
         x: Object.keys(counts),
@@ -1002,10 +1021,7 @@
       div.className = 'chart-container';
       container.appendChild(div);
 
-      const counts = {};
-      records.forEach(r => {
-        counts[r.destino] = (counts[r.destino] || 0) + 1;
-      });
+      const counts = this.countByField(records, 'destino');
 
       const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
 
@@ -1034,10 +1050,7 @@
       div.className = 'chart-container';
       container.appendChild(div);
 
-      const counts = {};
-      records.forEach(r => {
-        counts[r.area] = (counts[r.area] || 0) + 1;
-      });
+      const counts = this.countByField(records, 'area');
 
       const data = [{
         labels: Object.keys(counts),
@@ -1135,14 +1148,6 @@
       setTimeout(() => el.style.display = 'none', 5000);
     }
 
-    headerToFieldId(header) {
-      return header.toLowerCase()
-        .replace(/[^a-z0-9]+/g, '_')
-        .replace(/^_|_$/g, '')
-        .replace('fecha/hora', 'ts')
-        .replace('resultado', 'resultado');
-    }
-
     getLogTitle(logType) {
       const config = FORMS_CONFIG[logType];
       return config?.title || logType;
@@ -1152,8 +1157,81 @@
   // ==========================================================================
   // Config & Helpers
   // ==========================================================================
+
+  /** Minúsculas + sin acentos, para comparar headers sin depender de tildes. */
+  function normalizeText(s) {
+    return String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+  }
+
+  /**
+   * Parser CSV con soporte de comillas (RFC4180): respeta comas y saltos de
+   * línea dentro de campos entre comillas (p. ej. el timestamp
+   * "14/7/2026, 10:30:45" que genera la app de captura). Ignora BOM UTF-8.
+   * Retorna { headers, records } con records como objetos { header: valor }.
+   */
+  function parseCSV(text) {
+    if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field);
+        field = '';
+      } else if (c === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else if (c === '\r') {
+        // ignorar, el \n siguiente cierra la fila
+      } else {
+        field += c;
+      }
+    }
+    if (field.length || row.length) {
+      row.push(field);
+      rows.push(row);
+    }
+
+    const nonEmpty = rows.filter(r => r.some(cell => String(cell).trim().length));
+    if (!nonEmpty.length) return { headers: [], records: [] };
+
+    const headers = nonEmpty[0].map(h => String(h).trim());
+    const records = nonEmpty.slice(1).map(r => {
+      const obj = {};
+      headers.forEach((h, idx) => {
+        obj[h] = String(r[idx] != null ? r[idx] : '').trim();
+      });
+      return obj;
+    });
+
+    return { headers, records };
+  }
+
   function detectLogTypeFromHeaders(headers) {
-    const normalized = headers.map(h => h.toLowerCase().trim());
+    const normalized = headers.map(normalizeText);
 
     if (normalized.includes('resultado')) {
       return 'destino_doca';
@@ -1164,6 +1242,28 @@
     }
 
     return null;
+  }
+
+  /** Header (texto exacto del CSV, con acentos) → field id, por tipo de log. */
+  function buildHeaderFieldMap(logType) {
+    const config = FORMS_CONFIG[logType];
+    const map = {};
+    config.csvColumns.forEach(col => {
+      map[normalizeText(col.header)] = col.field;
+    });
+    return map;
+  }
+
+  /** Convierte un registro { "Fecha/Hora": "...", "HU": "..." } a { ts, hu, ... }. */
+  function mapRowToRecord(rawRow, logType) {
+    const map = buildHeaderFieldMap(logType);
+    const record = {};
+    for (const [header, value] of Object.entries(rawRow)) {
+      const field = map[normalizeText(header)];
+      if (field) record[field] = value;
+    }
+    if (!record.ts) record.ts = new Date().toISOString();
+    return record;
   }
 
   const FORMS_CONFIG = {
