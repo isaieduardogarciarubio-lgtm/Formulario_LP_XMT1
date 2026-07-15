@@ -101,7 +101,7 @@ class FormApp {
     content.className = 'content';
     content.innerHTML = `
       <div>
-        <h1 class="step-question" style="margin-bottom: var(--spacing-xs);">¿Qué formulario deseas llenar?</h1>
+        <h1 class="step-question" style="margin-bottom: var(--spacing-xs);">¿Qué auditoría deseas capturar?</h1>
         <p style="color: var(--color-text-muted); font-size: var(--font-body);">Selecciona un tipo de registro para comenzar</p>
       </div>
     `;
