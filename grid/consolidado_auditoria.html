@@ -1049,9 +1049,10 @@
 
     renderCharts(records) {
       const container = document.getElementById('charts-grid');
-      container.innerHTML = '';
 
       if (typeof Plotly === 'undefined') {
+        if (this._chartsRafId) cancelAnimationFrame(this._chartsRafId);
+        container.innerHTML = '';
         const warn = document.createElement('div');
         warn.className = 'empty-state';
         warn.textContent = 'Plotly no está disponible en este entorno.';
@@ -1059,23 +1060,63 @@
         return;
       }
 
-      if (this.currentLog === 'destino_doca') {
-        this.renderResultadoChart(container, records);
-        this.renderDestinoChart(container, records);
-      } else if (this.currentLog === 'fury') {
-        this.renderSituacionChart(container, records);
-      } else if (this.currentLog === 'contenerizado') {
-        this.renderSituacionChart(container, records);
-      } else if (this.currentLog === 'linehaul') {
-        this.renderAreaChart(container, records);
+      // render() puede dispararse más de una vez seguida (p. ej. el usuario
+      // hace clic en "Análisis" mientras la carga inicial todavía está en
+      // curso). Si cada llamada limpiara el contenedor de forma síncrona
+      // pero dibujara con Plotly de forma diferida (rAF), varios dibujos
+      // pendientes terminarían ejecutándose en el mismo frame sobre el
+      // contenedor ya vacío, apilando gráficas duplicadas. Por eso
+      // cancelamos cualquier dibujo pendiente y limpiamos justo antes de
+      // dibujar, dentro del mismo callback — solo el último render gana.
+      if (this._chartsRafId) {
+        cancelAnimationFrame(this._chartsRafId);
       }
+
+      // El panel puede acabar de volverse visible (cambio de pestaña) o el
+      // grid CSS (auto-fit) puede no haber terminado de calcular el ancho
+      // final de columna todavía. Si Plotly dibuja en ese instante, mide un
+      // ancho incorrecto y el gráfico queda descuadrado/recortado sin
+      // autocorregirse después. Esperar un frame garantiza que el layout ya
+      // esté asentado antes de que Plotly lea las dimensiones reales.
+      this._chartsRafId = requestAnimationFrame(() => {
+        this._chartsRafId = null;
+        container.innerHTML = '';
+
+        let builders = [];
+        if (this.currentLog === 'destino_doca') {
+          builders = [
+            () => this.buildResultadoChart(records),
+            () => this.buildDestinoChart(records),
+          ];
+        } else if (this.currentLog === 'fury' || this.currentLog === 'contenerizado') {
+          builders = [() => this.buildSituacionChart(records)];
+        } else if (this.currentLog === 'linehaul') {
+          builders = [() => this.buildAreaChart(records)];
+        }
+
+        // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
+        // (auto-fit), el número de columnas depende de cuántos items hay
+        // en el momento de medir: si se dibuja el primer gráfico antes de
+        // que exista el segundo div, el grid colapsa a 1 sola columna a
+        // ancho completo, Plotly mide ese ancho incorrecto, y cuando el
+        // grid se reacomoda a 2 columnas al llegar el segundo div, el SVG
+        // ya dibujado no se vuelve a medir solo — queda descuadrado y
+        // recortado por el overflow:hidden del contenedor.
+        const specs = builders.map(build => {
+          const div = document.createElement('div');
+          div.className = 'chart-container';
+          container.appendChild(div);
+          return { div, ...build() };
+        });
+
+        // Fase 2: con el grid ya en su layout final, dibujar cada gráfica.
+        specs.forEach(({ div, data, layout }) => {
+          Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+        });
+      });
     }
 
-    renderResultadoChart(container, records) {
-      const div = document.createElement('div');
-      div.className = 'chart-container';
-      container.appendChild(div);
-
+    buildResultadoChart(records) {
       const counts = this.countByField(records, 'resultado');
 
       const data = [{
@@ -1091,17 +1132,14 @@
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
         showlegend: true,
-        margin: { l: 30, r: 30, t: 40, b: 30 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
+        margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      return { data, layout };
     }
 
-    renderSituacionChart(container, records) {
-      const div = document.createElement('div');
-      div.className = 'chart-container';
-      container.appendChild(div);
-
+    buildSituacionChart(records) {
       const counts = this.countByField(records, 'situacion');
 
       const data = [{
@@ -1121,14 +1159,10 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      return { data, layout };
     }
 
-    renderDestinoChart(container, records) {
-      const div = document.createElement('div');
-      div.className = 'chart-container';
-      container.appendChild(div);
-
+    buildDestinoChart(records) {
       const counts = this.countByField(records, 'destino');
 
       const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
@@ -1150,14 +1184,10 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      return { data, layout };
     }
 
-    renderAreaChart(container, records) {
-      const div = document.createElement('div');
-      div.className = 'chart-container';
-      container.appendChild(div);
-
+    buildAreaChart(records) {
       const counts = this.countByField(records, 'area');
 
       const data = [{
@@ -1173,10 +1203,11 @@
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
         showlegend: true,
-        margin: { l: 30, r: 30, t: 40, b: 30 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
+        margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      return { data, layout };
     }
 
     renderTable(records) {
