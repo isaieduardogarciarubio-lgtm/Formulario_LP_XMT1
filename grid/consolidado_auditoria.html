@@ -289,6 +289,14 @@
       border: 1px solid var(--border);
       border-radius: var(--r-md);
       padding: 16px;
+      height: 340px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .chart-container .js-plotly-plot,
+    .chart-container .plot-container {
+      width: 100%;
+      height: 100%;
     }
 
     /* ── TABLE ── */
@@ -563,10 +571,19 @@
 <script>
   // ==========================================================================
   // GridClient
-  // Contrato real de la API de State Buckets de Grid: el payload va bajo la
-  // clave "state" (no "data"), y la respuesta trae "updated_at" en el nivel
-  // superior (no anidado). Si Grid ya inyectó window.GRID.states (plataforma
-  // real), lo usamos directo; si no, replicamos el mismo contrato a mano.
+  //
+  // IMPORTANTE (Biblia Grid V11.4, sección 23): el bucket nombrado
+  // (/api/v1/documents/{id}/states/{name}) es el único con control optimista
+  // real (409 en escrituras concurrentes desactualizadas). El payload va bajo
+  // la clave "state" (no "data"), y la respuesta trae "state" + "updated_at"
+  // en el nivel superior: { state: {...}, updated_at: "iso-timestamp" }.
+  //
+  // NO usar window.GRID.state/states para persistencia durable: la Biblia
+  // documenta explícitamente que ese objeto está atado al docId del propio
+  // contenedor HTML, y "el docId cambia en cada upload" — cada vez que se
+  // sube una nueva versión del dashboard, los datos guardados bajo el docId
+  // anterior quedan inalcanzables. Por eso usamos siempre fetch directo
+  // contra un doc_id estable y explícito (this.docId), nunca window.GRID.
   // ==========================================================================
   class GridClient {
     constructor(docId) {
@@ -587,17 +604,6 @@
     }
 
     async getStateBucket(name) {
-      if (window.GRID && window.GRID.states) {
-        try {
-          const body = await window.GRID.states.get(name);
-          return body.state ?? null;
-        } catch (e) {
-          if (e && (e.status === 404 || e.error === 'not_found')) return null;
-          console.error(`getStateBucket ${name}:`, e);
-          return null;
-        }
-      }
-
       try {
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
           credentials: 'include',
@@ -614,17 +620,6 @@
     }
 
     async setStateBucket(name, data) {
-      if (window.GRID && window.GRID.states) {
-        try {
-          await window.GRID.states.set(name, data);
-          return { ok: true };
-        } catch (e) {
-          if (e && (e.status === 409 || e.error === 'conflict')) return { conflict: true };
-          console.error(`setStateBucket ${name}:`, e);
-          return null;
-        }
-      }
-
       try {
         const ifUpdatedAt = this._updatedAtByName[name] || '';
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
@@ -635,6 +630,10 @@
         });
 
         if (res.status === 409) {
+          const conflictBody = await res.json().catch(() => ({}));
+          if (conflictBody.current_updated_at) {
+            this._updatedAtByName[name] = conflictBody.current_updated_at;
+          }
           console.warn('Conflict on state bucket update — retrying');
           return { conflict: true };
         }
