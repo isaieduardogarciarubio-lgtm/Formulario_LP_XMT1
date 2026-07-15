@@ -369,8 +369,31 @@ class FormEngine {
 
   onScanDetected(field, text, format) {
     if (this.scanner) this.scanner.pause();
-    if (navigator.vibrate) navigator.vibrate(60);
-    this.enterDetectedState(field, text, format);
+
+    const parsed = ScanParser.parse(text);
+    if (!parsed) {
+      this.vibrate(40);
+      this.enterScanRejected(field);
+      return;
+    }
+
+    this.vibrate(60);
+    this.enterDetectedState(field, parsed, format);
+  }
+
+  /**
+   * El código escaneado no tiene el formato esperado (HU/Shipment ID). Se
+   * muestra un aviso breve y se reanuda el escaneo automáticamente.
+   */
+  enterScanRejected(field) {
+    this.supportEl.textContent = 'Código no reconocido. Verifica que sea el HU/Shipment ID correcto.';
+    this.supportEl.classList.add('error');
+    setTimeout(() => {
+      if (!this.scanner) return; // se salió del paso mientras esperaba
+      this.supportEl.classList.remove('error');
+      this.supportEl.textContent = 'Apunta la cámara al código QR o de barras.';
+      this.scanner.resume();
+    }, 1000);
   }
 
   enterDetectedState(field, text, format) {
@@ -422,6 +445,7 @@ class FormEngine {
 
     this.currentInput = input;
     this.inputWrapEl = inputWrap;
+    this.errorTargetEl = inputWrap;
 
     input.addEventListener('input', () => this.clearError());
     input.addEventListener('keydown', (e) => {
@@ -447,12 +471,27 @@ class FormEngine {
   }
 
   confirmManual(field) {
-    const value = this.currentInput.value.trim();
-    if (field.required && !value) {
+    const raw = this.currentInput.value.trim();
+
+    if (field.required && !raw) {
       this.showError('Este campo es obligatorio.');
       return;
     }
-    this.values[field.id] = value;
+
+    if (!raw) {
+      this.values[field.id] = '';
+      this.stopScanner();
+      this.advance();
+      return;
+    }
+
+    const parsed = ScanParser.parse(raw);
+    if (!parsed) {
+      this.showError('Formato inválido. Debe ser el HU/Shipment ID (solo dígitos).');
+      return;
+    }
+
+    this.values[field.id] = parsed;
     this.stopScanner();
     this.advance();
   }

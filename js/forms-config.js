@@ -18,7 +18,7 @@ const FORMS_CONFIG = {
         label: '¿Cuál es el HU?',
         type: 'scanner',
         required: true,
-        placeholder: 'Ej. HU123456789',
+        placeholder: 'Ej. 2420997802886101',
       },
       {
         id: 'destino',
@@ -53,7 +53,7 @@ const FORMS_CONFIG = {
         label: '¿Cuál es el Shipment ID?',
         type: 'scanner',
         required: true,
-        placeholder: 'Ej. SHP123456789',
+        placeholder: 'Ej. 47326091753',
       },
       {
         id: 'foto',
@@ -97,7 +97,7 @@ const FORMS_CONFIG = {
         label: '¿Cuál es el Shipment ID?',
         type: 'scanner',
         required: true,
-        placeholder: 'Ej. SHP123456789',
+        placeholder: 'Ej. 47326091753',
       },
       {
         id: 'situacion',
@@ -136,7 +136,7 @@ const FORMS_CONFIG = {
         label: '¿Cuál es el HU?',
         type: 'scanner',
         required: true,
-        placeholder: 'Ej. HU123456789',
+        placeholder: 'Ej. 2420997802886101',
       },
       {
         id: 'area',
