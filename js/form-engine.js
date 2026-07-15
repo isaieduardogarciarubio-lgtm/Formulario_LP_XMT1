@@ -370,7 +370,7 @@ class FormEngine {
   onScanDetected(field, text, format) {
     if (this.scanner) this.scanner.pause();
 
-    const parsed = ScanParser.parse(text);
+    const parsed = ScanParser.parse(text, field.idType);
     if (!parsed) {
       this.vibrate(40);
       this.enterScanRejected(field);
@@ -382,11 +382,21 @@ class FormEngine {
   }
 
   /**
-   * El código escaneado no tiene el formato esperado (HU/Shipment ID). Se
+   * Devuelve la etiqueta legible del tipo de identificador esperado, para
+   * mostrar mensajes de error específicos (HU, Shipment ID o Patente).
+   */
+  idTypeLabel(field) {
+    const labels = { hu: 'HU', shipment: 'Shipment ID', plate: 'Patente' };
+    return labels[field.idType] || 'código';
+  }
+
+  /**
+   * El código escaneado no tiene el formato esperado para este campo (o
+   * corresponde a otro tipo, p. ej. un Shipment en un campo de HU). Se
    * muestra un aviso breve y se reanuda el escaneo automáticamente.
    */
   enterScanRejected(field) {
-    this.supportEl.textContent = 'Código no reconocido. Verifica que sea el HU/Shipment ID correcto.';
+    this.supportEl.textContent = `Código no reconocido. Verifica que sea el ${this.idTypeLabel(field)} correcto.`;
     this.supportEl.classList.add('error');
     setTimeout(() => {
       if (!this.scanner) return; // se salió del paso mientras esperaba
@@ -485,9 +495,14 @@ class FormEngine {
       return;
     }
 
-    const parsed = ScanParser.parse(raw);
+    const parsed = ScanParser.parse(raw, field.idType);
     if (!parsed) {
-      this.showError('Formato inválido. Debe ser el HU/Shipment ID (solo dígitos).');
+      const messages = {
+        hu: 'Formato inválido. Debe ser el HU (solo dígitos).',
+        shipment: 'Formato inválido. Debe ser el Shipment ID (solo dígitos).',
+        plate: 'Formato inválido. Debe ser una patente válida.',
+      };
+      this.showError(messages[field.idType] || 'Formato inválido.');
       return;
     }
 
