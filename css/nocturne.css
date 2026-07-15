@@ -91,15 +91,8 @@ body {
   min-height: 32px;
 }
 
-.navbar-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  min-width: 0;
-}
-
 .navbar-logo {
-  height: 24px;
+  height: 28px;
   width: auto;
   flex-shrink: 0;
 }
