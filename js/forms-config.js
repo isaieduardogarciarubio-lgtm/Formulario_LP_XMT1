@@ -6,7 +6,7 @@
 const FORMS_CONFIG = {
   destino_doca: {
     id: 'destino_doca',
-    title: 'Auditoría - Destino / Doca',
+    title: 'Pre - Missort',
     description: 'Escanea HU, valida destino y doca',
     icon: 'scan',
     // Catálogo Destino → Docas válidas. Edita este archivo con los destinos
@@ -127,7 +127,7 @@ const FORMS_CONFIG = {
 
   linehaul: {
     id: 'linehaul',
-    title: 'Linehaul / Despacho',
+    title: 'Posible daño Linehaul / Despacho',
     description: 'Escanea HU, área, origen y canalización',
     icon: 'home',
     fields: [
