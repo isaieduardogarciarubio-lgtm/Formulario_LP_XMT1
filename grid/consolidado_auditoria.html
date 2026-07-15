@@ -44,29 +44,35 @@
       background-attachment: fixed;
       color: var(--text);
       min-height: 100vh;
-      display: flex;
-      align-items: flex-start;
-      justify-content: center;
-      padding: 32px 16px 56px;
     }
 
     .wrap {
-      width: min(900px, 100%);
+      max-width: 900px;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
       gap: 16px;
+      padding: 32px 16px 56px;
     }
 
-    /* ── HEADER ── */
+    /* ── HEADER (barra de título sticky, ancho completo) ── */
     .header {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r-lg);
-      padding: 20px 24px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 16px;
-      box-shadow: var(--shadow);
+      padding: 20px 40px;
+      background: linear-gradient(180deg, rgba(9,12,14,.85), rgba(9,12,14,0));
+      backdrop-filter: blur(10px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
     }
     .header-icon {
       width: 44px; height: 44px;
@@ -84,10 +90,37 @@
       object-fit: cover;
       display: block;
     }
-    .header h1 { margin: 0; font-size: 17px; font-weight: 800; line-height: 1.2; color: var(--text); }
-    .header p  { margin: 3px 0 0; font-size: 13px; color: var(--text-sub); }
+    .header h1 { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.2; color: var(--text); letter-spacing: -.02em; }
 
-    /* ── TABS (menubar Nocturne) ── */
+    /* Menú principal (Cargar / Análisis) dentro de la barra de título */
+    .header-menubar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      padding: 5px;
+    }
+    .tab-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--text-sub); text-decoration: none;
+      font-size: 14px; font-weight: 600; font-family: var(--font);
+      padding: 9px 16px; border-radius: var(--r-pill);
+      cursor: pointer; transition: all .16s; background: 0; border: none;
+    }
+    .tab-link:hover:not(.active) { color: var(--text); background: rgba(255,255,255,.04); }
+    .tab-link.active { color: var(--text); background: var(--surface); }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      justify-content: flex-end;
+    }
+
+    /* ── TABS (log-tabs secundarios, dentro del contenido) ── */
     .tabs {
       display: flex; gap: 4px;
       background: var(--surface-2);
@@ -452,8 +485,11 @@
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     @media (max-width: 640px) {
-      body { padding: 16px 12px 48px; }
-      .wrap { width: 100%; }
+      .wrap { width: 100%; padding: 24px 16px 48px; }
+      .header { padding: 16px 20px; flex-direction: column; gap: 16px; }
+      .header-menubar { order: 2; width: 100%; }
+      .header-menubar .tab-link { flex: 1; justify-content: center; }
+      .header-right { order: 3; width: 100%; justify-content: center; }
       .tabs { border-radius: var(--r-lg); }
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
       .charts-grid { grid-template-columns: 1fr; }
@@ -463,46 +499,46 @@
 </head>
 
 <body>
-<div class="wrap">
 
-  <!-- HEADER -->
-  <header class="header">
+<!-- HEADER (barra de título) -->
+<header class="header">
+  <div class="brand">
     <div class="header-icon">
       <img id="header-logo" alt="Logo" />
     </div>
-    <div>
-      <h1>Consolidado de Auditoría</h1>
-      <p>Dashboard de auditoría multi-log para Grid</p>
-    </div>
-    <div style="margin-left: auto; display: flex; gap: 8px;">
-      <button class="btn-icon" id="btn-refresh" title="Actualizar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M23 4v6h-6"/>
-          <path d="M1 20v-6h6"/>
-          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-        </svg>
-      </button>
-      <button class="btn-icon" id="btn-download" title="Descargar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-          <polyline points="7 10 12 15 17 10"/>
-          <line x1="12" y1="15" x2="12" y2="3"/>
-        </svg>
-      </button>
-    </div>
-  </header>
+    <h1>Consolidado de Auditoría</h1>
+  </div>
 
-  <!-- MENÚ PRINCIPAL (Cargar / Análisis) -->
-  <div class="tabs" id="main-tabs">
-    <button class="tab active" data-tab="upload" id="main-tab-upload">
+  <div class="header-menubar" id="main-tabs">
+    <button class="tab-link active" data-tab="upload" id="main-tab-upload">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
       Cargar
     </button>
-    <button class="tab" data-tab="analysis" id="main-tab-analysis">
+    <button class="tab-link" data-tab="analysis" id="main-tab-analysis">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       Análisis
     </button>
   </div>
+
+  <div class="header-right">
+    <button class="btn-icon" id="btn-refresh" title="Actualizar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 4v6h-6"/>
+        <path d="M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+    </button>
+    <button class="btn-icon" id="btn-download" title="Descargar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<div class="wrap">
 
   <!-- TABS de log (solo visibles dentro de Análisis) -->
   <div class="tabs" id="log-tabs" style="display: none;"></div>
