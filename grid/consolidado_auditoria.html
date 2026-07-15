@@ -468,7 +468,7 @@
   <!-- HEADER -->
   <header class="header">
     <div class="header-icon">
-      <img src="/api/v1/documents/01KTD4Q8GC7Y620F9F9WEXGDE4/download" alt="Logo" />
+      <img id="header-logo" alt="Logo" />
     </div>
     <div>
       <h1>Consolidado de Auditoría</h1>
@@ -499,7 +499,7 @@
       Cargar
     </button>
     <button class="tab" data-tab="analysis" id="main-tab-analysis">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       Análisis
     </button>
   </div>
@@ -541,7 +541,7 @@
   <div id="panel-analysis" class="panel">
     <div class="card">
       <p class="card-title">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         Análisis
       </p>
 
@@ -618,6 +618,31 @@
       }
     }
 
+    /**
+     * GET /documents/{id}/download no sirve el binario directo: devuelve
+     * metadata JSON con download_url (o agent_download_url), que hay que
+     * volver a fetchear para obtener el blob real.
+     */
+    async downloadDocumentAsObjectUrl(docId) {
+      try {
+        const metaRes = await fetch(`${this.baseUrl}/api/v1/documents/${docId}/download`, {
+          credentials: 'include',
+        });
+        if (!metaRes.ok) throw new Error(`${metaRes.status}`);
+        const meta = await metaRes.json();
+        const url = meta.download_url || meta.agent_download_url;
+        if (!url) throw new Error('No se encontró download_url en la respuesta');
+
+        const blobRes = await fetch(url, { credentials: 'include' });
+        if (!blobRes.ok) throw new Error(`${blobRes.status}`);
+        const blob = await blobRes.blob();
+        return URL.createObjectURL(blob);
+      } catch (e) {
+        console.warn(`downloadDocumentAsObjectUrl ${docId}:`, e);
+        return null;
+      }
+    }
+
     async getStateBucket(name) {
       try {
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
@@ -684,13 +709,21 @@
 
     async init() {
       this.setupEventListeners();
+      this.loadHeaderLogo();
       await this.loadAllLogs();
       const hasExistingData = Object.values(this.logs).some(r => r.length > 0);
       if (hasExistingData) {
         this.currentLog = Object.entries(this.logs).find(([, r]) => r.length > 0)[0];
         this.switchMainTab('analysis');
       }
-      this.render();
+    }
+
+    async loadHeaderLogo() {
+      const logoDocId = '01KTD4Q8GC7Y620F9F9WEXGDE4';
+      const objectUrl = await this.gridClient.downloadDocumentAsObjectUrl(logoDocId);
+      if (objectUrl) {
+        document.getElementById('header-logo').src = objectUrl;
+      }
     }
 
     setupEventListeners() {
@@ -733,7 +766,12 @@
       document.getElementById('panel-analysis').classList.toggle('active', tabName === 'analysis');
       document.getElementById('main-tab-upload').classList.toggle('active', tabName === 'upload');
       document.getElementById('main-tab-analysis').classList.toggle('active', tabName === 'analysis');
-      this.renderTabs();
+      // render() vuelve a dibujar las gráficas (ver renderAnalysis): Plotly
+      // calcula dimensiones en el momento de dibujar, así que si el panel
+      // estaba oculto (display:none) antes, el gráfico queda mal dimensionado
+      // y no se autocorrige solo al mostrarse — hay que redibujar con el
+      // panel ya visible.
+      this.render();
     }
 
     async loadAllLogs() {
@@ -864,7 +902,6 @@
       this.currentLog = logType;
       this.showAlert('uploadAlert', 'success', `${records.length} registros en ${logType}`);
       this.switchMainTab('analysis');
-      this.render();
     }
 
     render() {
@@ -911,8 +948,13 @@
       document.getElementById('analysis-content').style.display = 'block';
 
       this.renderKpis(records);
-      this.renderCharts(records);
       this.renderTable(records);
+
+      // Las gráficas solo se dibujan cuando el panel realmente está visible
+      // (ver switchMainTab) para que Plotly calcule dimensiones correctas.
+      if (this.activeMainTab === 'analysis') {
+        this.renderCharts(records);
+      }
     }
 
     renderKpis(records) {
