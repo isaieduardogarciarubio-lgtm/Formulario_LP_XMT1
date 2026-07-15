@@ -866,35 +866,15 @@
      */
     class AuditDashboard {
       constructor() {
-        // Extraer docId del URL o del contexto de Grid
+        // DOC_ID del documento contenedor de datos (HARDCODEADO)
+        // Este es el ID del CSV que contiene el State Bucket 'auditoria_master'
+        this.docId = '01KXHHVWD581MQ567XEBW8HM5B';
+
+        // Alternativa: si necesitas cambiar el doc_id sin editar el HTML,
+        // pasa ?data_doc_id=OTRO_ID en la URL (útil para testing)
         const urlParams = new URLSearchParams(window.location.search);
-        this.docId =
-          urlParams.get('doc_id') ||
-          window.GRID?.doc_id ||
-          window.GRID?.documentId ||
-          window.documentId ||
-          localStorage?.getItem?.('grid_doc_id') ||
-          null;
-
-        if (!this.docId) {
-          // Modo fallback: mostrar dialog con instrucciones claras
-          const msg = `No se encontró doc_id de documento de datos.
-
-📍 Para usar este dashboard:
-
-1️⃣ Crea un documento de datos en Grid
-   (cualquier archivo sirve, será el "contenedor" del log)
-
-2️⃣ Copia su ID de la URL:
-   grid.melioffice.com/d/{TU_DOC_ID}/...
-
-3️⃣ Abre este dashboard con:
-   ...?doc_id={TU_DOC_ID}
-
-Si necesitas ayuda, contacta al administrador.`;
-
-          this.showModal('Configuración Requerida', msg);
-          return;
+        if (urlParams.get('data_doc_id')) {
+          this.docId = urlParams.get('data_doc_id');
         }
 
         this.gridClient = new GridClient(this.docId);
