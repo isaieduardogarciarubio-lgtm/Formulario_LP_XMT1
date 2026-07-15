@@ -91,11 +91,26 @@ body {
   min-height: 32px;
 }
 
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.navbar-logo {
+  height: 24px;
+  width: auto;
+  flex-shrink: 0;
+}
+
 .navbar-title {
   font-size: 1rem;
   font-weight: 700;
   color: var(--color-text-primary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Icono de navegación superior: sin fondo, minimalista (Sección 4) */
