@@ -5,35 +5,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Consolidado de Auditoría — Grid</title>
   <script src="/d/_libs/plotly.min.js"></script>
+  <script src="/d/_libs/jszip.min.js"></script>
   <style>
-    /* ====================================================================
-       PALETA DATAVIZ + NOCTURNE DARK
-       ==================================================================== */
     :root {
-      /* Dark theme (OKLCH L 0.48–0.67, para marks ≥3:1 sobre surface #1a1a19) */
-      --surface-1: #1a1a19;           /* chart surface */
-      --text-primary: #ffffff;         /* primary ink */
-      --text-secondary: #c3c2b7;      /* secondary ink */
-      --text-muted: #898781;          /* axis/labels */
-      --gridline: #2c2c2a;            /* hairline */
-      --baseline: #383835;            /* axis */
+      --surface-1: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --gridline: #2c2c2a;
+      --baseline: #383835;
       --border: rgba(255, 255, 255, 0.10);
-
-      /* Categorical — fixed order (CVD-safe, adjacent ΔE ≥8.4 dark) */
-      --series-1: #3987e5;            /* blue — serie general */
-      --series-2: #008300;            /* green — Sin incidencia (Success) */
-      --series-8: #e66767;            /* red — Erroneo (categorical) */
-
-      /* Status (fixed, reserved meaning) */
-      --status-good: #0ca30c;         /* green good */
-      --status-critical: #d03b3b;     /* red critical */
-
-      /* Sequential (one hue blue, L→D) */
-      --seq-blue-100: #86b6ef;        /* lightest */
-      --seq-blue-400: #3987e5;        /* mid */
-      --seq-blue-600: #184f95;        /* darkest */
-
-      /* Nocturne: OLED True Dark */
+      --series-1: #3987e5;
+      --series-2: #008300;
+      --series-8: #e66767;
+      --status-good: #0ca30c;
+      --status-critical: #d03b3b;
+      --seq-blue-100: #86b6ef;
+      --seq-blue-400: #3987e5;
+      --seq-blue-600: #184f95;
       --color-bg: #000000;
       --color-surface: #1c1c1e;
       --color-surface-hover: #2c2c2e;
@@ -42,8 +31,7 @@
       --color-text-muted: #8e8e93;
       --color-error: #ff453a;
       --color-border: #2c2c2e;
-      --color-accent-yellow: #ffd100; /* Meli yellow */
-
+      --color-accent-yellow: #ffd100;
       --radius-card: 20px;
       --radius-sm: 8px;
       --spacing-xs: 4px;
@@ -51,7 +39,6 @@
       --spacing-md: 16px;
       --spacing-lg: 24px;
       --spacing-xl: 32px;
-
       --font-h1: 1.75rem;
       --font-h2: 1.25rem;
       --font-body: 0.95rem;
@@ -76,9 +63,6 @@
       min-height: 100vh;
     }
 
-    /* ====================================================================
-       LAYOUT PRINCIPAL
-       ==================================================================== */
     .app-container {
       display: flex;
       flex-direction: column;
@@ -104,208 +88,266 @@
       gap: var(--spacing-lg);
     }
 
-    .navbar-title {
-      font-size: var(--font-h2);
+    .navbar-brand {
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+      flex: 1;
+    }
+
+    .navbar-brand h1 {
+      font-size: var(--font-h1);
       font-weight: 700;
-      color: var(--color-text-primary);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    }
+
+    .navbar-brand svg {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
     }
 
     .navbar-actions {
       display: flex;
-      gap: var(--spacing-md);
       align-items: center;
+      gap: var(--spacing-md);
     }
 
-    /* ====================================================================
-       MAIN CONTENT
-       ==================================================================== */
+    .btn-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--color-surface-hover);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .btn-icon:hover {
+      background: var(--color-highlight);
+      border-color: var(--color-accent-yellow);
+    }
+
+    .btn-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--color-accent-yellow), #ffa500);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: #000000;
+      cursor: pointer;
+      border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+
     .content {
       flex: 1;
       max-width: 1200px;
       margin: 0 auto;
-      padding: var(--spacing-lg);
       width: 100%;
+      padding: var(--spacing-lg);
     }
 
-    /* ====================================================================
-       CARDS & DROPZONE
-       ==================================================================== */
-    .card {
-      background: var(--color-surface);
+    .capsule {
+      background: linear-gradient(135deg, rgba(40, 40, 40, 0.8), rgba(30, 30, 30, 0.6));
+      border: 1px solid var(--color-border);
       border-radius: var(--radius-card);
       padding: var(--spacing-lg);
       margin-bottom: var(--spacing-lg);
-      border: 1px solid var(--color-border);
+      backdrop-filter: blur(10px);
     }
 
-    /* Cápsulas principales */
-    .capsule {
-      background: var(--color-surface);
-      border-radius: 24px;
-      padding: var(--spacing-xl);
-      margin-bottom: var(--spacing-xl);
-      border: 1px solid var(--color-border);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-      transition: all 0.3s ease;
-    }
-
-    .capsule:hover {
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-      border-color: rgba(255, 255, 255, 0.1);
-    }
-
-    .capsule-title {
-      font-size: var(--font-h2);
-      font-weight: 700;
-      margin-bottom: var(--spacing-lg);
-      color: var(--color-text-primary);
+    .capsule-header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--spacing-lg);
       gap: var(--spacing-md);
     }
 
-    .capsule-title svg {
-      width: 28px;
-      height: 28px;
-      color: var(--color-accent-yellow);
-    }
-
-    .card-title {
+    .capsule-header h2 {
       font-size: var(--font-h2);
       font-weight: 700;
-      margin-bottom: var(--spacing-md);
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    }
+
+    .capsule-header h2 svg {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .log-tabs {
+      display: flex;
+      gap: var(--spacing-sm);
+      flex-wrap: wrap;
+    }
+
+    .log-tab {
+      padding: var(--spacing-sm) var(--spacing-md);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface-hover);
+      border: 1px solid var(--color-border);
+      color: var(--color-text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 600;
+      font-size: var(--font-body);
+    }
+
+    .log-tab:hover {
+      border-color: var(--color-accent-yellow);
       color: var(--color-text-primary);
     }
 
-    .card-subtitle {
-      font-size: var(--font-small);
-      color: var(--text-muted);
-      margin-bottom: var(--spacing-md);
+    .log-tab.active {
+      background: var(--color-accent-yellow);
+      border-color: var(--color-accent-yellow);
+      color: #000000;
     }
 
-    /* Drag & drop zone */
-    #dropzone {
-      border: 2px dashed var(--text-muted);
+    /* Dropzone */
+    .dropzone {
+      border: 2px dashed var(--color-border);
       border-radius: var(--radius-sm);
-      padding: var(--spacing-lg);
+      padding: var(--spacing-xl);
       text-align: center;
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: all 0.2s;
+      background: rgba(255, 255, 255, 0.02);
     }
 
-    #dropzone:hover,
-    #dropzone.drag-over {
+    .dropzone:hover,
+    .dropzone.drag-over {
       border-color: var(--color-accent-yellow);
       background: rgba(255, 209, 0, 0.05);
     }
 
-    #dropzone-input {
-      display: none;
-    }
-
     .dropzone-icon {
-      font-size: 2.5rem;
-      margin-bottom: var(--spacing-md);
+      width: 48px;
+      height: 48px;
+      margin: 0 auto var(--spacing-md);
+      color: var(--color-text-muted);
     }
 
     .dropzone-text {
-      color: var(--text-secondary);
-      font-size: var(--font-body);
+      font-size: var(--font-h2);
+      font-weight: 700;
+      margin-bottom: var(--spacing-sm);
     }
 
     .dropzone-hint {
-      font-size: var(--font-small);
-      color: var(--text-muted);
-      margin-top: var(--spacing-sm);
-    }
-
-    /* ====================================================================
-       KPI ROW (Stat Tiles)
-       ==================================================================== */
-    .kpi-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: var(--spacing-md);
-      margin-bottom: var(--spacing-lg);
-    }
-
-    .stat-tile {
-      background: var(--color-surface-hover);
-      border-radius: var(--radius-sm);
-      padding: var(--spacing-md);
-      border: 1px solid var(--color-border);
-    }
-
-    .stat-label {
-      font-size: var(--font-small);
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: var(--spacing-xs);
-    }
-
-    .stat-value {
-      font-size: 2rem;
-      font-weight: 700;
-      color: var(--color-text-primary);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .stat-delta {
-      font-size: var(--font-small);
-      color: var(--status-good);
-      margin-top: var(--spacing-xs);
-    }
-
-    .stat-delta.negative {
-      color: var(--status-critical);
-    }
-
-    /* ====================================================================
-       CHARTS (Plotly containers)
-       ==================================================================== */
-    .charts-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-      gap: var(--spacing-lg);
-      margin-bottom: var(--spacing-lg);
-    }
-
-    .chart-container {
-      background: transparent;
-      border-radius: 0;
-      border: none;
-      padding: var(--spacing-lg) 0;
-      min-height: 320px;
-      border-bottom: 1px solid var(--color-border);
-    }
-
-    .chart-container:last-of-type {
-      border-bottom: none;
-    }
-
-    .chart-title {
       font-size: var(--font-body);
-      font-weight: 600;
-      color: var(--color-text-primary);
+      color: var(--color-text-muted);
+    }
+
+    .upload-progress {
+      margin-top: var(--spacing-lg);
+      display: none;
+    }
+
+    .upload-progress.active {
+      display: block;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--color-surface-hover);
+      border-radius: 4px;
+      overflow: hidden;
       margin-bottom: var(--spacing-md);
     }
 
-    .plot {
-      width: 100%;
-      height: 280px;
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--color-accent-yellow);
+      width: 0%;
+      transition: width 0.2s;
     }
 
-    /* ====================================================================
-       TABLE FILTRABLE
-       ==================================================================== */
-    .table-container {
-      background: transparent;
-      border-radius: 0;
-      border: none;
-      padding: 0;
-      margin-bottom: 0;
+    .progress-text {
+      font-size: var(--font-small);
+      color: var(--color-text-muted);
+      text-align: center;
+    }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: var(--spacing-lg);
+      margin-bottom: var(--spacing-xl);
+    }
+
+    .kpi-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: var(--spacing-md);
+      text-align: center;
+    }
+
+    .kpi-value {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--color-accent-yellow);
+      margin-bottom: var(--spacing-sm);
+    }
+
+    .kpi-label {
+      font-size: var(--font-small);
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Charts */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: var(--spacing-lg);
+      margin-bottom: var(--spacing-xl);
+    }
+
+    .chart-container {
+      background: rgba(255, 255, 255, 0.01);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      padding: var(--spacing-md);
+    }
+
+    .chart-title {
+      font-size: var(--font-h2);
+      font-weight: 700;
+      margin-bottom: var(--spacing-md);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-sm);
+    }
+
+    /* Table */
+    .table-wrapper {
       overflow-x: auto;
+      border-radius: var(--radius-sm);
     }
 
     .table-controls {
@@ -328,28 +370,7 @@
     }
 
     .search-input::placeholder {
-      color: var(--text-muted);
-    }
-
-    .filter-btn {
-      background: var(--color-surface-hover);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-sm);
-      padding: var(--spacing-sm) var(--spacing-md);
-      font-size: var(--font-body);
-      color: var(--color-text-primary);
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .filter-btn:hover {
-      background: var(--color-highlight);
-      border-color: var(--color-accent-yellow);
-    }
-
-    .filter-btn.active {
-      background: var(--status-critical);
-      border-color: var(--status-critical);
+      color: var(--color-text-muted);
     }
 
     table {
@@ -371,7 +392,6 @@
       text-transform: uppercase;
       font-size: 0.8rem;
       letter-spacing: 0.5px;
-      border-bottom: 1px solid var(--color-border);
     }
 
     td {
@@ -384,19 +404,25 @@
       background: var(--color-surface-hover);
     }
 
-    .resultado-good {
+    .status-good {
       color: var(--status-good);
       font-weight: 600;
     }
 
-    .resultado-bad {
+    .status-critical {
       color: var(--status-critical);
       font-weight: 600;
     }
 
-    /* ====================================================================
-       BUTTONS & CONTROLS
-       ==================================================================== */
+    .photo-thumbnail {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      object-fit: cover;
+      cursor: pointer;
+    }
+
+    /* Buttons */
     .btn {
       display: inline-flex;
       align-items: center;
@@ -412,46 +438,12 @@
       white-space: nowrap;
     }
 
-    .btn svg {
-      flex-shrink: 0;
-      vertical-align: middle;
-    }
-
-    .btn-icon-only {
-      padding: var(--spacing-sm);
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-    }
-
-    /* Avatar círculo con iniciales */
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, var(--color-accent-yellow), #ffa500);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: 700;
-      font-size: 0.9rem;
-      color: #000000;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: 2px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .avatar:hover {
-      border-color: var(--color-accent-yellow);
-      transform: scale(1.05);
-    }
-
     .btn-primary {
       background: var(--color-accent-yellow);
       color: #000000;
     }
 
-    .btn-primary:hover {
+    .btn-primary:hover:not(:disabled) {
       opacity: 0.9;
     }
 
@@ -471,20 +463,12 @@
       border-color: var(--color-accent-yellow);
     }
 
-    .btn-block {
-      width: 100%;
-    }
-
-    /* ====================================================================
-       ALERTS & MODALS
-       ==================================================================== */
+    /* Alert */
     .alert {
       position: fixed;
       bottom: var(--spacing-lg);
-      left: var(--spacing-lg);
       right: var(--spacing-lg);
       max-width: 400px;
-      margin: 0 auto;
       padding: var(--spacing-md);
       border-radius: var(--radius-sm);
       font-size: var(--font-body);
@@ -497,7 +481,7 @@
 
     @keyframes slideUp {
       from {
-        transform: translateY(100px);
+        transform: translateY(100%);
         opacity: 0;
       }
       to {
@@ -507,888 +491,1004 @@
     }
 
     .alert-success {
-      background: var(--status-good);
-      color: #000000;
+      background: rgba(12, 163, 12, 0.2);
+      border: 1px solid var(--status-good);
+      color: var(--status-good);
     }
 
     .alert-error {
-      background: var(--status-critical);
-      color: #ffffff;
+      background: rgba(208, 59, 59, 0.2);
+      border: 1px solid var(--status-critical);
+      color: var(--status-critical);
     }
 
-    .alert-info {
-      background: var(--seq-blue-400);
-      color: #ffffff;
+    .alert-close {
+      margin-left: auto;
+      background: none;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      font-size: 1.2rem;
     }
 
-    /* Modal backdrop + content */
-    .modal-backdrop {
+    /* Modal */
+    .modal {
       position: fixed;
       top: 0;
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
-      display: none;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 10000;
+      padding: var(--spacing-lg);
+      display: none;
     }
 
-    .modal-backdrop.show {
+    .modal.active {
       display: flex;
     }
 
     .modal-content {
       background: var(--color-surface);
+      border: 1px solid var(--color-border);
       border-radius: var(--radius-card);
       padding: var(--spacing-lg);
       max-width: 500px;
-      width: 90%;
-      border: 1px solid var(--color-border);
+      max-height: 80vh;
+      overflow-y: auto;
     }
 
-    .modal-title {
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--spacing-lg);
+    }
+
+    .modal-header h3 {
       font-size: var(--font-h2);
       font-weight: 700;
-      margin-bottom: var(--spacing-md);
-      color: var(--color-text-primary);
+      margin: 0;
     }
 
-    .modal-body {
-      font-size: var(--font-body);
-      color: var(--text-secondary);
-      margin-bottom: var(--spacing-lg);
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--color-text-primary);
+      cursor: pointer;
+      font-size: 1.5rem;
     }
 
     .modal-actions {
       display: flex;
       gap: var(--spacing-md);
+      margin-top: var(--spacing-lg);
       justify-content: flex-end;
-    }
-
-    /* ====================================================================
-       RESPONSIVE
-       ==================================================================== */
-    @media (max-width: 768px) {
-      .navbar-inner {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .navbar-actions {
-        width: 100%;
-      }
-
-      .charts-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .kpi-row {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .table-controls {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .search-input,
-      .filter-btn {
-        width: 100%;
-      }
-    }
-
-    /* ====================================================================
-       LOADING & EMPTY STATE
-       ==================================================================== */
-    .spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid var(--text-muted);
-      border-top-color: var(--color-accent-yellow);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
     }
 
     .empty-state {
       text-align: center;
       padding: var(--spacing-xl);
-      color: var(--text-muted);
+      color: var(--color-text-muted);
     }
 
-    .empty-state-icon {
-      font-size: 3rem;
+    .empty-state p {
       margin-bottom: var(--spacing-md);
     }
   </style>
 </head>
 <body>
   <div class="app-container">
-    <!-- NAVBAR -->
     <nav class="navbar">
       <div class="navbar-inner">
-        <div>
-          <h1 class="navbar-title"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" style="display:inline; margin-right:8px; vertical-align:middle;"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 14l3-4 3 2 4-5"/><circle cx="15" cy="9" r="1" fill="currentColor"/></svg>Consolidado de Auditoría</h1>
-          <p style="font-size: var(--font-small); color: var(--text-muted); margin-top: var(--spacing-xs);">
-            Panel en vivo — Destino / Doca
-          </p>
+        <div class="navbar-brand">
+          <h1>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 3h7v7H3z"/>
+              <path d="M14 3h7v7h-7z"/>
+              <path d="M14 14h7v7h-7z"/>
+              <path d="M3 14h7v7H3z"/>
+            </svg>
+            Consolidado de Auditoría
+          </h1>
         </div>
         <div class="navbar-actions">
-          <button class="btn btn-secondary btn-icon-only" id="btn-refresh" title="Actualizar ahora">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+          <button class="btn-icon" id="btn-refresh" title="Actualizar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
           </button>
-          <button class="btn btn-primary btn-icon-only" id="btn-export" title="Descargar CSV consolidado">
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <button class="btn-icon" id="btn-download" title="Descargar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
           </button>
-          <div class="avatar" id="user-avatar" title="Perfil del usuario"></div>
+          <div class="avatar" id="avatar" title="Perfil">--</div>
         </div>
       </div>
     </nav>
 
-    <!-- MAIN CONTENT -->
-    <main class="content">
-      <!-- CÁPSULA 1: CARGA -->
+    <div class="content">
+      <!-- Cápsula 1: Carga -->
       <div class="capsule">
-        <h2 class="capsule-title">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Cargar Datos
-        </h2>
-        <div id="dropzone">
-          <div class="dropzone-icon"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
-          <div class="dropzone-text">Arrastra un CSV aquí o haz click para seleccionar</div>
-          <div class="dropzone-hint">Formato: Fecha/Hora, HU, Destino, Doca, Resultado</div>
+        <div class="capsule-header">
+          <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M2 12h20"/>
+            </svg>
+            Cargar Registros
+          </h2>
         </div>
-        <input type="file" id="dropzone-input" accept=".csv" />
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <div class="dropzone-text">Arrastra CSV o ZIP aquí</div>
+          <div class="dropzone-hint">o toca para seleccionar archivos</div>
+        </div>
+        <div class="upload-progress" id="upload-progress">
+          <div class="progress-bar">
+            <div class="progress-bar-fill" id="progress-bar-fill"></div>
+          </div>
+          <div class="progress-text" id="progress-text">Subiendo fotos: 0/0</div>
+        </div>
+        <input type="file" id="file-input" style="display: none;" accept=".csv,.zip" />
       </div>
 
-      <!-- CÁPSULA 2: ANÁLISIS Y GRÁFICAS -->
+      <!-- Cápsula 2: Análisis -->
       <div class="capsule">
-        <h2 class="capsule-title">
-          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 14l3-4 3 2 4-5"/><circle cx="15" cy="9" r="1" fill="currentColor"/></svg>
-          Análisis en Vivo
-        </h2>
-
-        <!-- KPI ROW -->
-        <div class="kpi-row" id="kpi-row">
-        <div class="stat-tile">
-          <div class="stat-label">Total Registros</div>
-          <div class="stat-value" id="kpi-total">0</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">Sin Incidencia</div>
-          <div class="stat-value" id="kpi-good" style="color: var(--status-good);">0</div>
-          <div class="stat-delta" id="kpi-good-pct">—</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">Erróneos</div>
-          <div class="stat-value" id="kpi-bad" style="color: var(--status-critical);">0</div>
-          <div class="stat-delta negative" id="kpi-bad-pct">—</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-label">Destinos Distintos</div>
-          <div class="stat-value" id="kpi-destinos">0</div>
-        </div>
-      </div>
-
-      <!-- CHARTS GRID -->
-      <div class="charts-grid">
-        <div class="chart-container">
-          <h3 class="chart-title">Distribución Resultado</h3>
-          <div class="plot" id="plot-resultado"></div>
+        <div class="capsule-header">
+          <h2>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="2" x2="12" y2="22"/>
+              <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+            </svg>
+            Análisis
+          </h2>
+          <div class="log-tabs" id="log-tabs"></div>
         </div>
 
-        <div class="chart-container">
-          <h3 class="chart-title">Registros por Destino</h3>
-          <div class="plot" id="plot-destino"></div>
+        <div id="no-data-message" class="empty-state">
+          <p>No hay registros. Carga un archivo CSV o ZIP para comenzar.</p>
         </div>
 
-        <div class="chart-container">
-          <h3 class="chart-title">Registros por Doca</h3>
-          <div class="plot" id="plot-doca"></div>
+        <div id="analysis-content" style="display: none;">
+          <!-- KPIs -->
+          <div class="kpi-grid" id="kpi-grid"></div>
+
+          <!-- Charts -->
+          <div class="charts-grid" id="charts-grid"></div>
+
+          <!-- Table -->
+          <div class="table-wrapper">
+            <div class="table-controls">
+              <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros..." />
+            </div>
+            <table id="records-table">
+              <thead id="table-head"></thead>
+              <tbody id="table-body"></tbody>
+            </table>
+          </div>
         </div>
-
-        <div class="chart-container">
-          <h3 class="chart-title">Tendencia Temporal</h3>
-          <div class="plot" id="plot-timeline"></div>
-        </div>
-      </div>
-
-        <!-- TABLE CONTAINER (dentro de la cápsula) -->
-        <div style="margin-top: var(--spacing-xl);">
-          <h3 style="font-size: var(--font-h2); font-weight: 700; margin-bottom: var(--spacing-lg); color: var(--color-text-primary);">Registros Detallados</h3>
-
-        <div class="table-controls">
-          <input
-            type="text"
-            id="search-input"
-            class="search-input"
-            placeholder="Buscar por HU, Destino, Doca…"
-          />
-          <button class="filter-btn" id="filter-errores" title="Mostrar solo erróneos">
-            Mostrar Erróneos
-          </button>
-          <button class="btn btn-secondary" id="btn-clear" title="Limpiar todos los datos">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" style="display:inline; margin-right:4px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-            Limpiar
-          </button>
-        </div>
-
-        <table id="records-table">
-          <thead>
-            <tr>
-              <th>Fecha/Hora</th>
-              <th>HU</th>
-              <th>Destino</th>
-              <th>Doca</th>
-              <th>Resultado</th>
-              <th>Cargado por</th>
-            </tr>
-          </thead>
-          <tbody id="table-body">
-            <tr>
-              <td colspan="6" style="text-align: center; padding: var(--spacing-lg); color: var(--text-muted);">
-                Sin registros. Carga un CSV para comenzar.
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        </div>
-      </div>
-      </div>
-      <!-- FIN CÁPSULA 2 -->
-    </main>
-  </div>
-
-  <!-- MODAL (error handling) -->
-  <div class="modal-backdrop" id="modal">
-    <div class="modal-content">
-      <h2 class="modal-title" id="modal-title">Alerta</h2>
-      <div class="modal-body" id="modal-body">Mensaje</div>
-      <div class="modal-actions">
-        <button class="btn btn-primary" id="modal-close">Aceptar</button>
       </div>
     </div>
   </div>
 
-  <!-- SCRIPTS -->
+  <!-- Alerts -->
+  <div id="alerts"></div>
+
+  <!-- Photo Modal -->
+  <div class="modal" id="photo-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Foto</h3>
+        <button class="modal-close" id="photo-modal-close">&times;</button>
+      </div>
+      <img id="photo-modal-img" style="width: 100%; border-radius: 8px;" />
+    </div>
+  </div>
+
   <script>
-    /**
-     * SVG Icons — reemplaza emojis
-     */
-    const SVGIcons = (() => {
-      const ICONS = {
-        chart: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 14l3-4 3 2 4-5"/><circle cx="15" cy="9" r="1"/></svg>`,
-        upload: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
-        folder: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
-        refresh: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>`,
-        download: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
-        trash: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
-        table: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v2H3V3zm0 4h18v2H3V7zm0 4h18v2H3v-2zm0 4h18v2H3v-2z"/></svg>`,
-        search: `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`,
-        settings: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"/></svg>`,
-        check: `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`,
-        alert: `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 13h-2v-6h2v6zm0 4h-2v-2h2v2zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg>`,
-        info: `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><circle cx="12" cy="12" r="10"/><text x="12" y="16" text-anchor="middle" fill="white" font-size="14" font-weight="bold">i</text></svg>`,
-      };
-
-      function svg(name) {
-        return ICONS[name] || '';
-      }
-
-      return { svg };
-    })();
-
-    /**
-     * CSV Engine — Parser + Generador (reutilizado del formulario)
-     */
-    class CSVEngine {
-      static escapeCsvValue(value) {
-        if (value === null || value === undefined) return '';
-        const stringValue = String(value);
-        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n') || stringValue.includes('\r')) {
-          return '"' + stringValue.replace(/"/g, '""') + '"';
-        }
-        return stringValue;
-      }
-
-      static generateCSV(records, headers) {
-        if (!records || records.length === 0) throw new Error('No hay registros para exportar');
-        const headerLine = headers.map(h => this.escapeCsvValue(h)).join(',');
-        const dataLines = records.map(r => headers.map(h => this.escapeCsvValue(r[h] || '')).join(','));
-        const csvContent = [headerLine, ...dataLines].join('\n');
-        const bom = '﻿';
-        return bom + csvContent;
-      }
-
-      static parseCSV(text) {
-        if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
-        const rows = [];
-        let row = [];
-        let field = '';
-        let inQuotes = false;
-
-        for (let i = 0; i < text.length; i++) {
-          const c = text[i];
-          if (inQuotes) {
-            if (c === '"') {
-              if (text[i + 1] === '"') {
-                field += '"';
-                i++;
-              } else {
-                inQuotes = false;
-              }
-            } else {
-              field += c;
-            }
-          } else if (c === '"') {
-            inQuotes = true;
-          } else if (c === ',') {
-            row.push(field);
-            field = '';
-          } else if (c === '\n') {
-            row.push(field);
-            rows.push(row);
-            row = [];
-            field = '';
-          } else if (c === '\r') {
-            // skip
-          } else {
-            field += c;
-          }
-        }
-        if (field.length || row.length) {
-          row.push(field);
-          rows.push(row);
-        }
-
-        const nonEmpty = rows.filter(r => r.some(cell => String(cell).trim().length));
-        if (!nonEmpty.length) return { headers: [], records: [] };
-
-        const headers = nonEmpty[0].map(h => String(h).trim());
-        const records = nonEmpty.slice(1).map(r => {
-          const obj = {};
-          headers.forEach((h, idx) => {
-            obj[h] = String(r[idx] != null ? r[idx] : '').trim();
-          });
-          return obj;
-        });
-
-        return { headers, records };
-      }
-
-      static downloadCSV(csvContent, filename) {
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `${filename}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }
-    }
-
-    /**
-     * Grid API Client
-     */
+    // ==========================================================================
+    // GridClient
+    // ==========================================================================
     class GridClient {
       constructor(docId) {
         this.docId = docId;
-        this.bucketName = 'auditoria_master';
+        this.baseUrl = location.origin;
       }
 
       async getMe() {
-        const res = await fetch('/api/v1/me', { credentials: 'include' });
-        if (!res.ok) throw new Error('No autenticado');
-        return res.json();
-      }
-
-      async getState() {
-        const res = await fetch(`/api/v1/documents/${this.docId}/states/${this.bucketName}`, {
-          credentials: 'include',
-        });
-        if (res.status === 404) return { state: { version: 1, records: [] }, updated_at: new Date().toISOString() };
-        if (!res.ok) throw new Error(`Error al leer state: HTTP ${res.status}`);
-        return res.json();
-      }
-
-      async putState(state, ifUpdatedAt = null) {
-        const body = { state };
-        if (ifUpdatedAt) body.if_updated_at = ifUpdatedAt;
-
-        const res = await fetch(`/api/v1/documents/${this.docId}/states/${this.bucketName}`, {
-          method: 'PUT',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        });
-
-        if (res.status === 409) {
-          throw { code: 'CONFLICT', message: 'El estado cambió; reintentar.' };
+        try {
+          const res = await fetch(`${this.baseUrl}/api/v1/me`, {
+            credentials: 'include',
+          });
+          if (!res.ok) throw new Error(`${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.warn('Could not fetch /me:', e);
+          return null;
         }
-        if (!res.ok) throw new Error(`Error al escribir state: HTTP ${res.status}`);
-        return res.json();
+      }
+
+      async getStateBucket(name) {
+        try {
+          const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
+            credentials: 'include',
+          });
+          if (res.status === 404) return null;
+          if (!res.ok) throw new Error(`${res.status}`);
+          const data = await res.json();
+          return data.data || null;
+        } catch (e) {
+          console.error(`getStateBucket ${name}:`, e);
+          return null;
+        }
+      }
+
+      async setStateBucket(name, data, ifUpdatedAt = null) {
+        try {
+          const body = { data };
+          if (ifUpdatedAt) body.if_updated_at = ifUpdatedAt;
+
+          const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            credentials: 'include',
+          });
+
+          if (res.status === 409) {
+            console.warn('Conflict on state bucket update — retrying');
+            return { conflict: true };
+          }
+          if (!res.ok) throw new Error(`${res.status}`);
+          const result = await res.json();
+          return result;
+        } catch (e) {
+          console.error(`setStateBucket ${name}:`, e);
+          return null;
+        }
+      }
+
+      async createFolder(name) {
+        try {
+          const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/folders`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+            credentials: 'include',
+          });
+          if (!res.ok) throw new Error(`${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.error('createFolder:', e);
+          return null;
+        }
+      }
+
+      async uploadToFolder(folderId, filename, dataUrl) {
+        try {
+          const blob = await (await fetch(dataUrl)).blob();
+          const formData = new FormData();
+          formData.append('file', blob, filename);
+
+          const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/folders/${folderId}/documents`, {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+          });
+          if (!res.ok) throw new Error(`${res.status}`);
+          return await res.json();
+        } catch (e) {
+          console.error('uploadToFolder:', e);
+          return null;
+        }
       }
     }
 
-    /**
-     * APP PRINCIPAL
-     */
+    // ==========================================================================
+    // AuditDashboard
+    // ==========================================================================
     class AuditDashboard {
       constructor() {
-        // DOC_ID del documento contenedor de datos (HARDCODEADO)
-        // Este es el ID del CSV que contiene el State Bucket 'auditoria_master'
-        this.docId = '01KXHHVWD581MQ567XEBW8HM5B';
-
-        // Alternativa: si necesitas cambiar el doc_id sin editar el HTML,
-        // pasa ?data_doc_id=OTRO_ID en la URL (útil para testing)
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('data_doc_id')) {
-          this.docId = urlParams.get('data_doc_id');
-        }
-
+        const params = new URLSearchParams(location.search);
+        this.docId = params.get('data_doc_id') || '01KXHHVWD581MQ567XEBW8HM5B';
         this.gridClient = new GridClient(this.docId);
-        this.currentUser = null;
-        this.masterState = { version: 1, records: [] };
-        this.masterUpdatedAt = null;
-        this.filteredRecords = [];
-        this.filterErrorsOnly = false;
-        this.searchTerm = '';
-
+        this.logs = {
+          destino_doca: [],
+          fury: [],
+          contenerizado: [],
+          linehaul: [],
+        };
+        this.currentLog = 'destino_doca';
+        this.folderIds = {};
         this.init();
       }
 
       async init() {
-        try {
-          // Obtener identidad del usuario
-          this.currentUser = await this.gridClient.getMe();
-          this.renderUserAvatar();
-
-          // Cargar estado maestro
-          await this.loadMasterState();
-
-          // Binding de eventos
-          this.setupEventListeners();
-
-          // Refresco automático cada 30 minutos
-          setInterval(() => this.loadMasterState(), 30 * 60 * 1000);
-
-          this.render();
-        } catch (err) {
-          this.showAlert(`Error al inicializar: ${err.message}`, 'error');
-        }
+        this.setupEventListeners();
+        await this.loadUser();
+        await this.loadAllLogs();
+        this.render();
       }
 
       setupEventListeners() {
-        // Dropzone
         const dropzone = document.getElementById('dropzone');
-        const input = document.getElementById('dropzone-input');
-
-        dropzone.addEventListener('click', () => input.click());
-        dropzone.addEventListener('dragover', e => {
+        dropzone.addEventListener('click', () => document.getElementById('file-input').click());
+        dropzone.addEventListener('dragover', (e) => {
           e.preventDefault();
           dropzone.classList.add('drag-over');
         });
-        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
-        dropzone.addEventListener('drop', e => {
+        dropzone.addEventListener('dragleave', () => {
+          dropzone.classList.remove('drag-over');
+        });
+        dropzone.addEventListener('drop', async (e) => {
           e.preventDefault();
           dropzone.classList.remove('drag-over');
-          if (e.dataTransfer.files.length > 0) {
-            this.handleFileUpload(e.dataTransfer.files[0]);
-          }
+          const file = e.dataTransfer.files[0];
+          if (file) await this.handleFile(file);
         });
 
-        input.addEventListener('change', e => {
-          if (e.target.files.length > 0) {
-            this.handleFileUpload(e.target.files[0]);
-          }
+        document.getElementById('file-input').addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (file) await this.handleFile(file);
+          e.target.value = '';
         });
 
-        // Botones
-        document.getElementById('btn-refresh').addEventListener('click', () => this.loadMasterState());
-        document.getElementById('btn-export').addEventListener('click', () => this.exportCSV());
-        document.getElementById('btn-clear').addEventListener('click', () => this.clearData());
-
-        // Filtros
-        document.getElementById('search-input').addEventListener('input', e => {
-          this.searchTerm = e.target.value.toLowerCase();
-          this.applyFilters();
-        });
-
-        document.getElementById('filter-errores').addEventListener('click', e => {
-          this.filterErrorsOnly = !this.filterErrorsOnly;
-          e.target.classList.toggle('active', this.filterErrorsOnly);
-          this.applyFilters();
-        });
-
-        // Modal
-        document.getElementById('modal-close').addEventListener('click', () => {
-          document.getElementById('modal').classList.remove('show');
+        document.getElementById('btn-refresh').addEventListener('click', () => this.loadAllLogs());
+        document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
+        document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
+        document.getElementById('photo-modal-close').addEventListener('click', () => {
+          document.getElementById('photo-modal').classList.remove('active');
         });
       }
 
-      async handleFileUpload(file) {
-        try {
-          this.showAlert('Procesando archivo...', 'info');
-          const text = await file.text();
-          const { headers, records } = CSVEngine.parseCSV(text);
-
-          // Validar schema
-          const expectedHeaders = ['Fecha/Hora', 'HU', 'Destino', 'Doca', 'Resultado'];
-          if (!expectedHeaders.every(h => headers.includes(h))) {
-            throw new Error(`Encabezados inválidos. Esperado: ${expectedHeaders.join(', ')}`);
-          }
-
-          // Cargar estado actual
-          await this.loadMasterState();
-
-          // Calcular clave de dedup
-          const newRecords = records.map(r => ({
-            ts: r['Fecha/Hora'],
-            hu: r['HU'],
-            destino: r['Destino'],
-            doca: r['Doca'],
-            resultado: r['Resultado'],
-            uploaded_by: this.currentUser.email,
-            uploaded_at: new Date().toISOString(),
-          }));
-
-          // Merge con dedup
-          const existing = this.masterState.records || [];
-          const dedupKey = r => `${r.ts}|${r.hu}|${r.destino}|${r.doca}`;
-          const existingKeys = new Set(existing.map(dedupKey));
-
-          let newCount = 0;
-          newRecords.forEach(r => {
-            if (!existingKeys.has(dedupKey(r))) {
-              existing.push(r);
-              newCount++;
-            }
-          });
-
-          // Escribir al bucket con OCC
-          await this.saveMasterState();
-
-          this.showAlert(
-            `${newCount} registros nuevos agregados • ${records.length - newCount} duplicados omitidos`,
-            'success'
-          );
-
-          await this.loadMasterState();
-          this.render();
-        } catch (err) {
-          this.showAlert(`Error: ${err.message}`, 'error');
+      async loadUser() {
+        const me = await this.gridClient.getMe();
+        if (me && me.email) {
+          const initials = me.email.split('@')[0].substring(0, 2).toUpperCase();
+          document.getElementById('avatar').textContent = initials;
         }
       }
 
-      async loadMasterState() {
-        try {
-          const { state, updated_at } = await this.gridClient.getState();
-          this.masterState = state || { version: 1, records: [] };
-          this.masterUpdatedAt = updated_at;
-          this.applyFilters();
-          this.render();
-        } catch (err) {
-          this.showAlert(`Error al cargar estado: ${err.message}`, 'error');
-        }
-      }
-
-      async saveMasterState() {
-        try {
-          await this.gridClient.putState(this.masterState, this.masterUpdatedAt);
-        } catch (err) {
-          if (err.code === 'CONFLICT') {
-            // Reintentar merge
-            await this.loadMasterState();
-            await this.saveMasterState();
+      async loadAllLogs() {
+        for (const logType of Object.keys(this.logs)) {
+          const bucket = `${logType}_master`;
+          const data = await this.gridClient.getStateBucket(bucket);
+          if (data && data.records) {
+            this.logs[logType] = data.records;
           } else {
-            throw err;
+            this.logs[logType] = [];
+          }
+        }
+        this.render();
+      }
+
+      async handleFile(file) {
+        if (file.name.endsWith('.zip')) {
+          await this.handleZipFile(file);
+        } else if (file.name.endsWith('.csv')) {
+          await this.handleCsvFile(file);
+        } else {
+          this.showAlert('Formato no soportado. Usa CSV o ZIP.', 'error');
+        }
+      }
+
+      async handleCsvFile(file) {
+        const text = await file.text();
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length < 2) {
+          this.showAlert('CSV vacío', 'error');
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.trim());
+        const logType = detectLogTypeFromHeaders(headers);
+
+        if (!logType) {
+          this.showAlert('No se pudo detectar el tipo de log', 'error');
+          return;
+        }
+
+        const records = [];
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim());
+          const record = {};
+          headers.forEach((h, idx) => {
+            record[this.headerToFieldId(h)] = values[idx] || '';
+          });
+          record.ts = new Date().toISOString();
+          records.push(record);
+        }
+
+        await this.addRecords(logType, records);
+      }
+
+      async handleZipFile(file) {
+        if (!window.JSZip) {
+          this.showAlert('JSZip no cargado', 'error');
+          return;
+        }
+
+        const zip = new JSZip();
+        const content = await zip.loadAsync(file);
+
+        for (const [path, file] of Object.entries(content.files)) {
+          if (path.endsWith('data.csv')) {
+            const folderName = path.split('/')[0];
+            const logType = folderName.split('_').slice(0, -1).join('_');
+
+            if (!this.logs.hasOwnProperty(logType)) continue;
+
+            const csvText = await file.async('string');
+            const lines = csvText.split('\n').filter(l => l.trim());
+            if (lines.length < 2) continue;
+
+            const headers = lines[0].split(',').map(h => h.trim());
+            const records = [];
+
+            for (let i = 1; i < lines.length; i++) {
+              const values = lines[i].split(',').map(v => v.trim());
+              const record = {};
+              headers.forEach((h, idx) => {
+                const fieldId = this.headerToFieldId(h);
+                const value = values[idx] || '';
+                record[fieldId] = value;
+              });
+              record.ts = new Date().toISOString();
+              records.push(record);
+            }
+
+            // Process photos
+            const fotoFolder = content.folder(`${folderName}/fotos`);
+            if (fotoFolder) {
+              const photos = {};
+              fotoFolder.forEach((relativePath, file) => {
+                if (!file.dir) {
+                  const filename = relativePath.split('/').pop();
+                  photos[filename] = file;
+                }
+              });
+
+              for (const record of records) {
+                for (const field of FORMS_CONFIG[logType].fields) {
+                  if (field.type === 'photo' && record[field.id]) {
+                    const filename = record[field.id];
+                    if (photos[filename]) {
+                      const dataUrl = await photos[filename].async('data:image/jpeg;base64,');
+                      record[field.id] = dataUrl;
+                    }
+                  }
+                }
+              }
+            }
+
+            await this.addRecords(logType, records);
           }
         }
       }
 
-      applyFilters() {
-        let filtered = this.masterState.records || [];
+      async addRecords(logType, newRecords) {
+        const bucket = `${logType}_master`;
+        const existing = await this.gridClient.getStateBucket(bucket);
+        const records = existing?.records || [];
 
-        if (this.filterErrorsOnly) {
-          filtered = filtered.filter(r => r.resultado !== 'Sin incidencia');
-        }
-
-        if (this.searchTerm) {
-          filtered = filtered.filter(r =>
-            [r.hu, r.destino, r.doca, r.ts].some(v => v && v.toLowerCase().includes(this.searchTerm))
+        for (const record of newRecords) {
+          const isDuplicate = records.some(
+            r => r.ts === record.ts &&
+                 r.hu === record.hu &&
+                 r.shipment === record.shipment &&
+                 r.destino === record.destino &&
+                 r.doca === record.doca
           );
+          if (!isDuplicate) {
+            records.push(record);
+          }
         }
 
-        this.filteredRecords = filtered;
-      }
+        const updated_at = existing?.updated_at;
+        const result = await this.gridClient.setStateBucket(bucket, { version: 1, records }, updated_at);
 
-      exportCSV() {
-        try {
-          const headers = ['Fecha/Hora', 'HU', 'Destino', 'Doca', 'Resultado', 'Cargado por'];
-          const records = this.masterState.records.map(r => ({
-            'Fecha/Hora': r.ts,
-            'HU': r.hu,
-            'Destino': r.destino,
-            'Doca': r.doca,
-            'Resultado': r.resultado,
-            'Cargado por': r.uploaded_by,
-          }));
-
-          const csv = CSVEngine.generateCSV(records, headers);
-          const now = new Date().toISOString().split('T')[0];
-          CSVEngine.downloadCSV(csv, `auditoria_consolidado_${now}`);
-          this.showAlert('CSV descargado exitosamente', 'success');
-        } catch (err) {
-          this.showAlert(`Error al descargar: ${err.message}`, 'error');
+        if (result?.conflict) {
+          setTimeout(() => this.addRecords(logType, newRecords), 500 + Math.random() * 500);
+          return;
         }
-      }
 
-      clearData() {
-        if (!confirm('⚠️ ¿Eliminar todos los registros? Esta acción no se puede deshacer.')) return;
-
-        this.masterState.records = [];
-        this.saveMasterState().then(() => {
-          this.showAlert('Datos eliminados', 'success');
-          this.loadMasterState();
-        });
+        this.logs[logType] = records;
+        this.showAlert(`${records.length} registros en ${logType}`, 'success');
+        this.render();
       }
 
       render() {
-        this.renderKPIs();
-        this.renderCharts();
-        this.renderTable();
+        this.renderTabs();
+        this.renderAnalysis();
       }
 
-      renderKPIs() {
-        const records = this.masterState.records || [];
-        const total = records.length;
-        const good = records.filter(r => r.resultado === 'Sin incidencia').length;
-        const bad = records.filter(r => r.resultado !== 'Sin incidencia').length;
-        const destinos = new Set(records.map(r => r.destino)).size;
+      renderTabs() {
+        const container = document.getElementById('log-tabs');
+        container.innerHTML = '';
 
-        document.getElementById('kpi-total').textContent = total.toLocaleString();
-        document.getElementById('kpi-good').textContent = good.toLocaleString();
-        document.getElementById('kpi-good-pct').textContent = total > 0 ? `${((good / total) * 100).toFixed(1)}%` : '—';
-        document.getElementById('kpi-bad').textContent = bad.toLocaleString();
-        document.getElementById('kpi-bad-pct').textContent = total > 0 ? `${((bad / total) * 100).toFixed(1)}%` : '—';
-        document.getElementById('kpi-destinos').textContent = destinos.toLocaleString();
-      }
+        for (const [logType, records] of Object.entries(this.logs)) {
+          if (records.length === 0) continue;
 
-      renderCharts() {
-        const records = this.masterState.records || [];
-        if (records.length === 0) {
-          ['plot-resultado', 'plot-destino', 'plot-doca', 'plot-timeline'].forEach(id => {
-            Plotly.newPlot(
-              id,
-              [{ x: [], y: [], type: 'bar' }],
-              { title: 'Sin datos', plot_bgcolor: '#1a1a19', paper_bgcolor: '#1c1c1e', font: { color: '#ffffff' } },
-              { responsive: true }
-            );
+          const tab = document.createElement('button');
+          tab.className = `log-tab ${logType === this.currentLog ? 'active' : ''}`;
+          tab.textContent = this.getLogTitle(logType);
+          tab.addEventListener('click', () => {
+            this.currentLog = logType;
+            this.render();
           });
+          container.appendChild(tab);
+        }
+      }
+
+      renderAnalysis() {
+        const records = this.logs[this.currentLog];
+
+        if (records.length === 0) {
+          document.getElementById('no-data-message').style.display = 'block';
+          document.getElementById('analysis-content').style.display = 'none';
           return;
         }
 
-        // Resultado (dona — categorical: green vs red)
-        const resultadoCount = {};
-        records.forEach(r => {
-          resultadoCount[r.resultado] = (resultadoCount[r.resultado] || 0) + 1;
-        });
+        document.getElementById('no-data-message').style.display = 'none';
+        document.getElementById('analysis-content').style.display = 'block';
 
-        Plotly.newPlot(
-          'plot-resultado',
-          [
-            {
-              labels: Object.keys(resultadoCount),
-              values: Object.values(resultadoCount),
-              type: 'pie',
-              marker: {
-                colors: [
-                  resultadoCount['Sin incidencia'] ? '#008300' : undefined,
-                  resultadoCount['Erroneo'] ? '#d03b3b' : undefined,
-                ].filter(Boolean),
-              },
-            },
-          ],
-          {
-            title: 'Distribución Resultado',
-            plot_bgcolor: '#1a1a19',
-            paper_bgcolor: '#1c1c1e',
-            font: { color: '#ffffff', family: 'system-ui' },
-          },
-          { responsive: true }
-        );
-
-        // Destino (barras — top 8 categorical)
-        const destinoCount = {};
-        records.forEach(r => {
-          destinoCount[r.destino] = (destinoCount[r.destino] || 0) + 1;
-        });
-
-        const topDestinos = Object.entries(destinoCount)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8);
-
-        const categoricalColors = ['#3987e5', '#008300', '#d55181', '#c98500'];
-        Plotly.newPlot(
-          'plot-destino',
-          [
-            {
-              x: topDestinos.map(d => d[0]),
-              y: topDestinos.map(d => d[1]),
-              type: 'bar',
-              marker: { color: categoricalColors[0] },
-            },
-          ],
-          {
-            title: 'Top Destinos',
-            xaxis: { title: 'Destino' },
-            yaxis: { title: 'Registros' },
-            plot_bgcolor: '#1a1a19',
-            paper_bgcolor: '#1c1c1e',
-            font: { color: '#ffffff', family: 'system-ui' },
-          },
-          { responsive: true }
-        );
-
-        // Doca (barras — top 8)
-        const docaCount = {};
-        records.forEach(r => {
-          docaCount[r.doca] = (docaCount[r.doca] || 0) + 1;
-        });
-
-        const topDocas = Object.entries(docaCount)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8);
-
-        Plotly.newPlot(
-          'plot-doca',
-          [
-            {
-              x: topDocas.map(d => d[0]),
-              y: topDocas.map(d => d[1]),
-              type: 'bar',
-              marker: { color: categoricalColors[1] },
-            },
-          ],
-          {
-            title: 'Top Docas',
-            xaxis: { title: 'Doca' },
-            yaxis: { title: 'Registros' },
-            plot_bgcolor: '#1a1a19',
-            paper_bgcolor: '#1c1c1e',
-            font: { color: '#ffffff', family: 'system-ui' },
-          },
-          { responsive: true }
-        );
-
-        // Timeline (línea — sequential blue)
-        const timelineData = {};
-        records.forEach(r => {
-          const date = r.ts.split(',')[0];
-          timelineData[date] = (timelineData[date] || 0) + 1;
-        });
-
-        const sortedDates = Object.keys(timelineData).sort();
-        Plotly.newPlot(
-          'plot-timeline',
-          [
-            {
-              x: sortedDates,
-              y: sortedDates.map(d => timelineData[d]),
-              type: 'scatter',
-              mode: 'lines+markers',
-              line: { color: '#3987e5', width: 2 },
-              marker: { size: 6 },
-            },
-          ],
-          {
-            title: 'Tendencia Temporal',
-            xaxis: { title: 'Fecha' },
-            yaxis: { title: 'Registros/día' },
-            plot_bgcolor: '#1a1a19',
-            paper_bgcolor: '#1c1c1e',
-            font: { color: '#ffffff', family: 'system-ui' },
-          },
-          { responsive: true }
-        );
+        this.renderKpis(records);
+        this.renderCharts(records);
+        this.renderTable(records);
       }
 
-      renderTable() {
+      renderKpis(records) {
+        const container = document.getElementById('kpi-grid');
+        container.innerHTML = '';
+
+        const total = records.length;
+        let good = 0, bad = 0;
+
+        if (this.currentLog === 'destino_doca') {
+          good = records.filter(r => r.resultado === 'Sin incidencia').length;
+          bad = records.filter(r => r.resultado === 'Erroneo').length;
+
+          this.addKpiCard(container, total.toString(), 'Total');
+          this.addKpiCard(container, good.toString(), 'Sin incidencia');
+          this.addKpiCard(container, bad.toString(), 'Erroneo');
+        } else if (this.currentLog === 'fury') {
+          const situations = new Set(records.map(r => r.situacion));
+          this.addKpiCard(container, total.toString(), 'Total');
+          situations.forEach(s => {
+            const count = records.filter(r => r.situacion === s).length;
+            this.addKpiCard(container, count.toString(), s);
+          });
+        } else if (this.currentLog === 'contenerizado') {
+          const situations = new Set(records.map(r => r.situacion));
+          this.addKpiCard(container, total.toString(), 'Total');
+          situations.forEach(s => {
+            const count = records.filter(r => r.situacion === s).length;
+            this.addKpiCard(container, count.toString(), s);
+          });
+        } else if (this.currentLog === 'linehaul') {
+          const areas = new Set(records.map(r => r.area));
+          this.addKpiCard(container, total.toString(), 'Total');
+          areas.forEach(a => {
+            const count = records.filter(r => r.area === a).length;
+            this.addKpiCard(container, count.toString(), a);
+          });
+        }
+      }
+
+      addKpiCard(container, value, label) {
+        const card = document.createElement('div');
+        card.className = 'kpi-card';
+        card.innerHTML = `<div class="kpi-value">${value}</div><div class="kpi-label">${label}</div>`;
+        container.appendChild(card);
+      }
+
+      renderCharts(records) {
+        const container = document.getElementById('charts-grid');
+        container.innerHTML = '';
+
+        if (this.currentLog === 'destino_doca') {
+          this.renderResultadoChart(container, records);
+          this.renderDestinoChart(container, records);
+          this.renderDocaChart(container, records);
+        } else if (this.currentLog === 'fury') {
+          this.renderSituacionChart(container, records);
+          this.renderShipmentChart(container, records);
+        } else if (this.currentLog === 'contenerizado') {
+          this.renderSituacionChart(container, records);
+          this.renderShipmentChart(container, records);
+        } else if (this.currentLog === 'linehaul') {
+          this.renderAreaChart(container, records);
+          this.renderCanalizacionChart(container, records);
+        }
+      }
+
+      renderResultadoChart(container, records) {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+
+        const counts = {};
+        records.forEach(r => {
+          counts[r.resultado] = (counts[r.resultado] || 0) + 1;
+        });
+
+        const data = [{
+          labels: Object.keys(counts),
+          values: Object.values(counts),
+          type: 'pie',
+          marker: { colors: [this.getColor('good'), this.getColor('critical')] },
+        }];
+
+        const layout = {
+          title: 'Distribución de Resultados',
+          plot_bgcolor: 'transparent',
+          paper_bgcolor: 'transparent',
+          font: { color: '#ffffff' },
+          showlegend: true,
+        };
+
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      }
+
+      renderSituacionChart(container, records) {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+
+        const counts = {};
+        records.forEach(r => {
+          counts[r.situacion] = (counts[r.situacion] || 0) + 1;
+        });
+
+        const data = [{
+          x: Object.keys(counts),
+          y: Object.values(counts),
+          type: 'bar',
+          marker: { color: this.getColor('series') },
+        }];
+
+        const layout = {
+          title: 'Distribución de Situaciones',
+          xaxis: { title: 'Situación' },
+          yaxis: { title: 'Cantidad' },
+          plot_bgcolor: 'transparent',
+          paper_bgcolor: 'transparent',
+          font: { color: '#ffffff' },
+        };
+
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      }
+
+      renderDestinoChart(container, records) {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+
+        const counts = {};
+        records.forEach(r => {
+          counts[r.destino] = (counts[r.destino] || 0) + 1;
+        });
+
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+        const data = [{
+          x: sorted.map(([k]) => k),
+          y: sorted.map(([, v]) => v),
+          type: 'bar',
+          marker: { color: this.getColor('series') },
+        }];
+
+        const layout = {
+          title: 'Top Destinos',
+          xaxis: { title: 'Destino' },
+          yaxis: { title: 'Cantidad' },
+          plot_bgcolor: 'transparent',
+          paper_bgcolor: 'transparent',
+          font: { color: '#ffffff' },
+        };
+
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      }
+
+      renderDocaChart(container, records) {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+
+        const counts = {};
+        records.forEach(r => {
+          counts[r.doca] = (counts[r.doca] || 0) + 1;
+        });
+
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+        const data = [{
+          x: sorted.map(([k]) => k),
+          y: sorted.map(([, v]) => v),
+          type: 'bar',
+          marker: { color: this.getColor('good') },
+        }];
+
+        const layout = {
+          title: 'Top Docas',
+          xaxis: { title: 'Doca' },
+          yaxis: { title: 'Cantidad' },
+          plot_bgcolor: 'transparent',
+          paper_bgcolor: 'transparent',
+          font: { color: '#ffffff' },
+        };
+
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      }
+
+      renderAreaChart(container, records) {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+
+        const counts = {};
+        records.forEach(r => {
+          counts[r.area] = (counts[r.area] || 0) + 1;
+        });
+
+        const data = [{
+          labels: Object.keys(counts),
+          values: Object.values(counts),
+          type: 'pie',
+          marker: { colors: [this.getColor('series'), this.getColor('good'), this.getColor('critical')] },
+        }];
+
+        const layout = {
+          title: 'Distribución por Área',
+          plot_bgcolor: 'transparent',
+          paper_bgcolor: 'transparent',
+          font: { color: '#ffffff' },
+        };
+
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      }
+
+      renderCanalizacionChart(container, records) {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+
+        const counts = {};
+        records.forEach(r => {
+          counts[r.canalizacion] = (counts[r.canalizacion] || 0) + 1;
+        });
+
+        const data = [{
+          x: Object.keys(counts),
+          y: Object.values(counts),
+          type: 'bar',
+          marker: { color: this.getColor('series') },
+        }];
+
+        const layout = {
+          title: 'Distribución de Canalizaciones',
+          xaxis: { title: 'Canalización' },
+          yaxis: { title: 'Cantidad' },
+          plot_bgcolor: 'transparent',
+          paper_bgcolor: 'transparent',
+          font: { color: '#ffffff' },
+        };
+
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      }
+
+      renderShipmentChart(container, records) {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+
+        const counts = {};
+        records.forEach(r => {
+          counts[r.shipment] = (counts[r.shipment] || 0) + 1;
+        });
+
+        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+        const data = [{
+          x: sorted.map(([k]) => k),
+          y: sorted.map(([, v]) => v),
+          type: 'bar',
+          marker: { color: this.getColor('series') },
+        }];
+
+        const layout = {
+          title: 'Top Shipments',
+          xaxis: { title: 'Shipment' },
+          yaxis: { title: 'Cantidad' },
+          plot_bgcolor: 'transparent',
+          paper_bgcolor: 'transparent',
+          font: { color: '#ffffff' },
+        };
+
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      }
+
+      renderTable(records) {
+        const thead = document.getElementById('table-head');
         const tbody = document.getElementById('table-body');
+        thead.innerHTML = '';
         tbody.innerHTML = '';
 
-        if (this.filteredRecords.length === 0) {
-          tbody.innerHTML = `
-            <tr>
-              <td colspan="6" style="text-align: center; padding: var(--spacing-lg); color: var(--text-muted);">
-                Sin registros coincidentes
-              </td>
-            </tr>
-          `;
-          return;
-        }
+        const config = FORMS_CONFIG[this.currentLog];
+        if (!config) return;
 
-        this.filteredRecords.forEach(r => {
+        const tr = document.createElement('tr');
+        config.csvColumns.forEach(col => {
+          const th = document.createElement('th');
+          th.textContent = col.header;
+          tr.appendChild(th);
+        });
+        thead.appendChild(tr);
+
+        records.forEach(record => {
           const tr = document.createElement('tr');
-          const resultClass = r.resultado === 'Sin incidencia' ? 'resultado-good' : 'resultado-bad';
-          tr.innerHTML = `
-            <td>${r.ts}</td>
-            <td>${r.hu}</td>
-            <td>${r.destino}</td>
-            <td>${r.doca}</td>
-            <td><span class="${resultClass}">${r.resultado}</span></td>
-            <td style="font-size: var(--font-small); color: var(--text-muted);">${r.uploaded_by}</td>
-          `;
+          config.csvColumns.forEach(col => {
+            const td = document.createElement('td');
+            const value = record[col.field] || '';
+
+            if (col.field === 'resultado') {
+              td.className = value === 'Sin incidencia' ? 'status-good' : 'status-critical';
+              td.textContent = value;
+            } else if (col.field === 'foto' && value.startsWith('data:')) {
+              const img = document.createElement('img');
+              img.src = value;
+              img.className = 'photo-thumbnail';
+              img.addEventListener('click', () => this.showPhoto(value));
+              td.appendChild(img);
+            } else {
+              td.textContent = value;
+            }
+
+            tr.appendChild(td);
+          });
           tbody.appendChild(tr);
         });
       }
 
-      showAlert(message, type = 'info') {
+      filterTable(query) {
+        const tbody = document.getElementById('table-body');
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(row => {
+          const text = row.textContent.toLowerCase();
+          row.style.display = text.includes(query.toLowerCase()) ? '' : 'none';
+        });
+      }
+
+      showPhoto(dataUrl) {
+        const modal = document.getElementById('photo-modal');
+        const img = document.getElementById('photo-modal-img');
+        img.src = dataUrl;
+        modal.classList.add('active');
+      }
+
+      async downloadAll() {
+        const json = { logs: this.logs };
+        const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `consolidado_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      showAlert(message, type = 'success') {
+        const container = document.getElementById('alerts');
         const alert = document.createElement('div');
         alert.className = `alert alert-${type}`;
-        alert.textContent = message;
-        document.body.appendChild(alert);
-
-        setTimeout(() => alert.remove(), 3000);
+        alert.innerHTML = `
+          <span>${message}</span>
+          <button class="alert-close">&times;</button>
+        `;
+        container.appendChild(alert);
+        alert.querySelector('.alert-close').addEventListener('click', () => alert.remove());
+        setTimeout(() => alert.remove(), 5000);
       }
 
-      renderUserAvatar() {
-        if (!this.currentUser || !this.currentUser.email) return;
-
-        const avatarEl = document.getElementById('user-avatar');
-        if (!avatarEl) return;
-
-        // Obtener iniciales del LDAP o email
-        const ldap = this.currentUser.ldap || this.currentUser.email.split('@')[0];
-        const parts = ldap.split('_');
-        const initials = (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
-
-        avatarEl.textContent = initials;
-        avatarEl.title = `${this.currentUser.full_name || this.currentUser.email}`;
+      headerToFieldId(header) {
+        return header.toLowerCase()
+          .replace(/[^a-z0-9]+/g, '_')
+          .replace(/^_|_$/g, '')
+          .replace('fecha/hora', 'ts')
+          .replace('resultado', 'resultado');
       }
 
-      showModal(title, body) {
-        document.getElementById('modal-title').textContent = title;
-        document.getElementById('modal-body').textContent = body;
-        document.getElementById('modal').classList.add('show');
+      getLogTitle(logType) {
+        const config = FORMS_CONFIG[logType];
+        return config?.title || logType;
+      }
+
+      getColor(type) {
+        if (type === 'good') return '#0ca30c';
+        if (type === 'critical') return '#d03b3b';
+        if (type === 'series') return '#3987e5';
+        return '#008300';
       }
     }
 
-    // Iniciar cuando el DOM esté listo
-    document.addEventListener('DOMContentLoaded', () => {
-      new AuditDashboard();
-    });
+    // ==========================================================================
+    // Helper Functions
+    // ==========================================================================
+    function detectLogTypeFromHeaders(headers) {
+      const normalized = headers.map(h => h.toLowerCase().trim());
+
+      if (normalized.includes('resultado')) {
+        return 'destino_doca';
+      } else if (normalized.includes('shipment') && normalized.includes('situacion') && normalized.includes('foto')) {
+        return normalized.includes('valor') ? 'fury' : 'contenerizado';
+      } else if (normalized.includes('hu') && normalized.includes('area') && normalized.includes('canalizacion')) {
+        return 'linehaul';
+      }
+
+      return null;
+    }
+
+    const FORMS_CONFIG = {
+      destino_doca: {
+        title: 'Destino / Doca',
+        csvColumns: [
+          { field: 'ts', header: 'Fecha/Hora' },
+          { field: 'hu', header: 'HU' },
+          { field: 'destino', header: 'Destino' },
+          { field: 'doca', header: 'Doca' },
+          { field: 'resultado', header: 'Resultado' },
+        ],
+      },
+      fury: {
+        title: 'FURY',
+        csvColumns: [
+          { field: 'ts', header: 'Fecha/Hora' },
+          { field: 'shipment', header: 'Shipment' },
+          { field: 'foto', header: 'Foto' },
+          { field: 'situacion', header: 'Situación' },
+          { field: 'valor', header: 'Valor' },
+        ],
+      },
+      contenerizado: {
+        title: 'Contenerizado',
+        csvColumns: [
+          { field: 'ts', header: 'Fecha/Hora' },
+          { field: 'shipment', header: 'Shipment' },
+          { field: 'situacion', header: 'Situación' },
+          { field: 'foto', header: 'Foto' },
+        ],
+      },
+      linehaul: {
+        title: 'Linehaul',
+        csvColumns: [
+          { field: 'ts', header: 'Fecha/Hora' },
+          { field: 'hu', header: 'HU' },
+          { field: 'area', header: 'Área' },
+          { field: 'armado_sitio', header: 'Armado en Sitio' },
+          { field: 'origen', header: 'Origen' },
+          { field: 'canalizacion', header: 'Canalización' },
+          { field: 'foto', header: 'Foto' },
+          { field: 'comentarios', header: 'Comentarios' },
+        ],
+      },
+    };
+
+    // Initialize
+    const dashboard = new AuditDashboard();
   </script>
 </body>
 </html>
