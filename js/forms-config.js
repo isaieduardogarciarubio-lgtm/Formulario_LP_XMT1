@@ -46,7 +46,7 @@ const FORMS_CONFIG = {
     id: 'fury',
     title: 'FURY',
     description: 'Escanea shipment, foto y situación',
-    icon: 'clipboard',
+    icon: 'boxWithCross',
     fields: [
       {
         id: 'shipment',
@@ -129,7 +129,7 @@ const FORMS_CONFIG = {
     id: 'linehaul',
     title: 'Posible daño Linehaul / Despacho',
     description: 'Escanea HU, área, origen y canalización',
-    icon: 'truck',
+    icon: 'pallet',
     fields: [
       {
         id: 'hu',
@@ -194,6 +194,49 @@ const FORMS_CONFIG = {
       { field: 'canalizacion', header: 'Canalización' },
       { field: 'foto', header: 'Foto', type: 'photo' },
       { field: 'comentarios', header: 'Comentarios' },
+    ],
+  },
+
+  inbound_fm: {
+    id: 'inbound_fm',
+    title: 'Inbound FM',
+    description: 'Escanea patente, diferencia y hallazgo',
+    icon: 'pallet',
+    fields: [
+      {
+        id: 'patente',
+        label: '¿Cuál es la patente?',
+        type: 'scanner',
+        required: true,
+        placeholder: 'Ej. 2420997802886101',
+      },
+      {
+        id: 'diferencia_shipments',
+        label: '¿Cuál es la diferencia de shipments?',
+        type: 'text',
+        required: true,
+        placeholder: 'Ingresa la diferencia',
+      },
+      {
+        id: 'hallazgo',
+        label: '¿Cuál es el hallazgo?',
+        type: 'choice',
+        required: true,
+        options: ['Correcto', 'Divergencia', 'Falta de probidad'],
+      },
+      {
+        id: 'evidencia',
+        label: 'Evidencia (opcional)',
+        type: 'photo',
+        required: false,
+      },
+    ],
+    csvColumns: [
+      { field: 'ts', header: 'Fecha/Hora' },
+      { field: 'patente', header: 'Patente' },
+      { field: 'diferencia_shipments', header: 'Diferencia de Shipments' },
+      { field: 'hallazgo', header: 'Hallazgo' },
+      { field: 'evidencia', header: 'Evidencia', type: 'photo' },
     ],
   },
 };

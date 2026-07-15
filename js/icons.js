@@ -41,6 +41,8 @@ const Icons = (() => {
 
     // Logística / transporte
     truck: '<path d="M2 7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v9H2z"/><path d="M14 10h4l3 3v3h-7z"/><circle cx="6.5" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/><path d="M4.1 18h1M19.6 18H21a1 1 0 0 0 1-1v-2M8.1 18h6.4"/>',
+    pallet: '<rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="15" width="18" height="4" rx="1"/><path d="M8 5v14M12 5v14M16 5v14"/>',
+    boxWithCross: '<rect x="4" y="5" width="16" height="14" rx="1"/><path d="M9 10l6 8"/><path d="M15 10l-6 8"/>',
   };
 
   /**
