@@ -73,7 +73,7 @@ class FormApp {
 
     left.innerHTML = leftIcon
       ? `<button class="icon-btn-plain" aria-label="Atrás" title="Atrás">${Icons.svg(leftIcon, { size: 22 })}</button>`
-      : `<img class="navbar-logo" src="data/logo-meli.png" alt="MercadoLibre" />`;
+      : `<img class="navbar-logo" src="data/ML_es_RGB_ML-Pluma-Izquierda-Relleno-B (1).png" alt="MercadoLibre" />`;
 
     right.innerHTML = rightIcon
       ? `<button class="icon-btn-plain" aria-label="Cerrar" title="Cerrar">${Icons.svg(rightIcon, { size: 22 })}</button>`
