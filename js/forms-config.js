@@ -41,6 +41,161 @@ const FORMS_CONFIG = {
       { field: 'resultado', header: 'Resultado' },
     ],
   },
+
+  fury: {
+    id: 'fury',
+    title: 'FURY',
+    description: 'Escanea shipment, foto y situación',
+    icon: 'clipboard',
+    fields: [
+      {
+        id: 'shipment',
+        label: '¿Cuál es el Shipment ID?',
+        type: 'scanner',
+        required: true,
+        placeholder: 'Ej. SHP123456789',
+      },
+      {
+        id: 'foto',
+        label: 'Toma una foto del paquete',
+        type: 'photo',
+        required: true,
+      },
+      {
+        id: 'situacion',
+        label: '¿Cuál es la situación?',
+        type: 'choice',
+        required: true,
+        options: ['Sin Master', 'Dañado', 'Abierto'],
+      },
+      {
+        id: 'valor',
+        label: 'Valor en USD (opcional)',
+        type: 'number',
+        required: false,
+        placeholder: 'Ej. 120',
+        min: 0,
+      },
+    ],
+    csvColumns: [
+      { field: 'ts', header: 'Fecha/Hora' },
+      { field: 'shipment', header: 'Shipment ID' },
+      { field: 'foto', header: 'Foto', type: 'photo' },
+      { field: 'situacion', header: 'Situación' },
+      { field: 'valor', header: 'USD Valor' },
+    ],
+  },
+
+  contenerizado: {
+    id: 'contenerizado',
+    title: 'Contenerizado',
+    description: 'Escanea shipment y situación (foto si hay daño)',
+    icon: 'inbox',
+    fields: [
+      {
+        id: 'shipment',
+        label: '¿Cuál es el Shipment ID?',
+        type: 'scanner',
+        required: true,
+        placeholder: 'Ej. SHP123456789',
+      },
+      {
+        id: 'situacion',
+        label: '¿Cuál es la situación?',
+        type: 'choice',
+        required: true,
+        options: ['Missort', 'Dañado', 'Correcto'],
+        // Si cambian la situación, la foto previa deja de ser válida
+        resetOnChange: ['foto'],
+      },
+      {
+        id: 'foto',
+        label: 'Toma una foto del daño',
+        type: 'photo',
+        required: true,
+        // Solo se pide foto cuando la situación es "Dañado"
+        showIf: (v) => v.situacion === 'Dañado',
+      },
+    ],
+    csvColumns: [
+      { field: 'ts', header: 'Fecha/Hora' },
+      { field: 'shipment', header: 'Shipment ID' },
+      { field: 'situacion', header: 'Situación' },
+      { field: 'foto', header: 'Foto', type: 'photo' },
+    ],
+  },
+
+  linehaul: {
+    id: 'linehaul',
+    title: 'Linehaul / Despacho',
+    description: 'Escanea HU, área, origen y canalización',
+    icon: 'home',
+    fields: [
+      {
+        id: 'hu',
+        label: '¿Cuál es el HU?',
+        type: 'scanner',
+        required: true,
+        placeholder: 'Ej. HU123456789',
+      },
+      {
+        id: 'area',
+        label: '¿Cuál es el área?',
+        type: 'choice',
+        required: true,
+        options: ['Despacho', 'Inbound LH', 'Sorting Large', 'Otro'],
+      },
+      {
+        id: 'armado_sitio',
+        label: '¿Se armó en tu sitio?',
+        type: 'choice',
+        required: true,
+        options: ['Sí', 'No'],
+        // Cambiar esta respuesta recalcula el origen derivado
+        resetOnChange: ['origen'],
+      },
+      {
+        id: 'origen',
+        label: '¿Cuál es el origen?',
+        type: 'text',
+        required: true,
+        placeholder: 'Escribe el origen',
+        // Solo se escribe manualmente cuando NO se armó en el sitio;
+        // si se armó en el sitio, el origen es "XMT1" automáticamente.
+        showIf: (v) => v.armado_sitio === 'No',
+        valueWhenHidden: () => 'XMT1',
+      },
+      {
+        id: 'canalizacion',
+        label: '¿Cuál es la canalización?',
+        type: 'text',
+        required: true,
+        placeholder: 'Escribe la canalización',
+      },
+      {
+        id: 'foto',
+        label: 'Foto (opcional)',
+        type: 'photo',
+        required: false,
+      },
+      {
+        id: 'comentarios',
+        label: 'Comentarios (opcional)',
+        type: 'textarea',
+        required: false,
+        placeholder: 'Notas adicionales',
+      },
+    ],
+    csvColumns: [
+      { field: 'ts', header: 'Fecha/Hora' },
+      { field: 'hu', header: 'HU' },
+      { field: 'area', header: 'Área' },
+      { field: 'origen', header: 'Origen' },
+      { field: 'canalizacion', header: 'Canalización' },
+      { field: 'foto', header: 'Foto', type: 'photo' },
+      { field: 'comentarios', header: 'Comentarios' },
+    ],
+  },
 };
 
 /**

@@ -185,23 +185,25 @@ class FormApp {
   }
 
   /**
-   * Descarga un CSV por cada log con registros (columnas distintas por log,
-   * así que no se combinan en un solo archivo). Se espacían las descargas
-   * para evitar que el navegador bloquee las descargas múltiples.
+   * Descarga un único ZIP maestro con una subcarpeta por log (cada una con su
+   * CSV y, si aplica, su carpeta fotos/). Una sola descarga, todo organizado.
    */
-  downloadAllLogs(forms) {
+  async downloadAllLogs(forms) {
     if (!forms.length) return;
 
-    this.showAlert(`Descargando ${forms.length} log${forms.length === 1 ? '' : 's'}...`, 'success');
+    this.showAlert(`Generando ZIP con ${forms.length} log${forms.length === 1 ? '' : 's'}...`, 'info');
 
-    forms.forEach((form, index) => {
-      setTimeout(() => {
-        const result = CSVEngine.exportAndDownload(this.getRecords(form.id), form);
-        if (!result.success) {
-          this.showAlert(`Error al descargar "${form.title}": ${result.error}`, 'error');
-        }
-      }, index * 400);
-    });
+    const entries = forms.map((form) => ({
+      records: this.getRecords(form.id),
+      formConfig: form,
+    }));
+
+    const result = await ExportEngine.exportAllZip(entries);
+    if (result.success) {
+      this.showAlert('ZIP descargado exitosamente', 'success');
+    } else {
+      this.showAlert(`Error: ${result.error}`, 'error');
+    }
   }
 
   /**
@@ -420,8 +422,11 @@ class FormApp {
 
       const exportBtn = document.createElement('button');
       exportBtn.className = 'btn btn-secondary btn-block';
-      exportBtn.innerHTML = `<span>Descargar CSV</span>`;
-      exportBtn.addEventListener('click', () => this.exportToCSV());
+      const hasPhotos = ExportEngine.formHasPhotos(this.currentForm);
+      exportBtn.innerHTML = hasPhotos
+        ? `<span>Descargar ZIP (CSV + fotos)</span>`
+        : `<span>Descargar CSV</span>`;
+      exportBtn.addEventListener('click', () => this.exportRecords());
 
       const clearBtn = document.createElement('button');
       clearBtn.className = 'btn btn-secondary btn-block';
@@ -499,8 +504,21 @@ class FormApp {
       this.currentForm.csvColumns.forEach((col) => {
         const td = document.createElement('td');
         const value = record[col.field] || '';
-        td.textContent = value.length > 50 ? value.substring(0, 50) + '...' : value;
-        td.title = value;
+
+        if (col.type === 'photo') {
+          if (String(value).startsWith('data:')) {
+            const img = document.createElement('img');
+            img.className = 'record-thumb';
+            img.src = value;
+            img.alt = 'Foto';
+            td.appendChild(img);
+          } else {
+            td.textContent = '—';
+          }
+        } else {
+          td.textContent = value.length > 50 ? value.substring(0, 50) + '...' : value;
+          td.title = value;
+        }
         row.appendChild(td);
       });
 
@@ -521,10 +539,24 @@ class FormApp {
   }
 
   /**
-   * Exporta registros a CSV
+   * Exporta los registros del log actual. Si el log captura fotos, genera un
+   * ZIP (CSV + carpeta fotos/); si no, un CSV simple.
    */
-  exportToCSV() {
-    const result = CSVEngine.exportAndDownload(this.getRecords(this.currentForm.id), this.currentForm);
+  async exportRecords() {
+    const records = this.getRecords(this.currentForm.id);
+
+    if (ExportEngine.formHasPhotos(this.currentForm)) {
+      this.showAlert('Generando ZIP...', 'info');
+      const result = await ExportEngine.exportLogZip(records, this.currentForm);
+      if (result.success) {
+        this.showAlert('ZIP descargado exitosamente', 'success');
+      } else {
+        this.showAlert(`Error: ${result.error}`, 'error');
+      }
+      return;
+    }
+
+    const result = CSVEngine.exportAndDownload(records, this.currentForm);
     if (result.success) {
       this.showAlert('CSV descargado exitosamente', 'success');
     } else {

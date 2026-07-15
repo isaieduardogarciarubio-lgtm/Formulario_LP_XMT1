@@ -29,8 +29,24 @@ class FormEngine {
     return this.formConfig.fields[this.stepIndex];
   }
 
+  /**
+   * Un campo está oculto cuando su condición showIf(values) es falsa.
+   * Los campos ocultos se saltan (hacia adelante y hacia atrás) y reciben
+   * su valueWhenHidden (ej. origen → "XMT1") al normalizar.
+   */
+  isFieldHidden(field) {
+    return !!(field && field.showIf && !field.showIf(this.values));
+  }
+
+  /**
+   * Último paso *visible*: no quedan campos visibles después del actual.
+   * (Los campos condicionales ocultos al final no cuentan.)
+   */
   get isLastStep() {
-    return this.stepIndex === this.formConfig.fields.length - 1;
+    for (let i = this.stepIndex + 1; i < this.formConfig.fields.length; i++) {
+      if (!this.isFieldHidden(this.formConfig.fields[i])) return false;
+    }
+    return true;
   }
 
   render(containerId) {
@@ -85,7 +101,14 @@ class FormEngine {
     // lo saltamos una sola vez y avanzamos directo al siguiente paso.
     if (this.autoAdvanceFields.includes(field.id) && this._autoAdvancePending[field.id] !== undefined) {
       delete this._autoAdvancePending[field.id];
-      this.advance();
+      this.advance({ silent: true });
+      return;
+    }
+
+    // Campo condicional oculto: guarda su valor derivado y salta.
+    if (this.isFieldHidden(field)) {
+      this.values[field.id] = field.valueWhenHidden ? field.valueWhenHidden(this.values) : '';
+      this.advance({ silent: true });
       return;
     }
 
@@ -99,6 +122,14 @@ class FormEngine {
     }
     if (field.type === 'doca_picker') {
       this.renderDocaStep(field);
+      return;
+    }
+    if (field.type === 'choice') {
+      this.renderChoiceStep(field);
+      return;
+    }
+    if (field.type === 'photo') {
+      this.renderPhotoStep(field);
       return;
     }
 
@@ -148,9 +179,16 @@ class FormEngine {
   }
 
   buildProgress() {
+    // Cuenta solo pasos visibles según las condiciones actuales, para que la
+    // numeración no salte al ocultarse campos condicionales.
+    const fields = this.formConfig.fields;
+    const visible = fields.map((_, i) => i).filter((i) => !this.isFieldHidden(fields[i]));
+    const total = visible.length;
+    const pos = visible.indexOf(this.stepIndex) + 1;
+
     const progress = document.createElement('div');
     progress.className = 'step-progress';
-    progress.textContent = `${this.stepIndex + 1} / ${this.formConfig.fields.length}`;
+    progress.textContent = `${pos} / ${total}`;
     return progress;
   }
 
@@ -577,6 +615,213 @@ class FormEngine {
     });
   }
 
+  /* ======================================================================
+     Campo de opción (choice): lista de botones grandes; un toque elige y
+     avanza. Usado para enums (Situación, Área) y preguntas Sí/No.
+     ====================================================================== */
+
+  renderChoiceStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const list = document.createElement('div');
+    list.className = 'picker-list choice-list';
+    screen.appendChild(list);
+
+    const support = document.createElement('div');
+    support.className = 'step-support';
+    screen.appendChild(support);
+
+    this.container.appendChild(screen);
+
+    this.currentInput = null;
+    this.errorTargetEl = list;
+    this.supportEl = support;
+
+    (field.options || []).forEach((option) => {
+      const value = typeof option === 'string' ? option : option.value;
+      const label = typeof option === 'string' ? option : option.label;
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'picker-opt choice-opt';
+      if (this.values[field.id] === value) row.classList.add('selected');
+      row.innerHTML = `<span>${label}</span>`;
+      row.addEventListener('click', () => {
+        this.values[field.id] = value;
+        // Cambiar una respuesta que controla campos condicionales invalida
+        // los valores derivados posteriores para que se recalculen.
+        if (field.resetOnChange) field.resetOnChange.forEach((id) => delete this.values[id]);
+        this.advance();
+      });
+      list.appendChild(row);
+    });
+
+    // Los pasos de opción no usan la barra flotante estándar (se avanza al tocar).
+    this.actionsEl = null;
+    if (!field.required) {
+      const skipBtn = this.makeButton('Omitir', { onClick: () => this.skip() });
+      this.setActions([skipBtn]);
+    }
+  }
+
+  /* ======================================================================
+     Campo de foto: captura con la cámara del dispositivo (o galería), con
+     previsualización y opción de retomar. La imagen se comprime en canvas
+     (máx 1280px, JPEG 0.6) para minimizar memoria y tamaño del ZIP.
+     ====================================================================== */
+
+  renderPhotoStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen photo-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const body = document.createElement('div');
+    body.className = 'photo-body';
+    screen.appendChild(body);
+
+    const support = document.createElement('div');
+    support.className = 'step-support';
+    screen.appendChild(support);
+
+    this.container.appendChild(screen);
+
+    this.photoBody = body;
+    this.supportEl = support;
+    this.errorTargetEl = body;
+
+    if (this.values[field.id]) {
+      this.enterPhotoPreview(field);
+    } else {
+      this.enterPhotoCapture(field);
+    }
+  }
+
+  enterPhotoCapture(field, note) {
+    this.supportEl.textContent = note || 'Toma una foto con la cámara del dispositivo.';
+    this.supportEl.classList.toggle('error', !!note);
+
+    this.photoBody.innerHTML = `
+      <button type="button" class="photo-dropzone">
+        <span class="photo-dropzone-icon">${Icons.svg('camera', { size: 30 })}</span>
+        <span class="photo-dropzone-label">Tomar foto</span>
+      </button>
+      <input type="file" accept="image/*" capture="environment" class="photo-input" hidden />
+      <input type="file" accept="image/*" class="photo-input-gallery" hidden />
+    `;
+
+    const dropzone = this.photoBody.querySelector('.photo-dropzone');
+    const cameraInput = this.photoBody.querySelector('.photo-input');
+    const galleryInput = this.photoBody.querySelector('.photo-input-gallery');
+
+    dropzone.addEventListener('click', () => cameraInput.click());
+
+    const onFile = async (input) => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      this.supportEl.textContent = 'Procesando imagen...';
+      this.supportEl.classList.remove('error');
+      try {
+        this.values[field.id] = await this.compressImage(file, { maxDim: 1280, quality: 0.6 });
+        this.vibrate(30);
+        this.enterPhotoPreview(field);
+      } catch (e) {
+        this.enterPhotoCapture(field, 'No se pudo procesar la imagen. Intenta de nuevo.');
+      }
+    };
+    cameraInput.addEventListener('change', () => onFile(cameraInput));
+    galleryInput.addEventListener('change', () => onFile(galleryInput));
+
+    const galleryBtn = this.makeButton('Elegir de galería', {
+      icon: 'image',
+      onClick: () => galleryInput.click(),
+    });
+    const buttons = [galleryBtn];
+    if (!field.required) {
+      buttons.unshift(this.makeButton('Omitir', { onClick: () => this.skip() }));
+    }
+    this.setActions(buttons);
+  }
+
+  enterPhotoPreview(field) {
+    this.supportEl.textContent = '';
+    this.supportEl.classList.remove('error');
+
+    this.photoBody.innerHTML = `
+      <div class="photo-preview">
+        <img alt="Foto capturada" />
+        <div class="photo-preview-badge">${Icons.svg('checkCircle', { size: 20 })}</div>
+      </div>
+    `;
+    this.photoBody.querySelector('img').src = this.values[field.id];
+
+    const retakeBtn = this.makeButton('Retomar', {
+      icon: 'refresh',
+      onClick: () => {
+        delete this.values[field.id];
+        this.enterPhotoCapture(field);
+      },
+    });
+    const nextBtn = this.makeButton(this.isLastStep ? 'Agregar Registro' : 'Continuar', {
+      primary: true,
+      icon: this.isLastStep ? 'check' : 'arrowRight',
+      iconAfter: true,
+      onClick: () => this.advance(),
+    });
+    this.setActions([retakeBtn, nextBtn]);
+  }
+
+  /**
+   * Comprime/redimensiona una imagen usando canvas y la devuelve como
+   * data URL JPEG. Reescala para que el lado largo no exceda maxDim.
+   */
+  compressImage(file, { maxDim = 1280, quality = 0.6 } = {}) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('No se pudo cargar la imagen'));
+      };
+      img.src = url;
+    });
+  }
+
   /* ====================================================================== */
 
   readCurrentValue() {
@@ -647,8 +892,8 @@ class FormEngine {
     this.advance();
   }
 
-  advance() {
-    this.vibrate(10);
+  advance({ silent } = {}) {
+    if (!silent) this.vibrate(10);
     if (this.isLastStep) {
       this.finish();
     } else {
@@ -659,16 +904,26 @@ class FormEngine {
 
   back() {
     this.stopScanner();
-    if (this.stepIndex === 0) {
+    // Retrocede al paso visible anterior, saltando campos condicionales ocultos.
+    let idx = this.stepIndex - 1;
+    while (idx >= 0 && this.isFieldHidden(this.formConfig.fields[idx])) idx--;
+    if (idx < 0) {
       if (this.onCancel) this.onCancel();
       return;
     }
-    this.stepIndex--;
+    this.stepIndex = idx;
     this.renderStep();
   }
 
   finish() {
     this.stopScanner();
+    // Normaliza: cualquier campo no visitado (condicional oculto al final)
+    // recibe su valor derivado o cadena vacía.
+    this.formConfig.fields.forEach((f) => {
+      if (this.values[f.id] === undefined) {
+        this.values[f.id] = this.isFieldHidden(f) && f.valueWhenHidden ? f.valueWhenHidden(this.values) : '';
+      }
+    });
     if (this.onComplete) this.onComplete({ ...this.values });
   }
 }

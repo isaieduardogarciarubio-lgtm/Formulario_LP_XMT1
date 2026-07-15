@@ -36,6 +36,8 @@ const Icons = (() => {
 
     // Acciones
     trash: '<path d="M19 6H5M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M10 10v4M14 10v4"/>',
+    camera: '<path d="M4 8a2 2 0 0 1 2-2h1.5l1-2h5l1 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 15l-5-5-9 9"/>',
   };
 
   /**
