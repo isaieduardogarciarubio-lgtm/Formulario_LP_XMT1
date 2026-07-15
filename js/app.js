@@ -112,8 +112,9 @@ class FormApp {
     getAllForms().forEach((form) => {
       const card = document.createElement('div');
       card.className = 'form-card';
+      const iconClass = form.id === 'fury' ? 'icon-danger' : '';
       card.innerHTML = `
-        <div class="form-card-icon">${Icons.svg(form.icon, { size: 20 })}</div>
+        <div class="form-card-icon">${Icons.svg(form.icon, { size: 20, className: iconClass })}</div>
         <div class="form-card-body">
           <div class="form-card-title">${form.title}</div>
           <div class="form-card-desc">${form.description}</div>

@@ -46,7 +46,7 @@ const FORMS_CONFIG = {
     id: 'fury',
     title: 'FURY',
     description: 'Escanea shipment, foto y situación',
-    icon: 'boxWithCross',
+    icon: 'redCross',
     fields: [
       {
         id: 'shipment',
@@ -201,7 +201,7 @@ const FORMS_CONFIG = {
     id: 'inbound_fm',
     title: 'Inbound FM',
     description: 'Escanea patente, diferencia y hallazgo',
-    icon: 'pallet',
+    icon: 'truck',
     fields: [
       {
         id: 'patente',
