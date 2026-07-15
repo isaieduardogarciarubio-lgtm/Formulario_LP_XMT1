@@ -138,6 +138,38 @@
       border: 1px solid var(--color-border);
     }
 
+    /* Cápsulas principales */
+    .capsule {
+      background: var(--color-surface);
+      border-radius: 24px;
+      padding: var(--spacing-xl);
+      margin-bottom: var(--spacing-xl);
+      border: 1px solid var(--color-border);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+    }
+
+    .capsule:hover {
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .capsule-title {
+      font-size: var(--font-h2);
+      font-weight: 700;
+      margin-bottom: var(--spacing-lg);
+      color: var(--color-text-primary);
+      display: flex;
+      align-items: center;
+      gap: var(--spacing-md);
+    }
+
+    .capsule-title svg {
+      width: 28px;
+      height: 28px;
+      color: var(--color-accent-yellow);
+    }
+
     .card-title {
       font-size: var(--font-h2);
       font-weight: 700;
@@ -240,11 +272,16 @@
     }
 
     .chart-container {
-      background: var(--color-surface);
-      border-radius: var(--radius-card);
-      border: 1px solid var(--color-border);
-      padding: var(--spacing-lg);
+      background: transparent;
+      border-radius: 0;
+      border: none;
+      padding: var(--spacing-lg) 0;
       min-height: 320px;
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    .chart-container:last-of-type {
+      border-bottom: none;
     }
 
     .chart-title {
@@ -263,11 +300,11 @@
        TABLE FILTRABLE
        ==================================================================== */
     .table-container {
-      background: var(--color-surface);
-      border-radius: var(--radius-card);
-      border: 1px solid var(--color-border);
-      padding: var(--spacing-lg);
-      margin-bottom: var(--spacing-lg);
+      background: transparent;
+      border-radius: 0;
+      border: none;
+      padding: 0;
+      margin-bottom: 0;
       overflow-x: auto;
     }
 
@@ -322,7 +359,8 @@
     }
 
     thead {
-      background: var(--color-surface-hover);
+      background: transparent;
+      border-bottom: 2px solid var(--color-border);
     }
 
     th {
@@ -617,9 +655,12 @@
 
     <!-- MAIN CONTENT -->
     <main class="content">
-      <!-- DROPZONE CARD -->
-      <div class="card">
-        <h2 class="card-title"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline; margin-right:8px; vertical-align:middle;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Cargar CSV de Auditoría</h2>
+      <!-- CÁPSULA 1: CARGA -->
+      <div class="capsule">
+        <h2 class="capsule-title">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Cargar Datos
+        </h2>
         <div id="dropzone">
           <div class="dropzone-icon"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
           <div class="dropzone-text">Arrastra un CSV aquí o haz click para seleccionar</div>
@@ -628,8 +669,15 @@
         <input type="file" id="dropzone-input" accept=".csv" />
       </div>
 
-      <!-- KPI ROW -->
-      <div class="kpi-row" id="kpi-row">
+      <!-- CÁPSULA 2: ANÁLISIS Y GRÁFICAS -->
+      <div class="capsule">
+        <h2 class="capsule-title">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 14l3-4 3 2 4-5"/><circle cx="15" cy="9" r="1" fill="currentColor"/></svg>
+          Análisis en Vivo
+        </h2>
+
+        <!-- KPI ROW -->
+        <div class="kpi-row" id="kpi-row">
         <div class="stat-tile">
           <div class="stat-label">Total Registros</div>
           <div class="stat-value" id="kpi-total">0</div>
@@ -673,9 +721,9 @@
         </div>
       </div>
 
-      <!-- TABLE CONTAINER -->
-      <div class="table-container">
-        <h2 class="card-title"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline; margin-right:8px; vertical-align:middle;"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 3H8a2 2 0 0 0-2 2v4h12V5a2 2 0 0 0-2-2z"/></svg>Registros Detallados</h2>
+        <!-- TABLE CONTAINER (dentro de la cápsula) -->
+        <div style="margin-top: var(--spacing-xl);">
+          <h3 style="font-size: var(--font-h2); font-weight: 700; margin-bottom: var(--spacing-lg); color: var(--color-text-primary);">Registros Detallados</h3>
 
         <div class="table-controls">
           <input
@@ -712,7 +760,10 @@
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
+      </div>
+      <!-- FIN CÁPSULA 2 -->
     </main>
   </div>
 
