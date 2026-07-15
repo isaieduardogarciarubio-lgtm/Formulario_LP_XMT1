@@ -77,9 +77,28 @@ class FormEngine {
     this.viewportBound = false;
   }
 
+  isFieldHidden(field) {
+    if (!field.showIf) return false;
+    const { field: targetField, value: targetValue } = field.showIf;
+    return this.values[targetField] !== targetValue;
+  }
+
   renderStep() {
     this.stopScanner();
-    const field = this.currentField;
+    let field = this.currentField;
+
+    // Skip hidden fields automatically
+    while (field && this.isFieldHidden(field)) {
+      if (field.valueWhenHidden !== undefined) {
+        this.values[field.id] = field.valueWhenHidden;
+      }
+      this.stepIndex++;
+      if (this.stepIndex >= this.formConfig.fields.length) {
+        this.finish();
+        return;
+      }
+      field = this.currentField;
+    }
 
     // Si este campo ya viene precargado (ej. destino fijo entre capturas),
     // lo saltamos una sola vez y avanzamos directo al siguiente paso.
@@ -99,6 +118,14 @@ class FormEngine {
     }
     if (field.type === 'doca_picker') {
       this.renderDocaStep(field);
+      return;
+    }
+    if (field.type === 'photo') {
+      this.renderPhotoStep(field);
+      return;
+    }
+    if (field.type === 'choice') {
+      this.renderChoiceStep(field);
       return;
     }
 
@@ -173,7 +200,7 @@ class FormEngine {
       input.rows = 3;
     } else {
       input = document.createElement('input');
-      input.type = field.type;
+      input.type = field.type === 'number' ? 'number' : field.type;
       input.className = 'step-input';
       input.placeholder = field.placeholder || '';
       if (field.min !== undefined) input.min = field.min;
@@ -639,6 +666,14 @@ class FormEngine {
       this.values.resultado = this.isNum(value) ? 'Sin incidencia' : 'Erroneo';
     }
 
+    // Handle resetOnChange: if any field has resetOnChange, clear those fields
+    const fieldsToReset = this.formConfig.fields.filter(
+      f => f.resetOnChange && f.resetOnChange.includes(field.id)
+    );
+    fieldsToReset.forEach(f => {
+      delete this.values[f.id];
+    });
+
     this.advance();
   }
 
@@ -665,6 +700,174 @@ class FormEngine {
     }
     this.stepIndex--;
     this.renderStep();
+  }
+
+  /* ======================================================================
+     Campo opción (botones grandes)
+     ====================================================================== */
+
+  renderChoiceStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen choice-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const buttonsWrap = document.createElement('div');
+    buttonsWrap.className = 'choice-buttons';
+
+    field.options.forEach(option => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-button';
+      btn.textContent = option.label;
+      btn.addEventListener('click', () => {
+        this.values[field.id] = option.value;
+        this.advance();
+      });
+      buttonsWrap.appendChild(btn);
+    });
+
+    screen.appendChild(buttonsWrap);
+    this.container.appendChild(screen);
+  }
+
+  /* ======================================================================
+     Campo foto (dropzone + cámara + compression)
+     ====================================================================== */
+
+  renderPhotoStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen photo-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const preview = document.createElement('div');
+    preview.className = 'photo-preview';
+    if (this.values[field.id]) {
+      const img = document.createElement('img');
+      img.src = this.values[field.id];
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '12px';
+      preview.appendChild(img);
+    }
+    screen.appendChild(preview);
+
+    const dropzone = document.createElement('div');
+    dropzone.className = 'photo-dropzone';
+    dropzone.innerHTML = '<p>Arrastra foto aquí o toca para seleccionar</p>';
+    screen.appendChild(dropzone);
+
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.capture = 'environment';
+    fileInput.style.display = 'none';
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const dataUrl = await this.compressImage(file);
+        this.values[field.id] = dataUrl;
+        this.renderPhotoStep(field);
+      }
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = 'var(--color-accent-yellow)';
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.style.borderColor = 'var(--color-border)';
+    });
+    dropzone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = 'var(--color-border)';
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const dataUrl = await this.compressImage(file);
+        this.values[field.id] = dataUrl;
+        this.renderPhotoStep(field);
+      }
+    });
+
+    screen.appendChild(fileInput);
+    this.container.appendChild(screen);
+
+    this.renderPhotoActions(field);
+  }
+
+  renderPhotoActions(field) {
+    const actions = document.createElement('div');
+    actions.className = 'step-actions';
+
+    if (!field.required) {
+      const skipBtn = document.createElement('button');
+      skipBtn.type = 'button';
+      skipBtn.className = 'btn btn-secondary';
+      skipBtn.textContent = 'Omitir';
+      skipBtn.addEventListener('click', () => this.skip());
+      actions.appendChild(skipBtn);
+    }
+
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'btn btn-primary';
+    nextBtn.textContent = this.isLastStep ? 'Agregar Registro' : 'Continuar';
+    nextBtn.disabled = field.required && !this.values[field.id];
+    nextBtn.addEventListener('click', () => {
+      if (!field.required || this.values[field.id]) {
+        this.advance();
+      }
+    });
+    actions.appendChild(nextBtn);
+
+    this.container.appendChild(actions);
+    this.actionsEl = actions;
+    this.repositionActions();
+  }
+
+  async compressImage(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+
+          if (width > 1280) {
+            height = (height * 1280) / width;
+            width = 1280;
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+          resolve(dataUrl);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
   }
 
   finish() {

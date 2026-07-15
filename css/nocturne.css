@@ -327,6 +327,90 @@ select.step-input {
   margin-left: auto;
 }
 
+/* Choice field — botones grandes */
+.choice-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+  padding-top: var(--spacing-lg);
+  padding-bottom: 120px;
+}
+
+.choice-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xl);
+}
+
+.choice-button {
+  padding: var(--spacing-lg) var(--spacing-md);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-size: var(--font-h2);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.choice-button:active {
+  background: var(--color-surface-hover);
+  border-color: var(--color-accent-yellow);
+}
+
+/* Photo field — preview + dropzone */
+.photo-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+  padding-top: var(--spacing-lg);
+  padding-bottom: 120px;
+}
+
+.photo-preview {
+  width: 100%;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.photo-preview img {
+  width: 100%;
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+}
+
+.photo-dropzone {
+  width: 100%;
+  min-height: 180px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  background: rgba(255, 255, 255, 0.02);
+  margin-bottom: var(--spacing-lg);
+}
+
+.photo-dropzone:active {
+  border-color: var(--color-accent-yellow);
+  background: rgba(255, 209, 0, 0.05);
+}
+
+.photo-dropzone p {
+  color: var(--color-text-muted);
+  font-size: var(--font-body);
+  text-align: center;
+  padding: var(--spacing-md);
+}
+
 /* ==========================================================================
    Tabla de registros
    ========================================================================== */
