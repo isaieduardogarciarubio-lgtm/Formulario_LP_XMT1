@@ -129,7 +129,7 @@ const FORMS_CONFIG = {
     id: 'linehaul',
     title: 'Posible daño Linehaul / Despacho',
     description: 'Escanea HU, área, origen y canalización',
-    icon: 'home',
+    icon: 'truck',
     fields: [
       {
         id: 'hu',
