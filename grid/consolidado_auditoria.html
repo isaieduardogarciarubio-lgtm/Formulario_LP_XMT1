@@ -492,7 +492,19 @@
     </div>
   </header>
 
-  <!-- TABS -->
+  <!-- MENÚ PRINCIPAL (Cargar / Análisis) -->
+  <div class="tabs" id="main-tabs">
+    <button class="tab active" data-tab="upload" id="main-tab-upload">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+      Cargar
+    </button>
+    <button class="tab" data-tab="analysis" id="main-tab-analysis">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      Análisis
+    </button>
+  </div>
+
+  <!-- TABS de log (solo visibles dentro de Análisis) -->
   <div class="tabs" id="log-tabs" style="display: none;"></div>
 
   <!-- PANEL: CARGAR ──────────────────────────────── -->
@@ -666,12 +678,18 @@
         linehaul: [],
       };
       this.currentLog = 'destino_doca';
+      this.activeMainTab = 'upload';
       this.init();
     }
 
     async init() {
       this.setupEventListeners();
       await this.loadAllLogs();
+      const hasExistingData = Object.values(this.logs).some(r => r.length > 0);
+      if (hasExistingData) {
+        this.currentLog = Object.entries(this.logs).find(([, r]) => r.length > 0)[0];
+        this.switchMainTab('analysis');
+      }
       this.render();
     }
 
@@ -704,6 +722,18 @@
       document.getElementById('photo-modal-close').addEventListener('click', () => {
         document.getElementById('photo-modal').classList.remove('active');
       });
+
+      document.getElementById('main-tab-upload').addEventListener('click', () => this.switchMainTab('upload'));
+      document.getElementById('main-tab-analysis').addEventListener('click', () => this.switchMainTab('analysis'));
+    }
+
+    switchMainTab(tabName) {
+      this.activeMainTab = tabName;
+      document.getElementById('panel-upload').classList.toggle('active', tabName === 'upload');
+      document.getElementById('panel-analysis').classList.toggle('active', tabName === 'analysis');
+      document.getElementById('main-tab-upload').classList.toggle('active', tabName === 'upload');
+      document.getElementById('main-tab-analysis').classList.toggle('active', tabName === 'analysis');
+      this.renderTabs();
     }
 
     async loadAllLogs() {
@@ -831,7 +861,9 @@
       }
 
       this.logs[logType] = records;
+      this.currentLog = logType;
       this.showAlert('uploadAlert', 'success', `${records.length} registros en ${logType}`);
+      this.switchMainTab('analysis');
       this.render();
     }
 
@@ -844,7 +876,7 @@
       const container = document.getElementById('log-tabs');
       const hasAny = Object.values(this.logs).some(r => r.length > 0);
 
-      if (!hasAny) {
+      if (!hasAny || this.activeMainTab !== 'analysis') {
         container.style.display = 'none';
         return;
       }
@@ -872,15 +904,11 @@
       if (records.length === 0) {
         document.getElementById('no-data-message').style.display = 'block';
         document.getElementById('analysis-content').style.display = 'none';
-        document.getElementById('panel-analysis').classList.remove('active');
-        document.getElementById('panel-upload').classList.add('active');
         return;
       }
 
       document.getElementById('no-data-message').style.display = 'none';
       document.getElementById('analysis-content').style.display = 'block';
-      document.getElementById('panel-upload').classList.remove('active');
-      document.getElementById('panel-analysis').classList.add('active');
 
       this.renderKpis(records);
       this.renderCharts(records);
