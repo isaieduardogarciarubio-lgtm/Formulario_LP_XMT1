@@ -412,21 +412,39 @@
     .btn-action {
       background: transparent;
       border: none;
-      font-size: 16px;
       cursor: pointer;
-      padding: 4px 8px;
+      padding: 6px;
       border-radius: var(--r-sm);
-      transition: background .15s;
+      transition: background .15s, color .15s;
       color: var(--text-sub);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-action svg {
+      width: 16px; height: 16px;
+      display: block;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: none;
     }
     .btn-action:hover {
       background: rgba(255, 209, 0, .12);
       color: var(--accent);
     }
+    .btn-view:hover {
+      background: rgba(90, 149, 255, .14);
+      color: var(--c-blue);
+    }
     .btn-delete:hover {
       background: rgba(255, 92, 108, .12);
       color: var(--c-red);
     }
+
+    /* Botón de actualizar girando mientras carga */
+    .btn-icon.spinning svg { animation: spin .7s linear infinite; }
 
     /* ── EMPTY STATE ── */
     .empty-state {
@@ -637,10 +655,10 @@
 <div class="modal" id="photo-modal">
   <div class="modal-content">
     <div class="modal-header">
-      <h3>Foto</h3>
+      <h3>Fotos del registro</h3>
       <button class="modal-close" id="photo-modal-close">&times;</button>
     </div>
-    <img id="photo-modal-img" style="width: 100%; border-radius: 8px;" />
+    <div id="photo-modal-body" style="display: flex; flex-direction: column; gap: 12px;"></div>
   </div>
 </div>
 
@@ -702,6 +720,34 @@
         console.warn(`downloadDocumentAsObjectUrl ${docId}:`, e);
         return null;
       }
+    }
+
+    /**
+     * Sube un archivo a Grid como documento PÚBLICO y devuelve su doc ID.
+     * Las fotos no caben inline en un State Bucket (~1 MB total), así que
+     * cada foto se guarda como documento aparte y en el registro solo
+     * queda el doc ID (referencia liviana). Público = visible para
+     * cualquier usuario autorizado del dashboard sin depender de ACLs.
+     * (POST /api/v1/documents con FormData, Biblia Grid — visibility.)
+     */
+    async uploadPublicDocument(blob, filename) {
+      const fd = new FormData();
+      fd.append('file', blob, filename);
+      fd.append('title', filename);
+      fd.append('description', 'Foto de auditoría (consolidado)');
+      fd.append('visibility', 'public');
+
+      const res = await fetch(`${this.baseUrl}/api/v1/documents`, {
+        method: 'POST',
+        credentials: 'include',
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || err.message || `HTTP ${res.status}`);
+      }
+      const body = await res.json();
+      return body.id || body.doc_id || (body.document && body.document.id) || null;
     }
 
     async getStateBucket(name) {
@@ -790,6 +836,14 @@
       return new TextDecoder().decode(plainBuffer);
     }
   }
+
+  // Íconos SVG (estilo Lucide) para las acciones de la tabla. El path
+  // hereda stroke/fill vía CSS (.btn-action svg), así que solo el path.
+  const SVG_ICONS = {
+    edit: '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+    image: '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+  };
 
   // Admins autorizados para ver/rotar el passphrase compartido y para
   // editar/borrar registros consolidados.
@@ -894,7 +948,7 @@
         e.target.value = '';
       });
 
-      document.getElementById('btn-refresh').addEventListener('click', () => this.loadAllLogs());
+      document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
       document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
       document.getElementById('btn-admin-passphrase').addEventListener('click', () => this.openPassphraseAdminPanel());
       document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
@@ -931,6 +985,28 @@
         }
       }
       this.render();
+    }
+
+    /**
+     * Recarga manual desde el botón "Actualizar", con feedback visual: el
+     * ícono gira mientras carga y al terminar se muestra un aviso con el
+     * total de registros (antes la recarga no daba ninguna señal visible).
+     */
+    async refreshLogs() {
+      const btn = document.getElementById('btn-refresh');
+      if (btn.classList.contains('spinning')) return; // evitar recargas dobles
+      btn.classList.add('spinning');
+      btn.disabled = true;
+      try {
+        await this.loadAllLogs();
+        const total = Object.values(this.logs).reduce((sum, r) => sum + r.length, 0);
+        this.showNotification(`✅ Actualizado · ${total} registro${total === 1 ? '' : 's'}`, 'success');
+      } catch (e) {
+        this.showNotification('❌ No se pudo actualizar', 'error');
+      } finally {
+        btn.classList.remove('spinning');
+        btn.disabled = false;
+      }
     }
 
     async handleFile(file) {
@@ -1036,7 +1112,9 @@
             return record;
           });
 
-          // Process photos
+          // Procesar fotos: se suben a Grid como documentos públicos y en el
+          // registro solo queda el doc ID (los State Buckets tienen ~1 MB, no
+          // caben fotos inline). Se muestra progreso porque puede tardar.
           const fotoFolder = content.folder(`${folderName}/fotos`);
           if (fotoFolder) {
             const photos = {};
@@ -1047,17 +1125,33 @@
               }
             });
 
+            const photoFields = FORMS_CONFIG[logType].fields.filter(f => f.type === 'photo');
+
+            // Contar cuántas fotos hay que subir para el progreso.
+            const tasks = [];
             for (const record of records) {
-              for (const field of FORMS_CONFIG[logType].fields) {
-                if (field.type === 'photo' && record[field.id]) {
-                  const filename = record[field.id];
-                  if (photos[filename]) {
-                    const dataUrl = await photos[filename].async('data:image/jpeg;base64,');
-                    record[field.id] = dataUrl;
-                  }
+              for (const field of photoFields) {
+                const filename = record[field.id];
+                if (filename && photos[filename]) {
+                  tasks.push({ record, field, filename });
                 }
               }
             }
+
+            let done = 0;
+            this.showUploadProgress(0, tasks.length);
+            for (const { record, field, filename } of tasks) {
+              try {
+                const blob = await photos[filename].async('blob');
+                const docId = await this.gridClient.uploadPublicDocument(blob, filename);
+                record[field.id] = docId || '';
+              } catch (e) {
+                console.warn(`No se pudo subir la foto ${filename}:`, e);
+                record[field.id] = '';
+              }
+              this.showUploadProgress(++done, tasks.length);
+            }
+            this.hideUploadProgress();
           }
 
           await this.addRecords(logType, records);
@@ -1438,12 +1532,10 @@
           if (col.field === 'resultado') {
             td.className = value === 'Sin incidencia' ? 'status-good' : 'status-critical';
             td.textContent = value;
-          } else if (isPhotoField(col.field) && value.startsWith('data:')) {
-            const img = document.createElement('img');
-            img.src = value;
-            img.className = 'photo-thumbnail';
-            img.addEventListener('click', () => this.showPhoto(value));
-            td.appendChild(img);
+          } else if (isPhotoField(col.field)) {
+            // La foto se ve con la acción "Ver fotos"; aquí solo un indicador.
+            td.textContent = value ? '📎 1' : '—';
+            td.style.color = 'var(--text-mut)';
           } else {
             td.textContent = value;
           }
@@ -1451,22 +1543,32 @@
           tr.appendChild(td);
         });
 
-        // Columna de acciones
+        // Columna de acciones (íconos SVG estilo Lucide)
         const tdActions = document.createElement('td');
         tdActions.style.display = 'flex';
-        tdActions.style.gap = '6px';
+        tdActions.style.gap = '4px';
 
-        const btnDelete = document.createElement('button');
-        btnDelete.className = 'btn-action btn-delete';
-        btnDelete.title = 'Borrar registro';
-        btnDelete.innerHTML = '🗑';
-        btnDelete.addEventListener('click', () => this.deleteRecord(this.currentLog, index));
+        // Ver fotos — solo si el registro tiene alguna foto ligada
+        if (this.recordHasPhotos(this.currentLog, record)) {
+          const btnView = document.createElement('button');
+          btnView.className = 'btn-action btn-view';
+          btnView.title = 'Ver fotos';
+          btnView.innerHTML = SVG_ICONS.image;
+          btnView.addEventListener('click', () => this.viewRecordPhotos(this.currentLog, record));
+          tdActions.appendChild(btnView);
+        }
 
         const btnEdit = document.createElement('button');
         btnEdit.className = 'btn-action btn-edit';
         btnEdit.title = 'Editar registro';
-        btnEdit.innerHTML = '✏️';
+        btnEdit.innerHTML = SVG_ICONS.edit;
         btnEdit.addEventListener('click', () => this.editRecord(this.currentLog, index, record));
+
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-action btn-delete';
+        btnDelete.title = 'Borrar registro';
+        btnDelete.innerHTML = SVG_ICONS.trash;
+        btnDelete.addEventListener('click', () => this.deleteRecord(this.currentLog, index));
 
         tdActions.appendChild(btnEdit);
         tdActions.appendChild(btnDelete);
@@ -1663,11 +1765,73 @@
       });
     }
 
-    showPhoto(dataUrl) {
+    /** ¿El registro tiene al menos una foto (doc ID o data URL legacy)? */
+    recordHasPhotos(logType, record) {
+      const config = FORMS_CONFIG[logType];
+      return (config.fields || []).some(f => f.type === 'photo' && record[f.id]);
+    }
+
+    /**
+     * Abre el modal con las fotos del registro. Cada campo de foto guarda
+     * un doc ID de Grid (nuevo formato) o un data URL inline (registros
+     * viejos); ambos se resuelven a una imagen visible.
+     */
+    async viewRecordPhotos(logType, record) {
+      const config = FORMS_CONFIG[logType];
+      const photoFields = (config.fields || []).filter(f => f.type === 'photo' && record[f.id]);
+
       const modal = document.getElementById('photo-modal');
-      const img = document.getElementById('photo-modal-img');
-      img.src = dataUrl;
+      const body = document.getElementById('photo-modal-body');
+      body.innerHTML = '<div class="empty-state" style="padding:24px;">Cargando fotos…</div>';
       modal.classList.add('active');
+
+      const items = [];
+      for (const field of photoFields) {
+        const value = record[field.id];
+        let src = null;
+        if (typeof value === 'string' && value.startsWith('data:')) {
+          src = value; // registro viejo con foto inline
+        } else if (value) {
+          src = await this.gridClient.downloadDocumentAsObjectUrl(value); // doc ID → blob
+        }
+        items.push({ label: field.label || field.id, src });
+      }
+
+      body.innerHTML = '';
+      items.forEach(({ label, src }) => {
+        if (src) {
+          const img = document.createElement('img');
+          img.src = src;
+          img.style.cssText = 'width:100%;border-radius:8px;';
+          body.appendChild(img);
+        } else {
+          const err = document.createElement('div');
+          err.className = 'empty-state';
+          err.style.padding = '16px';
+          err.textContent = 'No se pudo cargar la foto.';
+          body.appendChild(err);
+        }
+      });
+
+      if (!items.length) {
+        body.innerHTML = '<div class="empty-state" style="padding:24px;">Este registro no tiene fotos.</div>';
+      }
+    }
+
+    showUploadProgress(current, total) {
+      const wrap = document.getElementById('upload-progress');
+      const fill = document.getElementById('progress-bar-fill');
+      const text = document.getElementById('progress-text');
+      wrap.classList.add('active');
+      const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+      fill.style.width = `${pct}%`;
+      text.textContent = `Subiendo fotos: ${current}/${total}`;
+    }
+
+    hideUploadProgress() {
+      setTimeout(() => {
+        document.getElementById('upload-progress').classList.remove('active');
+      }, 600);
     }
 
     async downloadAll() {
