@@ -10,6 +10,7 @@ class FormApp {
     this.lastDestino = null; // destino de la última captura (se mantiene fijo entre capturas)
     this.recordsByForm = {}; // registros acumulados en la sesión, por formId (persisten hasta descargar/limpiar)
     this.catalogCache = {}; // catálogos ya descargados, por catalogUrl
+    this.userEmail = null; // email del usuario actual, para encriptación
 
     // Guard de historial: intercepta el botón/gesto "atrás" del sistema
     // (Android) para navegar dentro de la app en vez de salir del navegador.
@@ -21,8 +22,21 @@ class FormApp {
     this.init();
   }
 
-  init() {
+  async init() {
+    await this.loadUserEmail();
     this.showMenu();
+  }
+
+  async loadUserEmail() {
+    try {
+      const res = await fetch('/api/v1/me', { credentials: 'include' });
+      if (res.ok) {
+        const user = await res.json();
+        this.userEmail = user.email || user.login || user.username || null;
+      }
+    } catch (e) {
+      console.warn('No se pudo obtener email del usuario:', e);
+    }
   }
 
   /**
@@ -200,10 +214,30 @@ class FormApp {
     }));
 
     const result = await ExportEngine.exportAllZip(entries);
-    if (result.success) {
-      this.showAlert('ZIP descargado exitosamente', 'success');
-    } else {
+    if (!result.success) {
       this.showAlert(`Error: ${result.error}`, 'error');
+      return;
+    }
+
+    // Encriptar ZIP si tenemos email del usuario
+    if (this.userEmail && result.blob) {
+      try {
+        this.showAlert('Encriptando datos...', 'info');
+        const encryptedBlob = await CryptoEngine_instance.createEncryptedBlob(result.blob, this.userEmail);
+        const url = URL.createObjectURL(encryptedBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `auditorias_encriptadas_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.showAlert('ZIP encriptado y descargado exitosamente', 'success');
+      } catch (e) {
+        console.error('Error al encriptar:', e);
+        this.showAlert(`Error al encriptar: ${e.message}`, 'error');
+      }
+    } else {
+      // Descargar sin encriptar si no hay email
+      this.showAlert('ZIP descargado (sin encriptación)', 'success');
     }
   }
 

@@ -137,9 +137,7 @@ class ExportEngine {
         this.addLogToZip(zip, records, formConfig, folder);
       });
       const blob = await this.generateBlob(zip);
-      const date = new Date().toISOString().split('T')[0];
-      this.downloadBlob(blob, `logs_${date}.zip`);
-      return { success: true };
+      return { success: true, blob };
     } catch (error) {
       return { success: false, error: error.message };
     }
