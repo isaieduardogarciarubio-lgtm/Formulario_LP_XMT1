@@ -43,7 +43,7 @@ class CryptoEngine {
    * { v, salt, iv, data, ts }. El salt y el iv son aleatorios por archivo
    * y no son secretos — solo el passphrase lo es.
    */
-  static async encryptText(text, passphrase) {
+  static async encryptText(text, passphrase, kind = 'csv') {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const key = await this.deriveKey(passphrase, salt);
@@ -52,6 +52,7 @@ class CryptoEngine {
 
     return JSON.stringify({
       v: 1,
+      kind, // 'csv' (texto plano) o 'zip' (base64 de un blob binario)
       salt: this.toBase64(salt),
       iv: this.toBase64(iv),
       data: this.toBase64(new Uint8Array(ciphertext)),
@@ -84,7 +85,7 @@ class CryptoEngine {
   static async encryptBlob(blob, passphrase) {
     const buffer = await blob.arrayBuffer();
     const base64Content = this.toBase64(new Uint8Array(buffer));
-    return this.encryptText(base64Content, passphrase);
+    return this.encryptText(base64Content, passphrase, 'zip');
   }
 
   static getSessionPassphrase() {

@@ -1009,19 +1009,37 @@
     }
 
     async handleFile(file) {
-      if (file.name.endsWith('.zip')) {
-        await this.handleZipFile(file);
-      } else if (file.name.endsWith('.csv')) {
+      if (file.name.endsWith('.csv')) {
         await this.handleCsvFile(file);
-      } else {
-        this.showAlert('uploadAlert', 'error', 'Formato no soportado. Usa CSV o ZIP.');
+        return;
       }
+
+      if (file.name.endsWith('.zip')) {
+        // Grid no acepta subir .json, así que un ZIP con fotos encriptado
+        // también se disfraza con extensión .zip. Un ZIP real empieza con
+        // la firma binaria "PK"; nuestro sobre encriptado es JSON puro que
+        // empieza con {"v". Con leer unos pocos bytes basta para decidir
+        // sin descargar el archivo completo como texto (puede pesar MBs).
+        const head = await file.slice(0, 10).text();
+        if (head.trim().startsWith('{"v"')) {
+          const text = await file.text();
+          if (this.looksEncrypted(text)) {
+            await this.handleEncryptedFile(text, file.name);
+            return;
+          }
+        }
+        await this.handleZipFile(file);
+        return;
+      }
+
+      this.showAlert('uploadAlert', 'error', 'Formato no soportado. Usa CSV o ZIP.');
     }
 
     /**
-     * Grid no permite subir archivos .json, así que los CSV encriptados
-     * conservan la extensión .csv — hay que detectar la encriptación
-     * leyendo el contenido (JSON con { v, salt, iv, data }), no el nombre.
+     * Grid no permite subir archivos .json, así que los archivos
+     * encriptados conservan su extensión original (.csv o .zip) — hay que
+     * detectar la encriptación leyendo el contenido (JSON con
+     * { v, kind, salt, iv, data }), no el nombre ni la extensión.
      */
     looksEncrypted(text) {
       try {
@@ -1038,13 +1056,20 @@
       const auditoriaId = file.name.replace(/\.csv$/i, '');
 
       if (this.looksEncrypted(text)) {
-        await this.handleEncryptedFile(text, auditoriaId);
+        await this.handleEncryptedFile(text, file.name);
       } else {
         await this.processCsvText(text, auditoriaId);
       }
     }
 
-    async handleEncryptedFile(jsonText, auditoriaId) {
+    /**
+     * Desencripta y despacha según el tipo de contenido original (kind):
+     * 'csv' → texto plano listo para processCsvText(); 'zip' → base64 de
+     * un blob binario que hay que reconstruir y pasar a handleZipFile().
+     * Los archivos encriptados antes de agregar `kind` no lo traen — se
+     * asumen 'csv' (único tipo que existía en ese momento).
+     */
+    async handleEncryptedFile(jsonText, filename) {
       try {
         this.showAlert('uploadAlert', 'info', 'Desencriptando archivo...');
 
@@ -1054,8 +1079,18 @@
           return;
         }
 
-        const csvText = await CryptoEngine.decryptText(jsonText, passphraseConfig.passphrase);
-        await this.processCsvText(csvText, auditoriaId);
+        const payload = JSON.parse(jsonText);
+        const kind = payload.kind || 'csv';
+        const auditoriaId = filename.replace(/\.(csv|zip)$/i, '');
+        const decrypted = await CryptoEngine.decryptText(jsonText, passphraseConfig.passphrase);
+
+        if (kind === 'zip') {
+          const bytes = CryptoEngine.fromBase64(decrypted);
+          const blob = new Blob([bytes], { type: 'application/zip' });
+          await this.handleZipFile(blob, auditoriaId);
+        } else {
+          await this.processCsvText(decrypted, auditoriaId);
+        }
       } catch (error) {
         console.error('Error al desencriptar:', error);
         this.showAlert('uploadAlert', 'error', 'No se pudo desencriptar: contraseña incorrecta o archivo dañado');
@@ -1085,7 +1120,16 @@
       await this.addRecords(logType, records);
     }
 
-    async handleZipFile(file) {
+    /**
+     * Detecta cada CSV dentro del ZIP por sus headers (igual que un CSV
+     * suelto), en vez de asumir nombres/carpetas fijos como "data.csv" o
+     * "{tipo}_{fecha}/" — el ExportEngine real genera nombres reales
+     * (ej. "fury_2026-07-21.csv"), a veces en la raíz del ZIP (exportación
+     * de un solo log) y a veces dentro de una carpeta con el título
+     * saneado (exportación de todos los logs), así que no hay un patrón
+     * fijo de nombre en el que apoyarse.
+     */
+    async handleZipFile(file, auditoriaIdOverride) {
       if (!window.JSZip) {
         this.showAlert('uploadAlert', 'error', 'JSZip no cargado');
         return;
@@ -1094,67 +1138,76 @@
       const zip = new JSZip();
       const content = await zip.loadAsync(file);
 
-      for (const [path, file] of Object.entries(content.files)) {
-        if (path.endsWith('data.csv')) {
-          const folderName = path.split('/')[0];
-          const logType = folderName.split('_').slice(0, -1).join('_');
+      const csvEntries = Object.entries(content.files)
+        .filter(([path, entry]) => !entry.dir && path.toLowerCase().endsWith('.csv'));
 
-          if (!this.logs.hasOwnProperty(logType)) continue;
+      for (const [path, csvFile] of csvEntries) {
+        const csvText = await csvFile.async('string');
+        const { headers, records: rawRecords } = parseCSV(csvText);
+        if (rawRecords.length === 0) continue;
 
-          const csvText = await file.async('string');
-          const { headers, records: rawRecords } = parseCSV(csvText);
-          if (rawRecords.length === 0) continue;
+        const logType = detectLogTypeFromHeaders(headers);
+        if (!logType || !this.logs.hasOwnProperty(logType)) continue;
 
-          const records = rawRecords.map(raw => {
-            const record = mapRowToRecord(raw, logType);
-            record.auditoria = folderName;
-            return record;
+        // Carpeta que contiene este CSV ('' si está en la raíz del ZIP).
+        const dirPath = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+        const auditoriaId = auditoriaIdOverride || dirPath || path.replace(/\.csv$/i, '');
+
+        const records = rawRecords.map(raw => {
+          const record = mapRowToRecord(raw, logType);
+          record.auditoria = auditoriaId;
+          return record;
+        });
+
+        // Procesar fotos: viven en una carpeta fotos/ junto al CSV (dentro
+        // de la misma carpeta, o en la raíz si el CSV también está ahí).
+        // Se suben a Grid como documentos públicos y en el registro solo
+        // queda el doc ID (los State Buckets tienen ~1 MB, no caben fotos
+        // inline). Se muestra progreso porque puede tardar.
+        const fotoFolderPath = dirPath ? `${dirPath}/fotos` : 'fotos';
+        const fotoFolder = content.folder(fotoFolderPath);
+        if (fotoFolder) {
+          const photos = {};
+          fotoFolder.forEach((relativePath, photoFile) => {
+            if (!photoFile.dir) {
+              const filename = relativePath.split('/').pop();
+              photos[filename] = photoFile;
+            }
           });
 
-          // Procesar fotos: se suben a Grid como documentos públicos y en el
-          // registro solo queda el doc ID (los State Buckets tienen ~1 MB, no
-          // caben fotos inline). Se muestra progreso porque puede tardar.
-          const fotoFolder = content.folder(`${folderName}/fotos`);
-          if (fotoFolder) {
-            const photos = {};
-            fotoFolder.forEach((relativePath, file) => {
-              if (!file.dir) {
-                const filename = relativePath.split('/').pop();
-                photos[filename] = file;
-              }
-            });
+          const photoFields = FORMS_CONFIG[logType].fields.filter(f => f.type === 'photo');
 
-            const photoFields = FORMS_CONFIG[logType].fields.filter(f => f.type === 'photo');
-
-            // Contar cuántas fotos hay que subir para el progreso.
-            const tasks = [];
-            for (const record of records) {
-              for (const field of photoFields) {
-                const filename = record[field.id];
-                if (filename && photos[filename]) {
-                  tasks.push({ record, field, filename });
-                }
+          // Contar cuántas fotos hay que subir para el progreso. El CSV
+          // guarda la ruta relativa completa (ej. "fotos/001_S123.jpg"),
+          // pero photos está indexado solo por el nombre base del archivo.
+          const tasks = [];
+          for (const record of records) {
+            for (const field of photoFields) {
+              const rawValue = record[field.id];
+              const filename = rawValue ? rawValue.split('/').pop() : null;
+              if (filename && photos[filename]) {
+                tasks.push({ record, field, filename });
               }
             }
-
-            let done = 0;
-            this.showUploadProgress(0, tasks.length);
-            for (const { record, field, filename } of tasks) {
-              try {
-                const blob = await photos[filename].async('blob');
-                const docId = await this.gridClient.uploadPublicDocument(blob, filename);
-                record[field.id] = docId || '';
-              } catch (e) {
-                console.warn(`No se pudo subir la foto ${filename}:`, e);
-                record[field.id] = '';
-              }
-              this.showUploadProgress(++done, tasks.length);
-            }
-            this.hideUploadProgress();
           }
 
-          await this.addRecords(logType, records);
+          let done = 0;
+          this.showUploadProgress(0, tasks.length);
+          for (const { record, field, filename } of tasks) {
+            try {
+              const blob = await photos[filename].async('blob');
+              const docId = await this.gridClient.uploadPublicDocument(blob, filename);
+              record[field.id] = docId || '';
+            } catch (e) {
+              console.warn(`No se pudo subir la foto ${filename}:`, e);
+              record[field.id] = '';
+            }
+            this.showUploadProgress(++done, tasks.length);
+          }
+          this.hideUploadProgress();
         }
+
+        await this.addRecords(logType, records);
       }
     }
 
