@@ -408,6 +408,26 @@
       font-weight: 600;
     }
 
+    /* ── ACCIONES EN TABLA ── */
+    .btn-action {
+      background: transparent;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: var(--r-sm);
+      transition: background .15s;
+      color: var(--text-sub);
+    }
+    .btn-action:hover {
+      background: rgba(255, 209, 0, .12);
+      color: var(--accent);
+    }
+    .btn-delete:hover {
+      background: rgba(255, 92, 108, .12);
+      color: var(--c-red);
+    }
+
     /* ── EMPTY STATE ── */
     .empty-state {
       text-align: center;
@@ -1122,7 +1142,7 @@
         labels: Object.keys(counts),
         values: Object.values(counts),
         type: 'pie',
-        marker: { colors: ['#00D689', '#FF5C6C'] },
+        marker: { colors: ['#FFD100', '#E6BC00'] },
       }];
 
       const layout = {
@@ -1145,7 +1165,7 @@
         x: Object.keys(counts),
         y: Object.values(counts),
         type: 'bar',
-        marker: { color: '#5A95FF' },
+        marker: { color: '#FFD100' },
       }];
 
       const layout = {
@@ -1170,7 +1190,7 @@
         x: sorted.map(([k]) => k),
         y: sorted.map(([, v]) => v),
         type: 'bar',
-        marker: { color: '#00D689' },
+        marker: { color: '#FFD100' },
       }];
 
       const layout = {
@@ -1193,7 +1213,7 @@
         labels: Object.keys(counts),
         values: Object.values(counts),
         type: 'pie',
-        marker: { colors: ['#5A95FF', '#00D689', '#FF9E45'] },
+        marker: { colors: ['#FFD100', '#E6BC00', '#FFF000'] },
       }];
 
       const layout = {
@@ -1224,10 +1244,16 @@
         th.textContent = col.header;
         tr.appendChild(th);
       });
+      const thActions = document.createElement('th');
+      thActions.textContent = 'Acciones';
+      thActions.style.width = '120px';
+      tr.appendChild(thActions);
       thead.appendChild(tr);
 
-      records.forEach(record => {
+      records.forEach((record, index) => {
         const tr = document.createElement('tr');
+        tr.setAttribute('data-index', index);
+
         config.csvColumns.forEach(col => {
           const td = document.createElement('td');
           const value = record[col.field] || '';
@@ -1247,7 +1273,129 @@
 
           tr.appendChild(td);
         });
+
+        // Columna de acciones
+        const tdActions = document.createElement('td');
+        tdActions.style.display = 'flex';
+        tdActions.style.gap = '6px';
+
+        const btnDelete = document.createElement('button');
+        btnDelete.className = 'btn-action btn-delete';
+        btnDelete.title = 'Borrar registro';
+        btnDelete.innerHTML = '🗑';
+        btnDelete.addEventListener('click', () => this.deleteRecord(this.currentLog, index));
+
+        const btnEdit = document.createElement('button');
+        btnEdit.className = 'btn-action btn-edit';
+        btnEdit.title = 'Editar registro';
+        btnEdit.innerHTML = '✏️';
+        btnEdit.addEventListener('click', () => this.editRecord(this.currentLog, index, record));
+
+        tdActions.appendChild(btnEdit);
+        tdActions.appendChild(btnDelete);
+        tr.appendChild(tdActions);
+
         tbody.appendChild(tr);
+      });
+    }
+
+    async deleteRecord(logType, index) {
+      if (!confirm('¿Estás seguro de que quieres borrar este registro? Se eliminará tanto de la tabla como del consolidado.')) {
+        return;
+      }
+
+      const records = this.logs[logType];
+      if (index < 0 || index >= records.length) {
+        alert('Registro no encontrado');
+        return;
+      }
+
+      // Borrar del array local
+      records.splice(index, 1);
+
+      // Actualizar el bucket en Grid
+      try {
+        await this.gridClient.setStateBucket(`${logType}_master`, { version: 1, records });
+        this.showNotification('✅ Registro borrado exitosamente', 'success');
+      } catch (error) {
+        this.logs[logType].splice(index, 0, records[index]); // Restaurar si falla
+        this.showNotification('❌ Error al borrar: ' + error.message, 'error');
+        return;
+      }
+
+      // Recargar tabla y gráficas
+      this.render();
+    }
+
+    async editRecord(logType, index, record) {
+      const config = FORMS_CONFIG[logType];
+      const fields = config.csvColumns;
+
+      // Crear un modal simple para editar
+      const html = `
+        <div id="edit-modal-bg" style="
+          position: fixed; inset: 0; background: rgba(0,0,0,.75);
+          display: flex; align-items: center; justify-content: center; z-index: 100;
+          padding: 16px; backdrop-filter: blur(4px);
+        ">
+          <div style="
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-lg); padding: 24px; max-width: 500px;
+            width: 100%; max-height: 80vh; overflow-y: auto;
+            box-shadow: 0 18px 40px -20px rgba(0,0,0,.7);
+          ">
+            <h3 style="margin: 0 0 16px; font-size: 18px; font-weight: 700;">Editar Registro</h3>
+            <div id="edit-form" style="display: flex; flex-direction: column; gap: 12px;"></div>
+            <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end;">
+              <button class="btn btn-secondary" onclick="document.getElementById('edit-modal-bg').remove()">Cancelar</button>
+              <button class="btn btn-primary" id="btn-save-edit">Guardar</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', html);
+
+      // Llenar el formulario con los valores actuales
+      const form = document.getElementById('edit-form');
+      const inputs = {};
+
+      fields.forEach(field => {
+        const value = record[field.field] || '';
+        const input = document.createElement('input');
+        input.type = field.field === 'foto' ? 'hidden' : 'text';
+        input.placeholder = field.header;
+        input.value = value;
+        input.style.cssText = `
+          width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+          background: var(--surface-2); color: var(--text); border-radius: var(--r-sm);
+          font-family: inherit; font-size: 13px;
+        `;
+        form.appendChild(input);
+        inputs[field.field] = input;
+      });
+
+      // Botón guardar
+      document.getElementById('btn-save-edit').addEventListener('click', async () => {
+        const updated = { ...record };
+        fields.forEach(field => {
+          if (field.field !== 'foto') { // No editar fotos por ahora
+            updated[field.field] = inputs[field.field].value;
+          }
+        });
+
+        try {
+          this.logs[logType][index] = updated;
+          await this.gridClient.setStateBucket(`${logType}_master`, {
+            version: 1,
+            records: this.logs[logType]
+          });
+          document.getElementById('edit-modal-bg').remove();
+          this.showNotification('✅ Registro actualizado', 'success');
+          this.render();
+        } catch (error) {
+          this.showNotification('❌ Error: ' + error.message, 'error');
+        }
       });
     }
 
@@ -1268,12 +1416,52 @@
     }
 
     async downloadAll() {
-      const json = { logs: this.logs };
-      const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+      // Consolidar todos los registros con su tipo
+      const allRecords = [];
+
+      for (const [logType, records] of Object.entries(this.logs)) {
+        records.forEach(rec => {
+          allRecords.push({
+            'Tipo de Log': FORMS_CONFIG[logType].title,
+            ...rec
+          });
+        });
+      }
+
+      if (allRecords.length === 0) {
+        alert('No hay registros para descargar');
+        return;
+      }
+
+      // Obtener todos los campos únicos
+      const allFields = new Set();
+      allRecords.forEach(rec => Object.keys(rec).forEach(k => allFields.add(k)));
+
+      // Crear encabezados en orden: Tipo de Log, luego los demás
+      const headers = ['Tipo de Log', ...Array.from(allFields).filter(f => f !== 'Tipo de Log')];
+
+      // Generar CSV manualmente (similar a CSVEngine pero con más flexibilidad)
+      const escapeCsv = (val) => {
+        if (val === null || val === undefined) return '';
+        const str = String(val);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      };
+
+      const csvLines = [headers.map(escapeCsv).join(',')];
+      allRecords.forEach(rec => {
+        const row = headers.map(h => escapeCsv(rec[h] || '')).join(',');
+        csvLines.push(row);
+      });
+
+      const csv = '﻿' + csvLines.join('\n'); // BOM UTF-8
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `consolidado_${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `consolidado_${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     }
