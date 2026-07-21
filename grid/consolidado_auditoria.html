@@ -936,17 +936,39 @@
       if (file.name.endsWith('.zip')) {
         await this.handleZipFile(file);
       } else if (file.name.endsWith('.csv')) {
-        const auditoriaId = file.name.replace(/\.csv$/i, '');
-        const text = await file.text();
-        await this.processCsvText(text, auditoriaId);
-      } else if (file.name.endsWith('.json')) {
-        await this.handleEncryptedFile(file);
+        await this.handleCsvFile(file);
       } else {
-        this.showAlert('uploadAlert', 'error', 'Formato no soportado. Usa CSV, ZIP o JSON encriptado.');
+        this.showAlert('uploadAlert', 'error', 'Formato no soportado. Usa CSV o ZIP.');
       }
     }
 
-    async handleEncryptedFile(file) {
+    /**
+     * Grid no permite subir archivos .json, así que los CSV encriptados
+     * conservan la extensión .csv — hay que detectar la encriptación
+     * leyendo el contenido (JSON con { v, salt, iv, data }), no el nombre.
+     */
+    looksEncrypted(text) {
+      try {
+        const payload = JSON.parse(text.trim());
+        return !!(payload && payload.v === 1 && typeof payload.salt === 'string' &&
+          typeof payload.iv === 'string' && typeof payload.data === 'string');
+      } catch {
+        return false;
+      }
+    }
+
+    async handleCsvFile(file) {
+      const text = await file.text();
+      const auditoriaId = file.name.replace(/\.csv$/i, '');
+
+      if (this.looksEncrypted(text)) {
+        await this.handleEncryptedFile(text, auditoriaId);
+      } else {
+        await this.processCsvText(text, auditoriaId);
+      }
+    }
+
+    async handleEncryptedFile(jsonText, auditoriaId) {
       try {
         this.showAlert('uploadAlert', 'info', 'Desencriptando archivo...');
 
@@ -956,9 +978,7 @@
           return;
         }
 
-        const jsonText = await file.text();
         const csvText = await CryptoEngine.decryptText(jsonText, passphraseConfig.passphrase);
-        const auditoriaId = file.name.replace(/\.encrypted\.json$/i, '').replace(/\.json$/i, '');
         await this.processCsvText(csvText, auditoriaId);
       } catch (error) {
         console.error('Error al desencriptar:', error);

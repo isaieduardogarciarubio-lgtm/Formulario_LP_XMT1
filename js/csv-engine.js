@@ -176,15 +176,17 @@ class CSVEngine {
   }
 
   /**
-   * Descarga un archivo JSON (contenido ya encriptado) al navegador
+   * Descarga el contenido encriptado (JSON por dentro) con extensión .csv
+   * — Grid no acepta subir archivos .json, así que el archivo debe seguir
+   * pareciendo un CSV normal aunque el contenido esté encriptado.
    */
-  static downloadEncryptedJSON(jsonContent, filename) {
-    const blob = new Blob([jsonContent], { type: 'application/json' });
+  static downloadEncryptedCSV(jsonContent, filename) {
+    const blob = new Blob([jsonContent], { type: 'text/csv;charset=utf-8' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
 
     link.setAttribute('href', url);
-    link.setAttribute('download', `${filename}.encrypted.json`);
+    link.setAttribute('download', `${filename}.csv`);
     link.style.visibility = 'hidden';
 
     document.body.appendChild(link);
@@ -197,8 +199,9 @@ class CSVEngine {
   /**
    * Exporta registros a CSV, lo encripta con el passphrase de sesión
    * (pide la contraseña una sola vez por pestaña) y descarga el resultado
-   * como JSON encriptado. El dashboard de consolidado lo detecta y
-   * desencripta automáticamente al cargarlo.
+   * con extensión .csv (contenido interno: JSON encriptado). El dashboard
+   * de consolidado detecta que está encriptado leyendo el contenido, no
+   * la extensión, y lo desencripta automáticamente al cargarlo.
    */
   static async exportAndDownloadEncrypted(records, formConfig) {
     try {
@@ -206,7 +209,7 @@ class CSVEngine {
       const passphrase = await CryptoGate.ensurePassphrase();
       const encrypted = await CryptoEngine.encryptText(csvContent, passphrase);
       const filename = this.generateFilename(formConfig.id, formConfig.title);
-      this.downloadEncryptedJSON(encrypted, filename);
+      this.downloadEncryptedCSV(encrypted, filename);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
