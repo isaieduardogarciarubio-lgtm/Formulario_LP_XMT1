@@ -830,6 +830,7 @@
         fury: [],
         contenerizado: [],
         linehaul: [],
+        inbound_fm: [],
       };
       this.currentLog = 'destino_doca';
       this.activeMainTab = 'upload';
@@ -1188,6 +1189,13 @@
           const count = records.filter(r => r.area === a).length;
           this.addKpiCard(container, count.toString(), a);
         });
+      } else if (this.currentLog === 'inbound_fm') {
+        const hallazgos = new Set(records.map(r => r.hallazgo));
+        this.addKpiCard(container, total.toString(), 'Total');
+        hallazgos.forEach(h => {
+          const count = records.filter(r => r.hallazgo === h).length;
+          this.addKpiCard(container, count.toString(), h);
+        });
       }
     }
 
@@ -1252,6 +1260,8 @@
           builders = [() => this.buildSituacionChart(records)];
         } else if (this.currentLog === 'linehaul') {
           builders = [() => this.buildAreaChart(records)];
+        } else if (this.currentLog === 'inbound_fm') {
+          builders = [() => this.buildHallazgoChart(records)];
         }
 
         // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
@@ -1283,7 +1293,7 @@
         labels: Object.keys(counts),
         values: Object.values(counts),
         type: 'pie',
-        marker: { colors: ['#FFD100', '#E6BC00'] },
+        marker: { colors: ['#FFD100', '#4A4A4A'] },
       }];
 
       const layout = {
@@ -1354,7 +1364,7 @@
         labels: Object.keys(counts),
         values: Object.values(counts),
         type: 'pie',
-        marker: { colors: ['#FFD100', '#E6BC00', '#FFF000'] },
+        marker: { colors: ['#FFD100', '#8A7300', '#4A4A4A'] },
       }];
 
       const layout = {
@@ -1370,6 +1380,29 @@
       return { data, layout };
     }
 
+    buildHallazgoChart(records) {
+      const counts = this.countByField(records, 'hallazgo');
+
+      const data = [{
+        x: Object.keys(counts),
+        y: Object.values(counts),
+        type: 'bar',
+        marker: { color: '#FFD100' },
+      }];
+
+      const layout = {
+        title: 'Distribución de Hallazgos',
+        xaxis: { title: 'Hallazgo' },
+        yaxis: { title: 'Cantidad' },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 40 },
+      };
+
+      return { data, layout };
+    }
+
     renderTable(records) {
       const thead = document.getElementById('table-head');
       const tbody = document.getElementById('table-body');
@@ -1378,6 +1411,9 @@
 
       const config = FORMS_CONFIG[this.currentLog];
       if (!config) return;
+
+      const isPhotoField = (fieldName) =>
+        (config.fields || []).some(f => f.type === 'photo' && f.id === fieldName);
 
       const tr = document.createElement('tr');
       config.csvColumns.forEach(col => {
@@ -1402,7 +1438,7 @@
           if (col.field === 'resultado') {
             td.className = value === 'Sin incidencia' ? 'status-good' : 'status-critical';
             td.textContent = value;
-          } else if (col.field === 'foto' && value.startsWith('data:')) {
+          } else if (isPhotoField(col.field) && value.startsWith('data:')) {
             const img = document.createElement('img');
             img.src = value;
             img.className = 'photo-thumbnail';
@@ -1547,6 +1583,8 @@
     async editRecord(logType, index, record) {
       const config = FORMS_CONFIG[logType];
       const fields = config.csvColumns;
+      const isPhotoField = (fieldName) =>
+        (config.fields || []).some(f => f.type === 'photo' && f.id === fieldName);
 
       // Crear un modal simple para editar
       const html = `
@@ -1580,7 +1618,7 @@
       fields.forEach(field => {
         const value = record[field.field] || '';
         const input = document.createElement('input');
-        input.type = field.field === 'foto' ? 'hidden' : 'text';
+        input.type = isPhotoField(field.field) ? 'hidden' : 'text';
         input.placeholder = field.header;
         input.value = value;
         input.style.cssText = `
@@ -1596,7 +1634,7 @@
       document.getElementById('btn-save-edit').addEventListener('click', async () => {
         const updated = { ...record };
         fields.forEach(field => {
-          if (field.field !== 'foto') { // No editar fotos por ahora
+          if (!isPhotoField(field.field)) { // No editar fotos por ahora
             updated[field.field] = inputs[field.field].value;
           }
         });
@@ -1801,6 +1839,8 @@
       return normalized.includes('valor') ? 'fury' : 'contenerizado';
     } else if (normalized.includes('hu') && normalized.includes('area') && normalized.includes('canalizacion')) {
       return 'linehaul';
+    } else if (normalized.includes('patente') && normalized.includes('hallazgo')) {
+      return 'inbound_fm';
     }
 
     return null;
@@ -1878,6 +1918,18 @@
         { field: 'comentarios', header: 'Comentarios' },
       ],
       fields: [{ type: 'photo', id: 'foto' }],
+    },
+    inbound_fm: {
+      title: 'Inbound FM',
+      csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
+        { field: 'ts', header: 'Fecha/Hora' },
+        { field: 'patente', header: 'Patente' },
+        { field: 'diferencia_shipments', header: 'Diferencia de Shipments' },
+        { field: 'hallazgo', header: 'Hallazgo' },
+        { field: 'evidencia', header: 'Evidencia' },
+      ],
+      fields: [{ type: 'photo', id: 'evidencia' }],
     },
   };
 
