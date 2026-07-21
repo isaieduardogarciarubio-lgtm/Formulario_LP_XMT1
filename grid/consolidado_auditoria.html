@@ -2132,14 +2132,19 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   function detectLogTypeFromHeaders(headers) {
     const normalized = headers.map(normalizeText);
+    // Substring, no coincidencia exacta: encabezados como "Shipment ID" o
+    // "USD Valor" no son iguales a "shipment"/"valor" carácter por
+    // carácter, pero sí los contienen. Coincidencia exacta se rompe apenas
+    // alguien le agrega una palabra al header en el formulario.
+    const has = (keyword) => normalized.some(h => h.includes(keyword));
 
-    if (normalized.includes('resultado')) {
+    if (has('resultado')) {
       return 'destino_doca';
-    } else if (normalized.includes('shipment') && normalized.includes('situacion') && normalized.includes('foto')) {
-      return normalized.includes('valor') ? 'fury' : 'contenerizado';
-    } else if (normalized.includes('hu') && normalized.includes('area') && normalized.includes('canalizacion')) {
+    } else if (has('shipment') && has('situacion') && has('foto')) {
+      return has('valor') ? 'fury' : 'contenerizado';
+    } else if (has('hu') && has('area') && has('canalizacion')) {
       return 'linehaul';
-    } else if (normalized.includes('patente') && normalized.includes('hallazgo')) {
+    } else if (has('patente') && has('hallazgo')) {
       return 'inbound_fm';
     }
 
@@ -2186,10 +2191,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       csvColumns: [
         { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
-        { field: 'shipment', header: 'Shipment' },
+        { field: 'shipment', header: 'Shipment ID' },
         { field: 'foto', header: 'Foto' },
         { field: 'situacion', header: 'Situación' },
-        { field: 'valor', header: 'Valor' },
+        { field: 'valor', header: 'USD Valor' },
       ],
       fields: [{ type: 'photo', id: 'foto' }],
     },
@@ -2198,7 +2203,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       csvColumns: [
         { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
-        { field: 'shipment', header: 'Shipment' },
+        { field: 'shipment', header: 'Shipment ID' },
         { field: 'situacion', header: 'Situación' },
         { field: 'foto', header: 'Foto' },
       ],
@@ -2211,7 +2216,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'hu', header: 'HU' },
         { field: 'area', header: 'Área' },
-        { field: 'armado_sitio', header: 'Armado en Sitio' },
         { field: 'origen', header: 'Origen' },
         { field: 'canalizacion', header: 'Canalización' },
         { field: 'foto', header: 'Foto' },
