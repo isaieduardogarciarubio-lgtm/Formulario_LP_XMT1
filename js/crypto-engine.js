@@ -120,7 +120,7 @@ class CryptoGate {
           <h3>Contraseña de encriptación</h3>
           <p>Ingresa la contraseña compartida para proteger este archivo mientras viaja fuera de Grid. Pregúntale a un administrador si no la tienes.</p>
           <p style="font-size: 0.82rem; color: var(--color-error, #ff453a); margin-top: -8px;">
-            ⚠️ Verifica que sea la contraseña vigente. Si escribes una distinta a la configurada por tu admin, el archivo se generará sin error, pero <strong>no podrá desencriptarse</strong> después en el dashboard.
+            Verifica que sea la contraseña vigente. Si escribes una distinta a la configurada por tu admin, el archivo se generará sin error, pero <strong>no podrá desencriptarse</strong> después en el dashboard.
           </p>
           <input type="password" id="passphrase-input" placeholder="Contraseña" autocomplete="off" />
           <div class="passphrase-modal-actions">
