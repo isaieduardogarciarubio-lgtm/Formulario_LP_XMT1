@@ -197,6 +197,65 @@ body {
 }
 
 /* ==========================================================================
+   Passphrase Modal — pedir contraseña de encriptación 1 vez por sesión
+   ========================================================================== */
+
+.passphrase-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: var(--spacing-md);
+}
+
+.passphrase-modal-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-lg);
+  max-width: 380px;
+  width: 100%;
+}
+
+.passphrase-modal-card h3 {
+  font-size: var(--font-h1);
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-text-primary);
+}
+
+.passphrase-modal-card p {
+  font-size: var(--font-body);
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-md);
+  line-height: 1.5;
+}
+
+.passphrase-modal-card input {
+  width: 100%;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-popover);
+  padding: var(--spacing-md);
+  font-size: var(--font-body);
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-md);
+}
+
+.passphrase-modal-card input:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+}
+
+.passphrase-modal-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  justify-content: flex-end;
+}
+
+/* ==========================================================================
    Cards — superficies contenedoras (color-surface)
    ========================================================================== */
 

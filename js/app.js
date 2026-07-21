@@ -189,19 +189,22 @@ class FormApp {
    * así que no se combinan en un solo archivo). Se espacían las descargas
    * para evitar que el navegador bloquee las descargas múltiples.
    */
-  downloadAllLogs(forms) {
+  async downloadAllLogs(forms) {
     if (!forms.length) return;
 
     this.showAlert(`Descargando ${forms.length} log${forms.length === 1 ? '' : 's'}...`, 'success');
 
-    forms.forEach((form, index) => {
-      setTimeout(() => {
-        const result = CSVEngine.exportAndDownload(this.getRecords(form.id), form);
+    for (const form of forms) {
+      try {
+        const result = await CSVEngine.exportAndDownloadEncrypted(this.getRecords(form.id), form);
         if (!result.success) {
           this.showAlert(`Error al descargar "${form.title}": ${result.error}`, 'error');
         }
-      }, index * 400);
-    });
+      } catch (error) {
+        this.showAlert('Descarga cancelada', 'info');
+        return;
+      }
+    }
   }
 
   /**
@@ -523,12 +526,16 @@ class FormApp {
   /**
    * Exporta registros a CSV
    */
-  exportToCSV() {
-    const result = CSVEngine.exportAndDownload(this.getRecords(this.currentForm.id), this.currentForm);
-    if (result.success) {
-      this.showAlert('CSV descargado exitosamente', 'success');
-    } else {
-      this.showAlert(`Error: ${result.error}`, 'error');
+  async exportToCSV() {
+    try {
+      const result = await CSVEngine.exportAndDownloadEncrypted(this.getRecords(this.currentForm.id), this.currentForm);
+      if (result.success) {
+        this.showAlert('CSV encriptado y descargado exitosamente', 'success');
+      } else {
+        this.showAlert(`Error: ${result.error}`, 'error');
+      }
+    } catch (error) {
+      this.showAlert('Descarga cancelada', 'info');
     }
   }
 

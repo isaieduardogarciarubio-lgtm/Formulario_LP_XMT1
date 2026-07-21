@@ -174,4 +174,42 @@ class CSVEngine {
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * Descarga un archivo JSON (contenido ya encriptado) al navegador
+   */
+  static downloadEncryptedJSON(jsonContent, filename) {
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filename}.encrypted.json`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Exporta registros a CSV, lo encripta con el passphrase de sesión
+   * (pide la contraseña una sola vez por pestaña) y descarga el resultado
+   * como JSON encriptado. El dashboard de consolidado lo detecta y
+   * desencripta automáticamente al cargarlo.
+   */
+  static async exportAndDownloadEncrypted(records, formConfig) {
+    try {
+      const csvContent = this.generateCSV(records, formConfig);
+      const passphrase = await CryptoGate.ensurePassphrase();
+      const encrypted = await CryptoEngine.encryptText(csvContent, passphrase);
+      const filename = this.generateFilename(formConfig.id, formConfig.title);
+      this.downloadEncryptedJSON(encrypted, filename);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
 }

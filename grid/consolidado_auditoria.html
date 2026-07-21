@@ -554,6 +554,12 @@
         <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
     </button>
+    <button class="btn-icon" id="btn-admin-passphrase" title="Contraseña de encriptación" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="11" width="18" height="11" rx="2"/>
+        <path d="M7 11V7a5 5 0 0110 0v4"/>
+      </svg>
+    </button>
   </div>
 </header>
 
@@ -744,6 +750,74 @@
   }
 
   // ==========================================================================
+  // CryptoEngine — desencriptación AES-256-GCM con passphrase compartido
+  // ==========================================================================
+  class CryptoEngine {
+    static toBase64(bytes) {
+      let binary = '';
+      bytes.forEach((b) => (binary += String.fromCharCode(b)));
+      return btoa(binary);
+    }
+
+    static fromBase64(b64) {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes;
+    }
+
+    static async deriveKey(passphrase, saltBytes) {
+      const enc = new TextEncoder();
+      const material = await crypto.subtle.importKey(
+        'raw', enc.encode(passphrase), { name: 'PBKDF2' }, false, ['deriveKey']
+      );
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations: 100000 },
+        material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']
+      );
+    }
+
+    static async decryptText(jsonText, passphrase) {
+      const payload = JSON.parse(jsonText);
+      if (payload.v !== 1) throw new Error('Versión de encriptación no soportada');
+
+      const salt = this.fromBase64(payload.salt);
+      const iv = this.fromBase64(payload.iv);
+      const data = this.fromBase64(payload.data);
+      const key = await this.deriveKey(passphrase, salt);
+
+      const plainBuffer = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+      return new TextDecoder().decode(plainBuffer);
+    }
+  }
+
+  // Admins autorizados para ver/rotar el passphrase compartido y para
+  // editar/borrar registros consolidados.
+  const ADMIN_EMAILS = [
+    'isaieduardo.garciarubio@mercadolibre.com.mx',
+  ];
+
+  // Palabras simples para generar passphrases fáciles de dictar/recordar:
+  // Palabra + 2 dígitos, primera letra en mayúscula (ej. "Cohete42").
+  const PASSPHRASE_WORDS = [
+    'tornado', 'brujula', 'ventisca', 'cohete', 'tigre', 'rio', 'montana',
+    'estrella', 'trueno', 'cactus', 'panda', 'oceano', 'sendero', 'cometa',
+    'faro', 'roble', 'delta', 'nebulosa', 'coral', 'ambar', 'glaciar',
+    'quetzal', 'jaguar', 'volcan', 'sierra', 'lucero', 'bosque', 'aurora',
+    'relampago', 'marea',
+  ];
+
+  function generatePassphrase() {
+    const rnd = new Uint32Array(2);
+    crypto.getRandomValues(rnd);
+    const word = PASSPHRASE_WORDS[rnd[0] % PASSPHRASE_WORDS.length];
+    const num = String(rnd[1] % 100).padStart(2, '0');
+    return word.charAt(0).toUpperCase() + word.slice(1) + num;
+  }
+
+  const PASSPHRASE_MAX_AGE_DAYS = 120;
+
+  // ==========================================================================
   // AuditDashboard
   // ==========================================================================
   class AuditDashboard {
@@ -770,6 +844,21 @@
       if (hasExistingData) {
         this.currentLog = Object.entries(this.logs).find(([, r]) => r.length > 0)[0];
         this.switchMainTab('analysis');
+      }
+      this.setupAdminUI();
+    }
+
+    async isAdmin() {
+      if (this._isAdminCache !== undefined) return this._isAdminCache;
+      const me = await this.gridClient.getMe();
+      this._isAdminCache = !!(me && me.email && ADMIN_EMAILS.includes(me.email));
+      return this._isAdminCache;
+    }
+
+    async setupAdminUI() {
+      const isAdmin = await this.isAdmin();
+      if (isAdmin) {
+        document.getElementById('btn-admin-passphrase').style.display = 'flex';
       }
     }
 
@@ -806,6 +895,7 @@
 
       document.getElementById('btn-refresh').addEventListener('click', () => this.loadAllLogs());
       document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
+      document.getElementById('btn-admin-passphrase').addEventListener('click', () => this.openPassphraseAdminPanel());
       document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
       document.getElementById('photo-modal-close').addEventListener('click', () => {
         document.getElementById('photo-modal').classList.remove('active');
@@ -846,14 +936,37 @@
       if (file.name.endsWith('.zip')) {
         await this.handleZipFile(file);
       } else if (file.name.endsWith('.csv')) {
-        await this.handleCsvFile(file);
+        const auditoriaId = file.name.replace(/\.csv$/i, '');
+        const text = await file.text();
+        await this.processCsvText(text, auditoriaId);
+      } else if (file.name.endsWith('.json')) {
+        await this.handleEncryptedFile(file);
       } else {
-        this.showAlert('uploadAlert', 'error', 'Formato no soportado. Usa CSV o ZIP.');
+        this.showAlert('uploadAlert', 'error', 'Formato no soportado. Usa CSV, ZIP o JSON encriptado.');
       }
     }
 
-    async handleCsvFile(file) {
-      const text = await file.text();
+    async handleEncryptedFile(file) {
+      try {
+        this.showAlert('uploadAlert', 'info', 'Desencriptando archivo...');
+
+        const passphraseConfig = await this.gridClient.getStateBucket('crypto_config');
+        if (!passphraseConfig || !passphraseConfig.passphrase) {
+          this.showAlert('uploadAlert', 'error', 'No hay contraseña configurada. Pide a un admin que genere una.');
+          return;
+        }
+
+        const jsonText = await file.text();
+        const csvText = await CryptoEngine.decryptText(jsonText, passphraseConfig.passphrase);
+        const auditoriaId = file.name.replace(/\.encrypted\.json$/i, '').replace(/\.json$/i, '');
+        await this.processCsvText(csvText, auditoriaId);
+      } catch (error) {
+        console.error('Error al desencriptar:', error);
+        this.showAlert('uploadAlert', 'error', 'No se pudo desencriptar: contraseña incorrecta o archivo dañado');
+      }
+    }
+
+    async processCsvText(text, auditoriaId) {
       const { headers, records: rawRecords } = parseCSV(text);
 
       if (rawRecords.length === 0) {
@@ -868,7 +981,6 @@
         return;
       }
 
-      const auditoriaId = file.name.replace(/\.csv$/i, '');
       const records = rawRecords.map(raw => {
         const record = mapRowToRecord(raw, logType);
         record.auditoria = auditoriaId;
@@ -1308,6 +1420,82 @@
       });
     }
 
+    async openPassphraseAdminPanel() {
+      const isAdmin = await this.isAdmin();
+      if (!isAdmin) {
+        this.showNotification('❌ No tienes permisos de administrador', 'error');
+        return;
+      }
+
+      const config = await this.gridClient.getStateBucket('crypto_config');
+      const hasPassphrase = !!(config && config.passphrase);
+      const daysOld = hasPassphrase
+        ? Math.floor((Date.now() - new Date(config.generated_at).getTime()) / 86400000)
+        : null;
+      const isStale = daysOld !== null && daysOld > PASSPHRASE_MAX_AGE_DAYS;
+
+      const html = `
+        <div id="passphrase-admin-modal" style="
+          position: fixed; inset: 0; background: rgba(0,0,0,.75);
+          display: flex; align-items: center; justify-content: center; z-index: 100;
+          padding: 16px; backdrop-filter: blur(4px);
+        ">
+          <div style="
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--r-lg); padding: 24px; max-width: 440px;
+            width: 100%; box-shadow: 0 18px 40px -20px rgba(0,0,0,.7);
+          ">
+            <h3 style="margin: 0 0 8px; font-size: 18px; font-weight: 700;">Contraseña de Encriptación</h3>
+            <p style="font-size: 13px; color: var(--text-sub); margin: 0 0 16px; line-height: 1.5;">
+              Comparte esta contraseña con los operadores del formulario. Protege los archivos mientras viajan fuera de Grid.
+            </p>
+            ${hasPassphrase ? `
+              <div style="display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; font-size: 13px; margin-bottom: 16px;">
+                <div style="color: var(--text-sub);">Contraseña actual</div>
+                <div style="font-weight: 700; font-family: monospace; font-size: 15px;">${config.passphrase}</div>
+                <div style="color: var(--text-sub);">Generada</div>
+                <div>${daysOld} día${daysOld === 1 ? '' : 's'} atrás</div>
+              </div>
+              ${isStale ? `
+                <div style="
+                  padding: 12px 14px; border-radius: var(--r-md); border: 1px solid rgba(255,209,0,.35);
+                  background: rgba(255,209,0,.12); color: #FFE680; font-size: 13px; margin-bottom: 16px;
+                ">⚠️ Han pasado más de ${PASSPHRASE_MAX_AGE_DAYS} días. Se recomienda generar una nueva contraseña.</div>
+              ` : `
+                <div style="font-size: 12px; color: var(--text-mut); margin-bottom: 16px;">
+                  Se recomienda rotarla cada ${PASSPHRASE_MAX_AGE_DAYS} días.
+                </div>
+              `}
+            ` : `
+              <div style="
+                padding: 12px 14px; border-radius: var(--r-md); border: 1px solid rgba(255,209,0,.35);
+                background: rgba(255,209,0,.12); color: #FFE680; font-size: 13px; margin-bottom: 16px;
+              ">⚠️ No hay contraseña configurada. Genera una para habilitar la encriptación.</div>
+            `}
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+              <button class="btn btn-secondary" onclick="document.getElementById('passphrase-admin-modal').remove()">Cerrar</button>
+              <button class="btn btn-primary" id="btn-generate-passphrase">Generar nueva contraseña</button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.insertAdjacentHTML('beforeend', html);
+
+      document.getElementById('btn-generate-passphrase').addEventListener('click', async () => {
+        const newPassphrase = generatePassphrase();
+        const me = await this.gridClient.getMe();
+        await this.gridClient.setStateBucket('crypto_config', {
+          passphrase: newPassphrase,
+          generated_at: new Date().toISOString(),
+          generated_by: (me && me.email) || 'desconocido',
+        });
+        document.getElementById('passphrase-admin-modal').remove();
+        this.showNotification(`✅ Nueva contraseña generada: ${newPassphrase}`, 'success');
+        this.openPassphraseAdminPanel();
+      });
+    }
+
     async deleteRecord(logType, index) {
       if (!confirm('¿Estás seguro de que quieres borrar este registro? Se eliminará tanto de la tabla como del consolidado.')) {
         return;
@@ -1481,6 +1669,25 @@
       el.textContent = message;
       el.style.display = 'block';
       setTimeout(() => el.style.display = 'none', 5000);
+    }
+
+    showNotification(message, type = 'success') {
+      const colors = {
+        success: { bg: 'rgba(255,209,0,.12)', border: 'rgba(255,209,0,.35)', text: '#FFE680' },
+        error: { bg: 'rgba(255,92,108,.12)', border: 'rgba(255,92,108,.35)', text: '#FFB3BB' },
+      };
+      const palette = colors[type] || colors.success;
+
+      const toast = document.createElement('div');
+      toast.textContent = message;
+      toast.style.cssText = `
+        position: fixed; bottom: 24px; right: 24px; z-index: 200;
+        padding: 12px 18px; border-radius: var(--r-md);
+        background: ${palette.bg}; border: 1px solid ${palette.border}; color: ${palette.text};
+        font-size: 13px; font-weight: 600; box-shadow: 0 18px 40px -20px rgba(0,0,0,.7);
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
     }
 
     getLogTitle(logType) {
