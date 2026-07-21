@@ -868,7 +868,12 @@
         return;
       }
 
-      const records = rawRecords.map(raw => mapRowToRecord(raw, logType));
+      const auditoriaId = file.name.replace(/\.csv$/i, '');
+      const records = rawRecords.map(raw => {
+        const record = mapRowToRecord(raw, logType);
+        record.auditoria = auditoriaId;
+        return record;
+      });
       await this.addRecords(logType, records);
     }
 
@@ -892,7 +897,11 @@
           const { headers, records: rawRecords } = parseCSV(csvText);
           if (rawRecords.length === 0) continue;
 
-          const records = rawRecords.map(raw => mapRowToRecord(raw, logType));
+          const records = rawRecords.map(raw => {
+            const record = mapRowToRecord(raw, logType);
+            record.auditoria = folderName;
+            return record;
+          });
 
           // Process photos
           const fotoFolder = content.folder(`${folderName}/fotos`);
@@ -1596,6 +1605,7 @@
     destino_doca: {
       title: 'Destino / Doca',
       csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'hu', header: 'HU' },
         { field: 'destino', header: 'Destino' },
@@ -1607,6 +1617,7 @@
     fury: {
       title: 'FURY',
       csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'shipment', header: 'Shipment' },
         { field: 'foto', header: 'Foto' },
@@ -1618,6 +1629,7 @@
     contenerizado: {
       title: 'Contenerizado',
       csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'shipment', header: 'Shipment' },
         { field: 'situacion', header: 'Situación' },
@@ -1628,6 +1640,7 @@
     linehaul: {
       title: 'Linehaul',
       csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'hu', header: 'HU' },
         { field: 'area', header: 'Área' },
