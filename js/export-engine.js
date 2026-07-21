@@ -1,149 +1,148 @@
 /**
- * Motor de exportación — CSV + ZIP con fotos
- * Genera ZIPs con subfolderes por tipo de log cuando exporta múltiples logs
+ * Motor de exportación con fotos (ZIP)
+ *
+ * Los logs que capturan fotos no caben en un CSV plano: se empaquetan en un
+ * ZIP que contiene el CSV + una carpeta `fotos/`. En el CSV, la columna de
+ * foto referencia el nombre del archivo dentro de `fotos/`. Las imágenes ya
+ * vienen comprimidas como JPEG desde la captura (el motor de formularios las
+ * reescala), así que el ZIP usa DEFLATE nivel 9 (ayuda sobre todo al CSV).
+ *
+ * Depende de JSZip (window.JSZip, vendorizado) y de CSVEngine.
  */
 
 class ExportEngine {
-  constructor(logsData) {
-    this.logsData = logsData; // { destino_doca: [], fury: [], contenerizado: [], linehaul: [] }
+  /** ¿El formulario captura fotos? (tiene alguna columna de tipo 'photo') */
+  static formHasPhotos(formConfig) {
+    return (formConfig.csvColumns || []).some((c) => c.type === 'photo');
   }
 
-  formHasPhotos(logType) {
-    const config = FORMS_CONFIG[logType];
-    return config && config.fields.some(f => f.type === 'photo');
+  /** Sanea un texto para usarlo como nombre de archivo/carpeta */
+  static sanitize(value) {
+    return String(value || '')
+      .trim()
+      .replace(/[^a-z0-9]+/gi, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase() || 'sin_id';
   }
 
-  photoFilename(index, shipmentId) {
-    return `${String(index + 1).padStart(3, '0')}_${shipmentId}.jpg`;
+  /**
+   * Nombre de archivo de una foto: índice + un identificador legible del
+   * registro (shipment / HU) para poder ubicarla fácilmente.
+   */
+  static photoFilename(record, index, formConfig, col, multiplePhotoCols) {
+    // La segunda columna suele ser el id escaneado (shipment / HU)
+    const idCol = (formConfig.csvColumns || [])[1];
+    const idVal = idCol ? record[idCol.field] : '';
+    const seq = String(index + 1).padStart(3, '0');
+    const suffix = multiplePhotoCols ? `_${this.sanitize(col.field)}` : '';
+    return `${seq}_${this.sanitize(idVal)}${suffix}.jpg`;
   }
 
-  dataUrlToBase64(dataUrl) {
-    // Strip data:image/jpeg;base64, prefix
-    return dataUrl.split(',')[1];
+  /** Extrae la parte base64 de un data URL (`data:image/jpeg;base64,...`) */
+  static dataUrlToBase64(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
   }
 
-  exportLogCsv(logType, records) {
-    const config = FORMS_CONFIG[logType];
-    if (!config) return null;
+  /**
+   * Agrega el CSV y las fotos de un log a un ZIP (opcionalmente dentro de una
+   * subcarpeta). Devuelve el número de fotos agregadas.
+   */
+  static addLogToZip(zip, records, formConfig, folder = '') {
+    const photoCols = (formConfig.csvColumns || []).filter((c) => c.type === 'photo');
+    const multiple = photoCols.length > 1;
+    let photoCount = 0;
 
-    const headers = config.csvColumns.map(c => c.header);
-    const rows = records.map(record => {
-      return config.csvColumns.map(col => {
-        const value = record[col.field] || '';
-        // Escape quotes in CSV
-        return typeof value === 'string' && value.includes(',')
-          ? `"${value.replace(/"/g, '""')}"`
-          : value;
-      }).join(',');
+    // Copia de los registros donde las columnas de foto muestran la ruta del
+    // archivo (o vacío si no hay foto), en vez del data URL completo.
+    const csvRecords = records.map((record, index) => {
+      const copy = { ...record };
+      photoCols.forEach((col) => {
+        const dataUrl = record[col.field];
+        if (dataUrl && String(dataUrl).startsWith('data:')) {
+          const filename = this.photoFilename(record, index, formConfig, col, multiple);
+          zip.file(`${folder}fotos/${filename}`, this.dataUrlToBase64(dataUrl), { base64: true });
+          copy[col.field] = `fotos/${filename}`;
+          photoCount++;
+        } else {
+          copy[col.field] = '';
+        }
+      });
+      return copy;
     });
 
-    return [headers.join(','), ...rows].join('\n');
+    const csv = CSVEngine.generateCSV(csvRecords, formConfig);
+    const csvName = `${CSVEngine.generateFilename(formConfig.id, formConfig.title)}.csv`;
+    zip.file(`${folder}${csvName}`, csv);
+
+    return photoCount;
   }
 
-  async exportLogZip(logType, records) {
-    // For a single log, create a ZIP with CSV + fotos subfolder
-    if (!window.JSZip) {
-      console.error('JSZip not loaded');
-      return null;
-    }
-
-    const zip = new window.JSZip();
-    const csvContent = this.exportLogCsv(logType, records);
-    zip.file('data.csv', csvContent);
-
-    if (this.formHasPhotos(logType)) {
-      const fotos = zip.folder('fotos');
-      const config = FORMS_CONFIG[logType];
-
-      records.forEach((record, idx) => {
-        config.fields.forEach(field => {
-          if (field.type === 'photo' && record[field.id]) {
-            const identifier = record.shipment || record.hu || `record_${idx}`;
-            const filename = this.photoFilename(idx, identifier);
-            const base64 = this.dataUrlToBase64(record[field.id]);
-            fotos.file(filename, base64, { base64: true });
-          }
-        });
-      });
-    }
-
-    return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 9 } });
-  }
-
-  async exportAllZip(filename = 'consolidado_auditoria.zip') {
-    // Create master ZIP with subfolder per log type
-    if (!window.JSZip) {
-      console.error('JSZip not loaded');
-      return null;
-    }
-
-    const zip = new window.JSZip();
-    const timestamp = new Date().toISOString().split('T')[0];
-
-    for (const [logType, records] of Object.entries(this.logsData)) {
-      if (records.length === 0) continue;
-
-      const folderName = `${logType}_${timestamp}`;
-      const folder = zip.folder(folderName);
-
-      const csvContent = this.exportLogCsv(logType, records);
-      folder.file('data.csv', csvContent);
-
-      if (this.formHasPhotos(logType)) {
-        const fotos = folder.folder('fotos');
-        const config = FORMS_CONFIG[logType];
-
-        records.forEach((record, idx) => {
-          config.fields.forEach(field => {
-            if (field.type === 'photo' && record[field.id]) {
-              const identifier = record.shipment || record.hu || `record_${idx}`;
-              const fname = this.photoFilename(idx, identifier);
-              const base64 = this.dataUrlToBase64(record[field.id]);
-              fotos.file(fname, base64, { base64: true });
-            }
-          });
-        });
-      }
-    }
-
+  static async generateBlob(zip) {
     return zip.generateAsync({
       type: 'blob',
-      filename,
       compression: 'DEFLATE',
-      compressionOptions: { level: 9 }
+      compressionOptions: { level: 9 },
     });
   }
 
-  triggerDownload(blob, filename) {
+  static downloadBlob(blob, filename) {
+    const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }
 
-  async exportAndDownload(logType = null) {
-    let blob;
-    let filename;
-
-    if (logType) {
-      const records = this.logsData[logType] || [];
-      if (records.length === 0) {
-        console.warn(`No records for ${logType}`);
-        return;
-      }
-      blob = await this.exportLogZip(logType, records);
-      filename = `${logType}_${new Date().toISOString().split('T')[0]}.zip`;
-    } else {
-      blob = await this.exportAllZip();
-      filename = `consolidado_auditoria_${new Date().toISOString().split('T')[0]}.zip`;
+  /**
+   * Genera un ZIP (CSV + fotos/) de un solo log. No descarga directamente —
+   * devuelve el blob para que el llamador lo encripte antes de descargarlo.
+   */
+  static async exportLogZip(records, formConfig) {
+    if (typeof JSZip === 'undefined') {
+      return { success: false, error: 'No se pudo cargar el compresor (JSZip).' };
     }
+    if (!records || !records.length) {
+      return { success: false, error: 'No hay registros para exportar' };
+    }
+    try {
+      const zip = new JSZip();
+      this.addLogToZip(zip, records, formConfig, '');
+      const blob = await this.generateBlob(zip);
+      const filename = `${CSVEngine.generateFilename(formConfig.id, formConfig.title)}.zip`;
+      return { success: true, blob, filename };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
 
-    if (blob) {
-      this.triggerDownload(blob, filename);
+  /**
+   * Exporta y descarga un ZIP maestro con una subcarpeta por log. Cada log con
+   * fotos incluye su carpeta `fotos/`; los logs sin fotos solo llevan su CSV.
+   * @param {{records:object[], formConfig:object}[]} entries
+   */
+  static async exportAllZip(entries) {
+    if (typeof JSZip === 'undefined') {
+      return { success: false, error: 'No se pudo cargar el compresor (JSZip).' };
+    }
+    if (!entries || !entries.length) {
+      return { success: false, error: 'No hay registros para exportar' };
+    }
+    try {
+      const zip = new JSZip();
+      entries.forEach(({ records, formConfig }) => {
+        if (!records || !records.length) return;
+        const folder = `${this.sanitize(formConfig.title)}/`;
+        this.addLogToZip(zip, records, formConfig, folder);
+      });
+      const blob = await this.generateBlob(zip);
+      return { success: true, blob };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   }
 }

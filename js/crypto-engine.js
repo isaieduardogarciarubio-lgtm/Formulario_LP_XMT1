@@ -77,6 +77,16 @@ class CryptoEngine {
     return new TextDecoder().decode(plainBuffer);
   }
 
+  /**
+   * Encripta un Blob binario (ej. un ZIP) codificándolo a base64 y
+   * reutilizando encryptText(). Retorna el mismo JSON string de siempre.
+   */
+  static async encryptBlob(blob, passphrase) {
+    const buffer = await blob.arrayBuffer();
+    const base64Content = this.toBase64(new Uint8Array(buffer));
+    return this.encryptText(base64Content, passphrase);
+  }
+
   static getSessionPassphrase() {
     return sessionStorage.getItem(this.SESSION_KEY) || null;
   }
@@ -109,6 +119,9 @@ class CryptoGate {
         <div class="passphrase-modal-card">
           <h3>Contraseña de encriptación</h3>
           <p>Ingresa la contraseña compartida para proteger este archivo mientras viaja fuera de Grid. Pregúntale a un administrador si no la tienes.</p>
+          <p style="font-size: 0.82rem; color: var(--color-error, #ff453a); margin-top: -8px;">
+            ⚠️ Verifica que sea la contraseña vigente. Si escribes una distinta a la configurada por tu admin, el archivo se generará sin error, pero <strong>no podrá desencriptarse</strong> después en el dashboard.
+          </p>
           <input type="password" id="passphrase-input" placeholder="Contraseña" autocomplete="off" />
           <div class="passphrase-modal-actions">
             <button type="button" class="btn btn-secondary" id="passphrase-cancel">Cancelar</button>

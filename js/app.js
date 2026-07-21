@@ -21,7 +21,7 @@ class FormApp {
     this.init();
   }
 
-  init() {
+  async init() {
     this.showMenu();
   }
 
@@ -73,11 +73,11 @@ class FormApp {
 
     left.innerHTML = leftIcon
       ? `<button class="icon-btn-plain" aria-label="Atrás" title="Atrás">${Icons.svg(leftIcon, { size: 22 })}</button>`
-      : `<span class="navbar-title">${title || ''}</span>`;
+      : `<img class="navbar-logo" src="data/ML_es_RGB_ML-Pluma-Izquierda-Relleno-B (1).png" alt="MercadoLibre" />`;
 
     right.innerHTML = rightIcon
       ? `<button class="icon-btn-plain" aria-label="Cerrar" title="Cerrar">${Icons.svg(rightIcon, { size: 22 })}</button>`
-      : '';
+      : `<span class="navbar-title">${title || ''}</span>`;
 
     if (leftIcon && leftAction) left.querySelector('button').addEventListener('click', leftAction);
     if (rightIcon && rightAction) right.querySelector('button').addEventListener('click', rightAction);
@@ -92,7 +92,7 @@ class FormApp {
     this.lastDestino = null;
     this._screen = 'menu';
     this._inSubScreen = false;
-    this.setHeader({ title: 'Generador de CSV' });
+    this.setHeader({ title: 'Auditorías XMT1' });
 
     const app = document.getElementById('app');
     app.innerHTML = '';
@@ -101,7 +101,7 @@ class FormApp {
     content.className = 'content';
     content.innerHTML = `
       <div>
-        <h1 class="step-question" style="margin-bottom: var(--spacing-xs);">¿Qué formulario deseas llenar?</h1>
+        <h1 class="step-question" style="margin-bottom: var(--spacing-xs);">¿Qué auditoría deseas capturar?</h1>
         <p style="color: var(--color-text-muted); font-size: var(--font-body);">Selecciona un tipo de registro para comenzar</p>
       </div>
     `;
@@ -112,8 +112,9 @@ class FormApp {
     getAllForms().forEach((form) => {
       const card = document.createElement('div');
       card.className = 'form-card';
+      const iconClass = form.id === 'fury' ? 'icon-danger' : '';
       card.innerHTML = `
-        <div class="form-card-icon">${Icons.svg(form.icon, { size: 20 })}</div>
+        <div class="form-card-icon">${Icons.svg(form.icon, { size: 20, className: iconClass })}</div>
         <div class="form-card-body">
           <div class="form-card-title">${form.title}</div>
           <div class="form-card-desc">${form.description}</div>
@@ -185,25 +186,39 @@ class FormApp {
   }
 
   /**
-   * Descarga un CSV por cada log con registros (columnas distintas por log,
-   * así que no se combinan en un solo archivo). Se espacían las descargas
-   * para evitar que el navegador bloquee las descargas múltiples.
+   * Descarga un único ZIP maestro con una subcarpeta por log (cada una con su
+   * CSV y, si aplica, su carpeta fotos/). Una sola descarga, todo organizado.
    */
   async downloadAllLogs(forms) {
     if (!forms.length) return;
 
-    this.showAlert(`Descargando ${forms.length} log${forms.length === 1 ? '' : 's'}...`, 'success');
+    this.showAlert(`Generando ZIP con ${forms.length} log${forms.length === 1 ? '' : 's'}...`, 'info');
 
-    for (const form of forms) {
-      try {
-        const result = await CSVEngine.exportAndDownloadEncrypted(this.getRecords(form.id), form);
-        if (!result.success) {
-          this.showAlert(`Error al descargar "${form.title}": ${result.error}`, 'error');
-        }
-      } catch (error) {
-        this.showAlert('Descarga cancelada', 'info');
-        return;
-      }
+    const entries = forms.map((form) => ({
+      records: this.getRecords(form.id),
+      formConfig: form,
+    }));
+
+    const result = await ExportEngine.exportAllZip(entries);
+    if (!result.success) {
+      this.showAlert(`Error: ${result.error}`, 'error');
+      return;
+    }
+
+    try {
+      const passphrase = await CryptoGate.ensurePassphrase();
+      this.showAlert('Encriptando datos...', 'info');
+      const encrypted = await CryptoEngine.encryptBlob(result.blob, passphrase);
+      const blob = new Blob([encrypted], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `auditorias_${new Date().toISOString().split('T')[0]}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      this.showAlert('ZIP encriptado y descargado exitosamente', 'success');
+    } catch (error) {
+      this.showAlert('Descarga cancelada', 'info');
     }
   }
 
@@ -423,8 +438,11 @@ class FormApp {
 
       const exportBtn = document.createElement('button');
       exportBtn.className = 'btn btn-secondary btn-block';
-      exportBtn.innerHTML = `<span>Descargar CSV</span>`;
-      exportBtn.addEventListener('click', () => this.exportToCSV());
+      const hasPhotos = ExportEngine.formHasPhotos(this.currentForm);
+      exportBtn.innerHTML = hasPhotos
+        ? `<span>Descargar ZIP (CSV + fotos)</span>`
+        : `<span>Descargar CSV</span>`;
+      exportBtn.addEventListener('click', () => this.exportRecords());
 
       const clearBtn = document.createElement('button');
       clearBtn.className = 'btn btn-secondary btn-block';
@@ -502,8 +520,21 @@ class FormApp {
       this.currentForm.csvColumns.forEach((col) => {
         const td = document.createElement('td');
         const value = record[col.field] || '';
-        td.textContent = value.length > 50 ? value.substring(0, 50) + '...' : value;
-        td.title = value;
+
+        if (col.type === 'photo') {
+          if (String(value).startsWith('data:')) {
+            const img = document.createElement('img');
+            img.className = 'record-thumb';
+            img.src = value;
+            img.alt = 'Foto';
+            td.appendChild(img);
+          } else {
+            td.textContent = '—';
+          }
+        } else {
+          td.textContent = value.length > 50 ? value.substring(0, 50) + '...' : value;
+          td.title = value;
+        }
         row.appendChild(td);
       });
 
@@ -524,11 +555,36 @@ class FormApp {
   }
 
   /**
-   * Exporta registros a CSV
+   * Exporta los registros del log actual. Si el log captura fotos, genera un
+   * ZIP (CSV + carpeta fotos/); si no, un CSV simple.
    */
-  async exportToCSV() {
+  async exportRecords() {
+    const records = this.getRecords(this.currentForm.id);
+
     try {
-      const result = await CSVEngine.exportAndDownloadEncrypted(this.getRecords(this.currentForm.id), this.currentForm);
+      if (ExportEngine.formHasPhotos(this.currentForm)) {
+        this.showAlert('Generando ZIP...', 'info');
+        const result = await ExportEngine.exportLogZip(records, this.currentForm);
+        if (!result.success) {
+          this.showAlert(`Error: ${result.error}`, 'error');
+          return;
+        }
+
+        const passphrase = await CryptoGate.ensurePassphrase();
+        this.showAlert('Encriptando datos...', 'info');
+        const encrypted = await CryptoEngine.encryptBlob(result.blob, passphrase);
+        const blob = new Blob([encrypted], { type: 'application/zip' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = result.filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.showAlert('ZIP encriptado y descargado exitosamente', 'success');
+        return;
+      }
+
+      const result = await CSVEngine.exportAndDownloadEncrypted(records, this.currentForm);
       if (result.success) {
         this.showAlert('CSV encriptado y descargado exitosamente', 'success');
       } else {

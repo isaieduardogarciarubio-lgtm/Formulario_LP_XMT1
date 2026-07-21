@@ -6,17 +6,20 @@
 const FORMS_CONFIG = {
   destino_doca: {
     id: 'destino_doca',
-    title: 'Auditoría - Destino / Doca',
+    title: 'Pre - Missort',
     description: 'Escanea HU, valida destino y doca',
     icon: 'scan',
+    // Catálogo Destino → Docas válidas. Edita este archivo con los destinos
+    // y docas reales de tu operación (columna Doca: valores separados por ";").
     catalogUrl: 'data/catalogo_destino_doca.csv',
     fields: [
       {
         id: 'hu',
         label: '¿Cuál es el HU?',
         type: 'scanner',
+        idType: 'hu',
         required: true,
-        placeholder: 'Ej. HU123456789',
+        placeholder: 'Ej. 2420997802886101',
       },
       {
         id: 'destino',
@@ -42,20 +45,21 @@ const FORMS_CONFIG = {
 
   fury: {
     id: 'fury',
-    title: 'FURY - Auditoría Contenedores',
-    description: 'Captura fotos y situación de envío',
-    icon: 'package',
+    title: 'FURY',
+    description: 'Escanea shipment, foto y situación',
+    icon: 'redCross',
     fields: [
       {
         id: 'shipment',
         label: '¿Cuál es el Shipment ID?',
         type: 'scanner',
+        idType: 'shipment',
         required: true,
-        placeholder: 'Ej. SHIP123456',
+        placeholder: 'Ej. 47326091753',
       },
       {
         id: 'foto',
-        label: 'Captura una foto',
+        label: 'Toma una foto del paquete',
         type: 'photo',
         required: true,
       },
@@ -64,118 +68,113 @@ const FORMS_CONFIG = {
         label: '¿Cuál es la situación?',
         type: 'choice',
         required: true,
-        options: [
-          { value: 'Normal', label: 'Normal' },
-          { value: 'Dañado', label: 'Dañado' },
-          { value: 'Perdido', label: 'Perdido' },
-        ],
+        options: ['Sin Master', 'Dañado', 'Abierto'],
       },
       {
         id: 'valor',
-        label: 'Valor estimado (opcional)',
+        label: 'Valor en USD (opcional)',
         type: 'number',
         required: false,
-        placeholder: 'Ej. 1500',
+        placeholder: 'Ej. 120',
+        min: 0,
       },
     ],
     csvColumns: [
       { field: 'ts', header: 'Fecha/Hora' },
-      { field: 'shipment', header: 'Shipment' },
-      { field: 'foto', header: 'Foto' },
+      { field: 'shipment', header: 'Shipment ID' },
+      { field: 'foto', header: 'Foto', type: 'photo' },
       { field: 'situacion', header: 'Situación' },
-      { field: 'valor', header: 'Valor' },
+      { field: 'valor', header: 'USD Valor' },
     ],
   },
 
   contenerizado: {
     id: 'contenerizado',
-    title: 'Contenerizado - Auditoría de Carga',
-    description: 'Valida estado de contenedor',
-    icon: 'box',
+    title: 'Contenerizado',
+    description: 'Escanea shipment y situación (foto si hay daño)',
+    icon: 'inbox',
     fields: [
       {
         id: 'shipment',
         label: '¿Cuál es el Shipment ID?',
         type: 'scanner',
+        idType: 'shipment',
         required: true,
-        placeholder: 'Ej. SHIP123456',
+        placeholder: 'Ej. 47326091753',
       },
       {
         id: 'situacion',
         label: '¿Cuál es la situación?',
         type: 'choice',
         required: true,
-        options: [
-          { value: 'Normal', label: 'Normal' },
-          { value: 'Dañado', label: 'Dañado' },
-        ],
+        options: ['Missort', 'Dañado', 'Correcto'],
+        // Si cambian la situación, la foto previa deja de ser válida
+        resetOnChange: ['foto'],
       },
       {
         id: 'foto',
-        label: 'Foto del contenedor',
+        label: 'Toma una foto del daño',
         type: 'photo',
-        required: false,
-        showIf: { field: 'situacion', value: 'Dañado' },
-        valueWhenHidden: null,
+        required: true,
+        // Solo se pide foto cuando la situación es "Dañado"
+        showIf: (v) => v.situacion === 'Dañado',
       },
     ],
     csvColumns: [
       { field: 'ts', header: 'Fecha/Hora' },
-      { field: 'shipment', header: 'Shipment' },
+      { field: 'shipment', header: 'Shipment ID' },
       { field: 'situacion', header: 'Situación' },
-      { field: 'foto', header: 'Foto' },
+      { field: 'foto', header: 'Foto', type: 'photo' },
     ],
   },
 
   linehaul: {
     id: 'linehaul',
-    title: 'Linehaul - Despacho',
-    description: 'Registra salida de unidades',
-    icon: 'truck',
+    title: 'Posible daño Linehaul / Despacho',
+    description: 'Escanea HU, área, origen y canalización',
+    icon: 'pallet',
     fields: [
       {
         id: 'hu',
         label: '¿Cuál es el HU?',
         type: 'scanner',
+        idType: 'hu',
         required: true,
-        placeholder: 'Ej. HU123456789',
+        placeholder: 'Ej. 2420997802886101',
       },
       {
         id: 'area',
-        label: '¿De cuál área es?',
+        label: '¿Cuál es el área?',
         type: 'choice',
         required: true,
-        options: [
-          { value: 'Carga', label: 'Carga' },
-          { value: 'Consolidación', label: 'Consolidación' },
-          { value: 'Retorno', label: 'Retorno' },
-        ],
+        options: ['Despacho', 'Inbound LH', 'Sorting Large', 'Otro'],
       },
       {
         id: 'armado_sitio',
-        label: '¿Armado en sitio?',
+        label: '¿Se armó en tu sitio?',
         type: 'choice',
         required: true,
-        options: [
-          { value: 'Sí', label: 'Sí' },
-          { value: 'No', label: 'No' },
-        ],
+        options: ['Sí', 'No'],
+        // Cambiar esta respuesta recalcula el origen derivado
+        resetOnChange: ['origen'],
       },
       {
         id: 'origen',
         label: '¿Cuál es el origen?',
         type: 'text',
-        required: false,
-        showIf: { field: 'armado_sitio', value: 'No' },
-        valueWhenHidden: 'XMT1',
-        placeholder: 'Ej. XMT1',
+        required: true,
+        placeholder: 'Escribe el origen',
+        // Solo se escribe manualmente cuando NO se armó en el sitio;
+        // si se armó en el sitio, el origen es "XMT1" automáticamente.
+        showIf: (v) => v.armado_sitio === 'No',
+        valueWhenHidden: () => 'XMT1',
       },
       {
         id: 'canalizacion',
-        label: 'Canalización',
+        label: '¿Cuál es la canalización?',
         type: 'text',
         required: true,
-        placeholder: 'Ej. LOCAL',
+        placeholder: 'Escribe la canalización',
       },
       {
         id: 'foto',
@@ -188,18 +187,61 @@ const FORMS_CONFIG = {
         label: 'Comentarios (opcional)',
         type: 'textarea',
         required: false,
-        placeholder: 'Ej. Unidad en buen estado',
+        placeholder: 'Notas adicionales',
       },
     ],
     csvColumns: [
       { field: 'ts', header: 'Fecha/Hora' },
       { field: 'hu', header: 'HU' },
       { field: 'area', header: 'Área' },
-      { field: 'armado_sitio', header: 'Armado en Sitio' },
       { field: 'origen', header: 'Origen' },
       { field: 'canalizacion', header: 'Canalización' },
-      { field: 'foto', header: 'Foto' },
+      { field: 'foto', header: 'Foto', type: 'photo' },
       { field: 'comentarios', header: 'Comentarios' },
+    ],
+  },
+
+  inbound_fm: {
+    id: 'inbound_fm',
+    title: 'Inbound FM',
+    description: 'Escanea patente, diferencia y hallazgo',
+    icon: 'truck',
+    fields: [
+      {
+        id: 'patente',
+        label: '¿Cuál es la patente?',
+        type: 'scanner',
+        idType: 'plate',
+        required: true,
+        placeholder: 'Ej. ABC-123',
+      },
+      {
+        id: 'diferencia_shipments',
+        label: '¿Cuál es la diferencia de shipments?',
+        type: 'text',
+        required: true,
+        placeholder: 'Ingresa la diferencia',
+      },
+      {
+        id: 'hallazgo',
+        label: '¿Cuál es el hallazgo?',
+        type: 'choice',
+        required: true,
+        options: ['Correcto', 'Divergencia', 'Falta de probidad'],
+      },
+      {
+        id: 'evidencia',
+        label: 'Evidencia (opcional)',
+        type: 'photo',
+        required: false,
+      },
+    ],
+    csvColumns: [
+      { field: 'ts', header: 'Fecha/Hora' },
+      { field: 'patente', header: 'Patente' },
+      { field: 'diferencia_shipments', header: 'Diferencia de Shipments' },
+      { field: 'hallazgo', header: 'Hallazgo' },
+      { field: 'evidencia', header: 'Evidencia', type: 'photo' },
     ],
   },
 };
@@ -216,29 +258,4 @@ function getAllForms() {
  */
 function getFormConfig(formId) {
   return FORMS_CONFIG[formId];
-}
-
-/**
- * Auto-detectar tipo de log por headers CSV
- */
-function detectLogTypeFromHeaders(headers) {
-  const normalized = headers.map(h => h.toLowerCase().trim());
-
-  if (normalized.includes('resultado')) {
-    return 'destino_doca';
-  } else if (normalized.includes('shipment') && normalized.includes('situacion') && normalized.includes('foto')) {
-    return normalized.includes('valor') ? 'fury' : 'contenerizado';
-  } else if (normalized.includes('hu') && normalized.includes('area') && normalized.includes('canalizacion')) {
-    return 'linehaul';
-  }
-
-  return null;
-}
-
-/**
- * Check if a form has photo fields
- */
-function formHasPhotos(formId) {
-  const form = FORMS_CONFIG[formId];
-  return form && form.fields.some(f => f.type === 'photo');
 }
