@@ -297,17 +297,20 @@ body {
   margin-bottom: var(--spacing-xs);
 }
 
-/* Wrapper input + botón de ojo (mostrar/ocultar) */
+/* Wrapper input + botón de ojo (mostrar/ocultar) — hermanos en flex, no
+   superpuestos, para no chocar el radio "píldora" del input con un botón
+   cuadrado encima. */
 .passphrase-field-wrap {
-  position: relative;
   display: flex;
-  align-items: center;
+  align-items: stretch;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
 }
 
 .passphrase-field-wrap input {
   width: auto;
   flex: 1;
-  padding-right: 44px !important;
+  margin-bottom: 0;
 }
 
 .passphrase-current-box .passphrase-field-wrap {
@@ -315,32 +318,27 @@ body {
 }
 
 .passphrase-current-box .passphrase-field-wrap input {
-  margin-bottom: 0;
   font-family: "SF Mono", "Fira Code", Consolas, monospace;
   font-size: 0.8rem;
 }
 
 .passphrase-eye-btn {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
+  flex-shrink: 0;
+  width: 48px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-popover);
   cursor: pointer;
-  padding: 4px;
   color: var(--color-text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  transition: background-color 0.15s;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
 .passphrase-eye-btn:hover {
   background: var(--color-surface-hover);
+  border-color: var(--color-text-muted);
 }
 
 .passphrase-eye-btn svg {
