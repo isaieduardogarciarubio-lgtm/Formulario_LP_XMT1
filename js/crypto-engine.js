@@ -122,20 +122,26 @@ class CryptoGate {
       const overlay = document.createElement('div');
       overlay.className = 'passphrase-modal-overlay';
 
+      // Ícono de ojo (SVG) reutilizado tanto para el campo de contraseña
+      // guardada como para el campo de contraseña nueva.
+      const eyeIconsSvg = `
+        <svg class="icon-show" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+          <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+        <svg class="icon-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+          <line x1="1" y1="1" x2="23" y2="23"></line>
+        </svg>
+      `;
+
       const currentSection = currentPassphrase ? `
-        <div style="margin-bottom: 1.2rem; padding: 10px; background: var(--surface-2, #161D22); border-radius: 6px; border: 1px solid var(--border, #1F2830);">
-          <div style="font-size: 0.85rem; color: var(--text-muted, #6B757D); margin-bottom: 6px;">Contraseña guardada actualmente:</div>
-          <div style="display: flex; align-items: center; gap: 8px; justify-content: center;">
-            <input type="password" id="current-passphrase" readonly style="flex: 0 1 160px; padding: 7px 10px; border: 1px solid var(--border, #1F2830); background: var(--surface, #11161A); color: var(--text, #F4F6F8); border-radius: 4px; font-family: monospace; font-size: 12px;" />
-            <button type="button" id="current-toggle" style="background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted, #6B757D); display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 4px; transition: background-color 0.15s;" title="Mostrar contraseña">
-              <svg class="current-icon-show" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: block;">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-              <svg class="current-icon-hide" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-              </svg>
+        <div class="passphrase-current-box">
+          <div class="passphrase-current-label">Contraseña guardada actualmente:</div>
+          <div class="passphrase-field-wrap">
+            <input type="password" id="current-passphrase" readonly />
+            <button type="button" class="passphrase-eye-btn" id="current-toggle" title="Mostrar contraseña">
+              ${eyeIconsSvg}
             </button>
           </div>
         </div>
@@ -145,21 +151,14 @@ class CryptoGate {
         <div class="passphrase-modal-card">
           <h3>Contraseña de encriptación</h3>
           <p>Ingresa la contraseña compartida para proteger tus archivos mientras viajan fuera de Grid. Solo se pide una vez en este dispositivo. Pregúntale a un administrador si no la tienes.</p>
-          <p style="font-size: 0.82rem; color: var(--color-error, #ff453a); margin-top: -8px;">
+          <p style="font-size: 0.82rem; color: var(--color-error); margin-top: -8px;">
             Verifica que sea la contraseña vigente. Si escribes una distinta a la configurada por tu admin, el archivo se generará sin error, pero <strong>no podrá desencriptarse</strong> después en el dashboard.
           </p>
           ${currentSection}
-          <div style="position: relative; display: flex; align-items: center;">
-            <input type="password" id="passphrase-input" placeholder="Ingresa la contraseña ${currentPassphrase ? 'nueva' : ''}" autocomplete="off" style="flex: 1; padding-right: 40px;" />
-            <button type="button" id="passphrase-toggle" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; padding: 4px; color: var(--text-muted, #8792A2); display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 4px; transition: background-color 0.15s;" title="Mostrar contraseña">
-              <svg class="passphrase-icon-show" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: block;">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-              <svg class="passphrase-icon-hide" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-              </svg>
+          <div class="passphrase-field-wrap">
+            <input type="password" id="passphrase-input" placeholder="Ingresa la contraseña ${currentPassphrase ? 'nueva' : ''}" autocomplete="off" />
+            <button type="button" class="passphrase-eye-btn" id="passphrase-toggle" title="Mostrar contraseña">
+              ${eyeIconsSvg}
             </button>
           </div>
           <div class="passphrase-modal-actions">
@@ -170,53 +169,27 @@ class CryptoGate {
       `;
       document.body.appendChild(overlay);
 
+      const wireToggle = (inputEl, btnEl) => {
+        btnEl.addEventListener('click', (e) => {
+          e.preventDefault();
+          const isPassword = inputEl.type === 'password';
+          inputEl.type = isPassword ? 'text' : 'password';
+          btnEl.classList.toggle('is-visible', isPassword);
+          btnEl.title = isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña';
+        });
+      };
+
       if (currentPassphrase) {
         const currentInput = overlay.querySelector('#current-passphrase');
         const currentToggleBtn = overlay.querySelector('#current-toggle');
-        const currentIconShow = overlay.querySelector('.current-icon-show');
-        const currentIconHide = overlay.querySelector('.current-icon-hide');
         currentInput.value = currentPassphrase;
-
-        currentToggleBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          const isPassword = currentInput.type === 'password';
-          currentInput.type = isPassword ? 'text' : 'password';
-          currentIconShow.style.display = isPassword ? 'none' : 'block';
-          currentIconHide.style.display = isPassword ? 'block' : 'none';
-          currentToggleBtn.title = isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña';
-        });
-
-        currentToggleBtn.addEventListener('mouseenter', () => {
-          currentToggleBtn.style.backgroundColor = 'var(--surface-2, #161D22)';
-        });
-
-        currentToggleBtn.addEventListener('mouseleave', () => {
-          currentToggleBtn.style.backgroundColor = 'transparent';
-        });
+        wireToggle(currentInput, currentToggleBtn);
       }
 
       const input = overlay.querySelector('#passphrase-input');
       const toggleBtn = overlay.querySelector('#passphrase-toggle');
-      const iconShow = overlay.querySelector('.passphrase-icon-show');
-      const iconHide = overlay.querySelector('.passphrase-icon-hide');
+      wireToggle(input, toggleBtn);
       input.focus();
-
-      toggleBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const isPassword = input.type === 'password';
-        input.type = isPassword ? 'text' : 'password';
-        iconShow.style.display = isPassword ? 'none' : 'block';
-        iconHide.style.display = isPassword ? 'block' : 'none';
-        toggleBtn.title = isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña';
-      });
-
-      toggleBtn.addEventListener('mouseenter', () => {
-        toggleBtn.style.backgroundColor = 'var(--surface-2, #F3F4F6)';
-      });
-
-      toggleBtn.addEventListener('mouseleave', () => {
-        toggleBtn.style.backgroundColor = 'transparent';
-      });
 
       const cleanup = () => overlay.remove();
 
