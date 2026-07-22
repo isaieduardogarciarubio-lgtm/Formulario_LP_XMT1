@@ -136,14 +136,12 @@ class CryptoGate {
       `;
 
       const currentSection = currentPassphrase ? `
-        <div class="passphrase-current-box">
-          <div class="passphrase-current-label">Contraseña guardada actualmente:</div>
-          <div class="passphrase-field-wrap">
-            <input type="password" id="current-passphrase" readonly />
-            <button type="button" class="passphrase-eye-btn" id="current-toggle" title="Mostrar contraseña">
-              ${eyeIconsSvg}
-            </button>
-          </div>
+        <div class="passphrase-current-label">Contraseña guardada actualmente:</div>
+        <div class="passphrase-field-wrap">
+          <input type="password" id="current-passphrase" readonly />
+          <button type="button" class="passphrase-eye-btn" id="current-toggle" title="Mostrar contraseña">
+            ${eyeIconsSvg}
+          </button>
         </div>
       ` : '';
 

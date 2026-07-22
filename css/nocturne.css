@@ -282,15 +282,7 @@ body {
   justify-content: flex-end;
 }
 
-/* Caja de "contraseña guardada actualmente" dentro del modal */
-.passphrase-current-box {
-  margin-bottom: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  background: var(--color-surface-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-popover);
-}
-
+/* Label para campos de contraseña */
 .passphrase-current-label {
   font-size: 0.8rem;
   color: var(--color-text-muted);
@@ -313,11 +305,8 @@ body {
   margin-bottom: 0;
 }
 
-.passphrase-current-box .passphrase-field-wrap {
-  margin-bottom: 0;
-}
-
-.passphrase-current-box .passphrase-field-wrap input {
+/* Input de contraseña guardada: monospace y más pequeño */
+#current-passphrase {
   font-family: "SF Mono", "Fira Code", Consolas, monospace;
   font-size: 0.8rem;
 }
