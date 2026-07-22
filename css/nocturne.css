@@ -323,8 +323,15 @@ body {
 }
 
 .passphrase-eye-btn {
+  /* Neutraliza el reset genérico de Skeleton para <button> (height, padding,
+     line-height fijos) que si no, gana por especificidad de elemento y
+     comprime/oculta el SVG. */
   flex-shrink: 0;
-  width: 48px;
+  width: 36px;
+  height: auto;
+  padding: 0;
+  line-height: normal;
+  font-size: 0;
   background: var(--color-surface-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-popover);
