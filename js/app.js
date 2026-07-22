@@ -140,107 +140,12 @@ class FormApp {
   renderPassphraseSection() {
     const wrap = document.createElement('div');
     wrap.style.marginTop = 'var(--spacing-lg)';
+    wrap.style.textAlign = 'center';
 
-    const currentPassphrase = CryptoEngine.getSessionPassphrase();
-
-    if (currentPassphrase) {
-      // Mostrar contraseña actual guardada
-      const viewSection = document.createElement('div');
-      viewSection.style.marginBottom = '1rem';
-      viewSection.innerHTML = `
-        <div style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem; text-align: center;">
-          Contraseña guardada en este dispositivo:
-        </div>
-      `;
-
-      const inputWrap = document.createElement('div');
-      inputWrap.style.display = 'flex';
-      inputWrap.style.alignItems = 'center';
-      inputWrap.style.gap = '8px';
-      inputWrap.style.justifyContent = 'center';
-
-      const input = document.createElement('input');
-      input.type = 'password';
-      input.readOnly = true;
-      input.value = currentPassphrase;
-      input.style.flex = '0 1 200px';
-      input.style.padding = '8px 12px';
-      input.style.border = '1px solid var(--border)';
-      input.style.borderRadius = '4px';
-      input.style.backgroundColor = 'var(--surface-2)';
-      input.style.color = 'var(--text)';
-      input.style.fontFamily = 'monospace';
-      input.style.fontSize = '13px';
-
-      const toggleBtn = document.createElement('button');
-      toggleBtn.type = 'button';
-      toggleBtn.style.background = 'none';
-      toggleBtn.style.border = 'none';
-      toggleBtn.style.cursor = 'pointer';
-      toggleBtn.style.padding = '4px';
-      toggleBtn.style.color = 'var(--text-muted)';
-      toggleBtn.style.display = 'flex';
-      toggleBtn.style.alignItems = 'center';
-      toggleBtn.style.justifyContent = 'center';
-      toggleBtn.style.width = '32px';
-      toggleBtn.style.height = '32px';
-      toggleBtn.style.borderRadius = '4px';
-      toggleBtn.style.transition = 'background-color 0.15s';
-      toggleBtn.title = 'Mostrar contraseña';
-
-      const svgShow = document.createElement('svg');
-      svgShow.setAttribute('width', '18');
-      svgShow.setAttribute('height', '18');
-      svgShow.setAttribute('viewBox', '0 0 24 24');
-      svgShow.setAttribute('fill', 'none');
-      svgShow.setAttribute('stroke', 'currentColor');
-      svgShow.setAttribute('stroke-width', '2');
-      svgShow.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
-      svgShow.style.display = 'block';
-
-      const svgHide = document.createElement('svg');
-      svgHide.setAttribute('width', '18');
-      svgHide.setAttribute('height', '18');
-      svgHide.setAttribute('viewBox', '0 0 24 24');
-      svgHide.setAttribute('fill', 'none');
-      svgHide.setAttribute('stroke', 'currentColor');
-      svgHide.setAttribute('stroke-width', '2');
-      svgHide.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
-      svgHide.style.display = 'none';
-
-      toggleBtn.appendChild(svgShow);
-      toggleBtn.appendChild(svgHide);
-
-      toggleBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const isPassword = input.type === 'password';
-        input.type = isPassword ? 'text' : 'password';
-        svgShow.style.display = isPassword ? 'none' : 'block';
-        svgHide.style.display = isPassword ? 'block' : 'none';
-        toggleBtn.title = isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña';
-      });
-
-      toggleBtn.addEventListener('mouseenter', () => {
-        toggleBtn.style.backgroundColor = 'var(--surface-2)';
-      });
-
-      toggleBtn.addEventListener('mouseleave', () => {
-        toggleBtn.style.backgroundColor = 'transparent';
-      });
-
-      inputWrap.appendChild(input);
-      inputWrap.appendChild(toggleBtn);
-      viewSection.appendChild(inputWrap);
-      wrap.appendChild(viewSection);
-    }
-
-    // Botón para cambiar/configurar contraseña
-    const btnWrap = document.createElement('div');
-    btnWrap.style.textAlign = 'center';
-
+    const hasPassphrase = !!CryptoEngine.getSessionPassphrase();
     const btn = document.createElement('button');
     btn.className = 'btn btn-secondary btn-sm';
-    btn.textContent = currentPassphrase ? 'Cambiar contraseña de encriptación' : 'Configurar contraseña de encriptación';
+    btn.textContent = hasPassphrase ? 'Cambiar contraseña de encriptación' : 'Configurar contraseña de encriptación';
     btn.addEventListener('click', async () => {
       CryptoEngine.clearSessionPassphrase();
       try {
@@ -251,9 +156,7 @@ class FormApp {
       }
       this.showMenu();
     });
-    btnWrap.appendChild(btn);
-    wrap.appendChild(btnWrap);
-
+    wrap.appendChild(btn);
     return wrap;
   }
 
