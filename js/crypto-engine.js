@@ -127,7 +127,10 @@ class CryptoGate {
           <p style="font-size: 0.82rem; color: var(--color-error, #ff453a); margin-top: -8px;">
             Verifica que sea la contraseña vigente. Si escribes una distinta a la configurada por tu admin, el archivo se generará sin error, pero <strong>no podrá desencriptarse</strong> después en el dashboard.
           </p>
-          <input type="password" id="passphrase-input" placeholder="Contraseña" autocomplete="off" />
+          <div style="position: relative; display: flex; align-items: center;">
+            <input type="password" id="passphrase-input" placeholder="Contraseña" autocomplete="off" style="flex: 1; padding-right: 40px;" />
+            <button type="button" id="passphrase-toggle" style="position: absolute; right: 8px; background: none; border: none; cursor: pointer; padding: 4px; color: var(--color-text-secondary, #666); font-size: 0.9rem;" title="Mostrar contraseña">👁️</button>
+          </div>
           <div class="passphrase-modal-actions">
             <button type="button" class="btn btn-secondary" id="passphrase-cancel">Cancelar</button>
             <button type="button" class="btn btn-primary" id="passphrase-confirm">Confirmar</button>
@@ -137,7 +140,16 @@ class CryptoGate {
       document.body.appendChild(overlay);
 
       const input = overlay.querySelector('#passphrase-input');
+      const toggleBtn = overlay.querySelector('#passphrase-toggle');
       input.focus();
+
+      toggleBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        toggleBtn.textContent = isPassword ? '🙈' : '👁️';
+        toggleBtn.title = isPassword ? 'Ocultar contraseña' : 'Mostrar contraseña';
+      });
 
       const cleanup = () => overlay.remove();
 
