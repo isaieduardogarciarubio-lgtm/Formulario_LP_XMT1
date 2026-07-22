@@ -127,7 +127,37 @@ class FormApp {
 
     content.appendChild(grid);
     content.appendChild(this.renderSavedLogsSection());
+    content.appendChild(this.renderPassphraseSection());
     app.appendChild(content);
+  }
+
+  /**
+   * La contraseña de encriptación ahora se guarda en este dispositivo
+   * (localStorage) para no pedirla en cada sesión — pero si el operador la
+   * escribió mal o el admin la rotó, necesita una forma de corregirla sin
+   * tener que saber borrar el localStorage del navegador a mano.
+   */
+  renderPassphraseSection() {
+    const wrap = document.createElement('div');
+    wrap.style.marginTop = 'var(--spacing-lg)';
+    wrap.style.textAlign = 'center';
+
+    const hasPassphrase = !!CryptoEngine.getSessionPassphrase();
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-secondary btn-sm';
+    btn.textContent = hasPassphrase ? 'Cambiar contraseña de encriptación' : 'Configurar contraseña de encriptación';
+    btn.addEventListener('click', async () => {
+      CryptoEngine.clearSessionPassphrase();
+      try {
+        await CryptoGate.ensurePassphrase();
+        this.showAlert('Contraseña guardada en este dispositivo', 'success');
+      } catch (e) {
+        this.showAlert('Operación cancelada', 'info');
+      }
+      this.showMenu();
+    });
+    wrap.appendChild(btn);
+    return wrap;
   }
 
   /**

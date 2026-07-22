@@ -29,19 +29,31 @@ class ExportEngine {
    * Nombre de archivo de una foto: índice + un identificador legible del
    * registro (shipment / HU) para poder ubicarla fácilmente.
    */
-  static photoFilename(record, index, formConfig, col, multiplePhotoCols) {
+  static photoFilename(record, index, formConfig, col, multiplePhotoCols, ext = 'jpg') {
     // La segunda columna suele ser el id escaneado (shipment / HU)
     const idCol = (formConfig.csvColumns || [])[1];
     const idVal = idCol ? record[idCol.field] : '';
     const seq = String(index + 1).padStart(3, '0');
     const suffix = multiplePhotoCols ? `_${this.sanitize(col.field)}` : '';
-    return `${seq}_${this.sanitize(idVal)}${suffix}.jpg`;
+    return `${seq}_${this.sanitize(idVal)}${suffix}.${ext}`;
   }
 
-  /** Extrae la parte base64 de un data URL (`data:image/jpeg;base64,...`) */
+  /** Extrae la parte base64 de un data URL (`data:image/webp;base64,...`) */
   static dataUrlToBase64(dataUrl) {
     const comma = dataUrl.indexOf(',');
     return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+  }
+
+  /**
+   * Extensión real de archivo a partir del mime type del data URL — la
+   * captura ahora puede generar WebP o, si el navegador no lo soporta,
+   * JPEG (ver FormEngine.compressImage). Nunca asumir .jpg fijo.
+   */
+  static extensionFromDataUrl(dataUrl) {
+    const match = /^data:image\/(\w+);/.exec(dataUrl);
+    if (!match) return 'jpg';
+    const type = match[1].toLowerCase();
+    return type === 'jpeg' ? 'jpg' : type;
   }
 
   /**
@@ -60,7 +72,8 @@ class ExportEngine {
       photoCols.forEach((col) => {
         const dataUrl = record[col.field];
         if (dataUrl && String(dataUrl).startsWith('data:')) {
-          const filename = this.photoFilename(record, index, formConfig, col, multiple);
+          const ext = this.extensionFromDataUrl(dataUrl);
+          const filename = this.photoFilename(record, index, formConfig, col, multiple, ext);
           zip.file(`${folder}fotos/${filename}`, this.dataUrlToBase64(dataUrl), { base64: true });
           copy[col.field] = `fotos/${filename}`;
           photoCount++;

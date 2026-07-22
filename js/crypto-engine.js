@@ -2,7 +2,11 @@
  * Motor de encriptación — AES-256-GCM con passphrase compartido.
  * Protege el CSV mientras viaja fuera de Grid (correo/Slack/USB) antes de
  * subirse al dashboard de consolidado. El passphrase se pide una sola vez
- * por sesión de navegador (sessionStorage) y nunca se guarda en disco.
+ * por dispositivo/navegador (localStorage, no sessionStorage) — pedirla en
+ * cada pestaña resultaba muy confuso para el operador en el uso diario.
+ * Sigue siendo un secreto real (nunca vive en el código, a diferencia de
+ * una clave fija), solo que ahora persiste entre sesiones en el mismo
+ * dispositivo en vez de pedirse cada vez.
  */
 class CryptoEngine {
   static SESSION_KEY = 'audit_passphrase';
@@ -89,21 +93,21 @@ class CryptoEngine {
   }
 
   static getSessionPassphrase() {
-    return sessionStorage.getItem(this.SESSION_KEY) || null;
+    return localStorage.getItem(this.SESSION_KEY) || null;
   }
 
   static setSessionPassphrase(passphrase) {
-    sessionStorage.setItem(this.SESSION_KEY, passphrase);
+    localStorage.setItem(this.SESSION_KEY, passphrase);
   }
 
   static clearSessionPassphrase() {
-    sessionStorage.removeItem(this.SESSION_KEY);
+    localStorage.removeItem(this.SESSION_KEY);
   }
 }
 
 /**
- * Gate de UI: pide el passphrase una sola vez por sesión y lo cachea.
- * Se usa antes de cada exportación encriptada.
+ * Gate de UI: pide el passphrase una sola vez por dispositivo y lo cachea
+ * en localStorage. Se usa antes de cada exportación encriptada.
  */
 class CryptoGate {
   static ensurePassphrase() {
@@ -119,7 +123,7 @@ class CryptoGate {
       overlay.innerHTML = `
         <div class="passphrase-modal-card">
           <h3>Contraseña de encriptación</h3>
-          <p>Ingresa la contraseña compartida para proteger este archivo mientras viaja fuera de Grid. Pregúntale a un administrador si no la tienes.</p>
+          <p>Ingresa la contraseña compartida para proteger tus archivos mientras viajan fuera de Grid. Solo se pide una vez en este dispositivo. Pregúntale a un administrador si no la tienes.</p>
           <p style="font-size: 0.82rem; color: var(--color-error, #ff453a); margin-top: -8px;">
             Verifica que sea la contraseña vigente. Si escribes una distinta a la configurada por tu admin, el archivo se generará sin error, pero <strong>no podrá desencriptarse</strong> después en el dashboard.
           </p>

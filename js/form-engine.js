@@ -842,8 +842,12 @@ class FormEngine {
   }
 
   /**
-   * Comprime/redimensiona una imagen usando canvas y la devuelve como
-   * data URL JPEG. Reescala para que el lado largo no exceda maxDim.
+   * Comprime/redimensiona una imagen usando canvas y la devuelve como data
+   * URL. Reescala para que el lado largo no exceda maxDim. Prefiere WebP
+   * (~25% más liviano que JPEG a la misma calidad visual, importa para el
+   * consumo de datos móviles del operador); si el navegador no lo soporta,
+   * toDataURL cae silenciosamente a PNG en vez de fallar — se detecta y se
+   * usa JPEG como respaldo explícito.
    */
   compressImage(file, { maxDim = 1280, quality = 0.6 } = {}) {
     return new Promise((resolve, reject) => {
@@ -863,7 +867,8 @@ class FormEngine {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
         try {
-          resolve(canvas.toDataURL('image/jpeg', quality));
+          const webp = canvas.toDataURL('image/webp', quality);
+          resolve(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', quality));
         } catch (e) {
           reject(e);
         }
