@@ -147,9 +147,11 @@ class FormApp {
     btn.className = 'btn btn-secondary btn-sm';
     btn.textContent = hasPassphrase ? 'Cambiar contraseña de encriptación' : 'Configurar contraseña de encriptación';
     btn.addEventListener('click', async () => {
-      CryptoEngine.clearSessionPassphrase();
+      // No borrar la contraseña antes de abrir el modal: promptPassphrase()
+      // necesita leerla todavía guardada para mostrarla en la caja "contraseña
+      // guardada actualmente". Si el operador cancela, además, así no se pierde.
       try {
-        await CryptoGate.ensurePassphrase();
+        await CryptoGate.promptPassphrase();
         this.showAlert('Contraseña guardada en este dispositivo', 'success');
       } catch (e) {
         this.showAlert('Operación cancelada', 'info');
