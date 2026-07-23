@@ -1,0 +1,2173 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Captura de Auditoría — Grid</title>
+
+  <style>
+/* ==========================================================================
+   OLED Minimalist Progressive — UX/UI Design Guide v3.0
+   Dark minimalism, mobile-first, one question per screen flows.
+   ========================================================================== */
+
+:root {
+  /* OLED True Dark Palette */
+  --color-bg: #000000;
+  --color-surface: #1c1c1e;
+  --color-surface-hover: #2c2c2e;
+  --color-surface-elevated: #2c2c2e;
+  --color-highlight: #3a3a3c;
+  --color-text-primary: #ffffff;
+  --color-text-muted: #8e8e93;
+  --color-error: #ff453a;
+  --color-success: #008300;
+  --color-border: #2c2c2e;
+
+  /* Shape */
+  --radius-pill: 9999px;
+  --radius-card: 20px;
+  --radius-popover: 16px;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Typography (26pt / 14pt) */
+  --font-h1: 1.75rem;
+  --font-body: 0.95rem;
+  --font-button: 0.95rem;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+.icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.icon-danger {
+  color: var(--color-error);
+}
+
+/* Layout */
+
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.navbar-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--spacing-md) var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  min-height: 32px;
+}
+
+.navbar-logo {
+  height: 28px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.navbar-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-btn-plain {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  margin: -8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.icon-btn-plain:hover {
+  opacity: 0.7;
+}
+
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
+@media (max-width: 768px) {
+  .navbar-inner {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .content {
+    padding: var(--spacing-md);
+  }
+}
+
+/* Buttons */
+
+.btn {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: none;
+  border-radius: var(--radius-pill);
+  font-size: var(--font-button);
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, opacity 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  text-decoration: none;
+  line-height: 1;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn .icon {
+  flex-shrink: 0;
+}
+
+.btn-primary {
+  background: var(--color-text-primary);
+  color: #000000;
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  transform: translateY(-1px);
+}
+
+.btn-sm {
+  padding: var(--spacing-xs) var(--spacing-md);
+  font-size: 0.82rem;
+}
+
+.btn-icon-only {
+  padding: var(--spacing-sm);
+  width: 38px;
+  height: 38px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
+/* Form flow: one question per screen */
+
+.step-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+  padding-top: var(--spacing-lg);
+  padding-bottom: 120px;
+}
+
+.step-progress {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  letter-spacing: 0.03em;
+  margin-bottom: var(--spacing-md);
+}
+
+.step-question {
+  font-size: var(--font-h1);
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-bottom: var(--spacing-xl);
+}
+
+.step-input-wrap {
+  margin-bottom: var(--spacing-sm);
+}
+
+.step-input {
+  width: 100%;
+  border: none;
+  border-bottom: 2px solid var(--color-text-primary);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-h1);
+  font-weight: 600;
+  padding: var(--spacing-sm) 0 var(--spacing-md);
+  transition: border-color 0.15s ease;
+}
+
+.step-input::placeholder {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
+.step-input:focus {
+  outline: none;
+  caret-color: var(--color-text-primary);
+}
+
+.step-input-wrap.error .step-input {
+  border-bottom-color: var(--color-error);
+}
+
+textarea.step-input {
+  resize: vertical;
+  min-height: 96px;
+}
+
+select.step-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4px center;
+  padding-right: var(--spacing-xl);
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.step-input-wrap.shake {
+  animation: shake 0.2s ease;
+}
+
+.step-support {
+  min-height: 1.2em;
+  font-size: var(--font-body);
+  color: var(--color-text-muted);
+}
+
+.step-support.error {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.step-actions {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg) calc(var(--spacing-md) + env(safe-area-inset-bottom));
+  background: var(--color-bg);
+}
+
+.step-actions .btn-primary {
+  margin-left: auto;
+}
+
+/* Scanner */
+
+.scan-mode-toggle {
+  display: flex;
+  gap: var(--spacing-xs);
+  background: var(--color-surface);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  margin-top: var(--spacing-md);
+}
+
+.scan-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.scan-mode-btn.active {
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+}
+
+.scanner-body {
+  margin-top: var(--spacing-md);
+}
+
+.scanner-viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 60vh;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  background: #0a0a0a;
+}
+
+.scanner-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scanner-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 66%;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.scanner-frame::before,
+.scanner-frame::after {
+  content: '';
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border: 3px solid #ffffff;
+}
+.scanner-frame::before {
+  top: 0;
+  left: 0;
+  border-right: none;
+  border-bottom: none;
+  border-top-left-radius: 12px;
+}
+.scanner-frame::after {
+  bottom: 0;
+  right: 0;
+  border-left: none;
+  border-top: none;
+  border-bottom-right-radius: 12px;
+}
+
+.scanner-line {
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  animation: scanline 2s ease-in-out infinite;
+}
+
+@keyframes scanline {
+  0%, 100% { top: 12%; }
+  50% { top: 88%; }
+}
+
+.scanner-torch {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.scanner-torch.active {
+  background: var(--color-text-primary);
+  color: #000000;
+}
+
+.scanner-result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl) var(--spacing-lg);
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  min-height: 200px;
+  justify-content: center;
+}
+
+.scanner-result-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-bg);
+  color: var(--color-success);
+}
+
+/* Choice field */
+
+.choice-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+.choice-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-lg);
+  background: var(--color-surface);
+  border: 2px solid transparent;
+  border-radius: var(--radius-card);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: var(--font-body);
+  font-weight: 600;
+}
+
+.choice-btn:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-text-muted);
+}
+
+.choice-btn.selected {
+  background: var(--color-highlight);
+  border-color: var(--color-text-primary);
+}
+
+/* Photo capture */
+
+.photo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  max-height: 60vh;
+  background: var(--color-surface);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-card);
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--spacing-lg);
+}
+
+.photo-capture-file {
+  display: none;
+}
+
+.photo-preview {
+  width: 100%;
+  max-height: 60vh;
+  border-radius: var(--radius-card);
+  object-fit: contain;
+  background: var(--color-surface);
+}
+
+.photo-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-lg);
+}
+
+/* Toast notifications */
+
+.toast-container {
+  position: fixed;
+  bottom: var(--spacing-lg);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  max-width: 90%;
+  width: 100%;
+  max-width: 400px;
+}
+
+.toast {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-pill);
+  font-size: 0.9rem;
+  font-weight: 500;
+  animation: slideUp 0.3s ease;
+  word-break: break-word;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.toast.info {
+  background: var(--color-surface-elevated);
+  color: var(--color-text-primary);
+}
+
+.toast.error {
+  background: var(--color-error);
+  color: #ffffff;
+}
+
+.toast.success {
+  background: var(--color-success);
+  color: #ffffff;
+}
+
+/* Modal */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-lg);
+  max-width: 90%;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-close {
+  position: absolute;
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Menu cards */
+
+.menu-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-lg);
+  cursor: pointer;
+  margin-bottom: var(--spacing-md);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.menu-card:hover {
+  background: var(--color-surface-hover);
+  transform: translateY(-2px);
+}
+
+.menu-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+.menu-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.menu-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.menu-card-desc {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.menu-card-arrow {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+/* Pending badge */
+
+.pending-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-error);
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+/* Destino / Doca pickers */
+
+.picker-search {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.picker-search input {
+  flex: 1;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-popover);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+}
+
+.picker-search input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.picker-option {
+  padding: var(--spacing-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-popover);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.picker-option:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-text-muted);
+}
+
+.picker-option.selected {
+  background: var(--color-highlight);
+  border-color: var(--color-text-primary);
+}
+
+  </style>
+</head>
+<body>
+<div class="app-container">
+  <div class="navbar">
+    <div class="navbar-inner">
+      <div class="navbar-title">Auditoría Grid</div>
+      <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
+        <span id="pending-icon" style="display: none; margin-right: 8px;">
+          <span class="pending-badge" id="pending-count">0</span>
+        </span>
+      </div>
+    </div>
+  </div>
+  <div id="content" class="content"></div>
+</div>
+
+<div id="toast-container" class="toast-container"></div>
+
+<script>
+/**
+ * SVG Icons — line style, clean, Atlas/Andes-inspired iconography
+ */
+const Icons = (() => {
+  const PATHS = {
+    arrowRight: '<path d="M5 12h14"/><path d="M13 6l6 6-6 6"/>',
+    arrowLeft: '<path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/>',
+    arrowDown: '<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    home: '<path d="M3 10v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V10"/><path d="M3 10l9-7 9 7"/><path d="M10 15h4v6h-4z"/>',
+    clipboard: '<rect x="6" y="4" width="12" height="17" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M9 11h6M9 15h6"/>',
+    star: '<path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.2-5.4 3.2 1.3-6-4.6-4.1 6.1-.6z" stroke-linejoin="round"/>',
+    scan: '<path d="M4 8V6a2 2 0 0 1 2-2h2"/><path d="M16 4h2a2 2 0 0 1 2 2v2"/><path d="M20 16v2a2 2 0 0 1-2 2h-2"/><path d="M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M4 12h16"/>',
+    qr: '<rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3M20 14v.01M14 20h.01M17 20h3v-3"/>',
+    keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/>',
+    flash: '<path d="M13 2L4.5 12.5a.6.6 0 0 0 .5 1H11l-1 8.5L18.5 11.5a.6.6 0 0 0-.5-1H12z" stroke-linejoin="round"/>',
+    refresh: '<path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"/><path d="M3 21v-5h5"/>',
+    checkCircle: '<circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/>',
+    alertCircle: '<circle cx="12" cy="12" r="9"/><path d="M12 8v5"/><circle cx="12" cy="16" r="0.75" fill="currentColor" stroke="none"/>',
+    infoCircle: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r="0.75" fill="currentColor" stroke="none"/>',
+    inbox: '<path d="M4 12h4l1.5 3h5L16 12h4"/><path d="M6 5h12l2 7v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6z"/>',
+    trash: '<path d="M19 6H5M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M10 10v4M14 10v4"/>',
+    camera: '<path d="M4 8a2 2 0 0 1 2-2h1.5l1-2h5l1 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 15l-5-5-9 9"/>',
+  };
+
+  function svg(name, opts = {}) {
+    const path = PATHS[name];
+    if (!path) {
+      console.warn(`Icon "${name}" not found`);
+      return '';
+    }
+
+    const size = opts.size || 20;
+    const strokeWidth = opts.strokeWidth || 1.8;
+    const className = opts.className ? ` ${opts.className}` : '';
+
+    return `<svg class="icon${className}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+  }
+
+  return { svg };
+})();
+
+/**
+ * IndexedDB storage for captured records
+ */
+class RecordStore {
+  static DB_NAME = 'auditorias_grid_db';
+  static DB_VERSION = 1;
+  static STORE = 'records';
+  static _dbPromise = null;
+
+  static open() {
+    if (this._dbPromise) return this._dbPromise;
+    this._dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(this.DB_NAME, this.DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(this.STORE)) {
+          const store = db.createObjectStore(this.STORE, { keyPath: 'uid' });
+          store.createIndex('formId', 'formId', { unique: false });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return this._dbPromise;
+  }
+
+  static genUid(formId) {
+    return `${formId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  static async put(uid, formId, data) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).put({ uid, formId, data, synced: false });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  static async delete(uid) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).delete(uid);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  static async getAll() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readonly');
+      const req = tx.objectStore(this.STORE).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  static async getByFormId(formId) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readonly');
+      const req = tx.objectStore(this.STORE).index('formId').getAll(formId);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  static async clearAll() {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      tx.objectStore(this.STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+}
+
+/**
+ * GridClient — interact with Grid API for state buckets and document uploads
+ */
+class GridClient {
+  constructor(docId) {
+    this.docId = docId;
+    this.baseUrl = location.origin;
+    this._updatedAtByName = {};
+  }
+
+  async _fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        const err = new Error(`Tiempo de espera agotado (${timeoutMs / 1000}s)`);
+        err.isTimeout = true;
+        throw err;
+      }
+      const err = new Error('Sin conexión con el servidor (red no disponible)');
+      err.isNetworkError = true;
+      err.cause = e;
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  async getMe() {
+    try {
+      const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/me`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.warn('Could not fetch /me:', e);
+      return null;
+    }
+  }
+
+  async uploadPublicDocument(blob, filename) {
+    const fd = new FormData();
+    fd.append('file', blob, filename);
+    fd.append('title', filename);
+    fd.append('description', 'Foto de auditoría (captura)');
+    fd.append('visibility', 'public');
+
+    const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents`, {
+      method: 'POST',
+      credentials: 'include',
+      body: fd,
+    }, 30000);
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || err.message || `HTTP ${res.status}`);
+    }
+    const body = await res.json();
+    return body.id || body.doc_id || (body.document && body.document.id) || null;
+  }
+
+  async getStateBucket(name) {
+    const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
+      credentials: 'include',
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`${res.status}`);
+    const body = await res.json();
+    this._updatedAtByName[name] = body.updated_at || '';
+    return body.state ?? null;
+  }
+
+  async setStateBucket(name, data) {
+    const ifUpdatedAt = this._updatedAtByName[name] || '';
+    const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: data, if_updated_at: ifUpdatedAt }),
+      credentials: 'include',
+    });
+
+    if (res.status === 409) {
+      const conflictBody = await res.json().catch(() => ({}));
+      if (conflictBody.current_updated_at) {
+        this._updatedAtByName[name] = conflictBody.current_updated_at;
+      }
+      return { conflict: true };
+    }
+    if (!res.ok) throw new Error(`${res.status}`);
+    const body = await res.json();
+    this._updatedAtByName[name] = body.updated_at || '';
+    return { ok: true };
+  }
+}
+
+/**
+ * ScanParser — detects and parses QR/barcode formats
+ */
+class ScanParser {
+  static parseId(rawScan, idType) {
+    let cleaned = rawScan.trim().toUpperCase();
+
+    if (idType === 'shipment') {
+      if (/^\d{11}$/.test(cleaned)) return cleaned;
+      return null;
+    }
+
+    if (idType === 'hu') {
+      if (/^\d{13}$/.test(cleaned)) return cleaned;
+      return null;
+    }
+
+    if (idType === 'plate') {
+      const plateMatch = cleaned.match(/^[A-Z]{3}[-\s]?\d{3}$/);
+      if (plateMatch) {
+        return cleaned.replace(/\s/g, '-');
+      }
+      return null;
+    }
+
+    return cleaned;
+  }
+}
+
+/**
+ * Scanner engine — BarcodeDetector or ZXing fallback
+ */
+class ScannerEngine {
+  constructor(videoElement, onDetected) {
+    this.videoElement = videoElement;
+    this.onDetected = onDetected;
+    this.running = false;
+    this.detector = null;
+    this.detectorType = null;
+    this.initDetector();
+  }
+
+  initDetector() {
+    if ('BarcodeDetector' in window) {
+      try {
+        this.detector = new BarcodeDetector({ formats: ['ean_13', 'code_128', 'qr_code'] });
+        this.detectorType = 'native';
+      } catch (e) {
+        console.warn('BarcodeDetector not supported:', e);
+        this.detectorType = null;
+      }
+    }
+  }
+
+  async start() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 960 } },
+        audio: false,
+      });
+      this.videoElement.srcObject = stream;
+      this.running = true;
+      this.scanLoop();
+    } catch (e) {
+      console.error('Camera error:', e);
+      this.onDetected({ error: 'No se pudo acceder a la cámara' });
+    }
+  }
+
+  async scanLoop() {
+    if (!this.running) return;
+
+    if (this.detectorType === 'native' && this.detector) {
+      try {
+        const barcodes = await this.detector.detect(this.videoElement);
+        if (barcodes.length > 0) {
+          this.onDetected({ rawValue: barcodes[0].rawValue });
+          return;
+        }
+      } catch (e) {
+        console.warn('Detector error:', e);
+      }
+    }
+
+    requestAnimationFrame(() => this.scanLoop());
+  }
+
+  stop() {
+    this.running = false;
+    if (this.videoElement && this.videoElement.srcObject) {
+      this.videoElement.srcObject.getTracks().forEach(t => t.stop());
+      this.videoElement.srcObject = null;
+    }
+  }
+
+  setTorch(enabled) {
+    if (!this.videoElement || !this.videoElement.srcObject) return;
+    const track = this.videoElement.srcObject.getVideoTracks()[0];
+    if (!track) return;
+    track.getSettings().torch !== undefined && track.applyConstraints({
+      advanced: [{ torch: enabled }]
+    }).catch(() => {});
+  }
+}
+
+/**
+ * FormEngine — dynamic form rendering
+ */
+class FormEngine {
+  constructor(formConfig, { onComplete, onCancel, catalogIndex } = {}) {
+    this.formConfig = formConfig;
+    this.onComplete = onComplete;
+    this.onCancel = onCancel;
+    this.catalogIndex = catalogIndex || {};
+    this.stepIndex = 0;
+    this.values = {};
+    this.container = null;
+    this.currentInput = null;
+    this.scanner = null;
+  }
+
+  get currentField() {
+    return this.formConfig.fields[this.stepIndex];
+  }
+
+  isFieldHidden(field) {
+    return !!(field && field.showIf && !field.showIf(this.values));
+  }
+
+  get isLastStep() {
+    for (let i = this.stepIndex + 1; i < this.formConfig.fields.length; i++) {
+      if (!this.isFieldHidden(this.formConfig.fields[i])) return false;
+    }
+    return true;
+  }
+
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.stepIndex = 0;
+    this.values = {};
+    this.renderStep();
+  }
+
+  stopScanner() {
+    if (this.scanner) {
+      this.scanner.stop();
+      this.scanner = null;
+    }
+  }
+
+  destroy() {
+    this.stopScanner();
+  }
+
+  renderStep() {
+    this.stopScanner();
+    const field = this.currentField;
+
+    if (this.isFieldHidden(field)) {
+      this.values[field.id] = field.valueWhenHidden ? field.valueWhenHidden(this.values) : '';
+      this.advance({ silent: true });
+      return;
+    }
+
+    if (field.type === 'scanner') {
+      this.renderScannerStep(field);
+      return;
+    }
+    if (field.type === 'choice') {
+      this.renderChoiceStep(field);
+      return;
+    }
+    if (field.type === 'photo') {
+      this.renderPhotoStep(field);
+      return;
+    }
+    if (field.type === 'destino_picker') {
+      this.renderDestinoStep(field);
+      return;
+    }
+    if (field.type === 'doca_picker') {
+      this.renderDocaStep(field);
+      return;
+    }
+
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'step-input-wrap';
+
+    const input = this.buildInput(field);
+    input.value = this.values[field.id] || '';
+    inputWrap.appendChild(input);
+    screen.appendChild(inputWrap);
+
+    const support = document.createElement('div');
+    support.className = 'step-support';
+    screen.appendChild(support);
+
+    this.container.appendChild(screen);
+
+    this.currentInput = input;
+    this.inputWrapEl = inputWrap;
+    this.errorTargetEl = inputWrap;
+    this.supportEl = support;
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && field.type !== 'textarea') {
+        e.preventDefault();
+        this.next();
+      }
+    });
+
+    input.addEventListener('input', () => this.clearError());
+
+    this.renderActions(field);
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  buildProgress() {
+    const fields = this.formConfig.fields;
+    const visible = fields.map((_, i) => i).filter((i) => !this.isFieldHidden(fields[i]));
+    const total = visible.length;
+    const pos = visible.indexOf(this.stepIndex) + 1;
+
+    const progress = document.createElement('div');
+    progress.className = 'step-progress';
+    progress.textContent = `${pos} / ${total}`;
+    return progress;
+  }
+
+  buildInput(field) {
+    let input;
+
+    if (field.type === 'select') {
+      input = document.createElement('select');
+      input.className = 'step-input';
+      field.options?.forEach(opt => {
+        const option = document.createElement('option');
+        option.value = opt.value || opt;
+        option.textContent = opt.label || opt;
+        input.appendChild(option);
+      });
+    } else if (field.type === 'textarea') {
+      input = document.createElement('textarea');
+      input.className = 'step-input';
+      input.placeholder = field.placeholder || '';
+    } else if (field.type === 'number') {
+      input = document.createElement('input');
+      input.className = 'step-input';
+      input.type = 'number';
+      input.placeholder = field.placeholder || '';
+      if (field.min !== undefined) input.min = field.min;
+      if (field.max !== undefined) input.max = field.max;
+    } else {
+      input = document.createElement('input');
+      input.className = 'step-input';
+      input.type = field.type === 'email' ? 'email' : field.type === 'tel' ? 'tel' : 'text';
+      input.placeholder = field.placeholder || '';
+    }
+
+    return input;
+  }
+
+  renderScannerStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const body = document.createElement('div');
+    body.className = 'scanner-body';
+
+    const viewport = document.createElement('div');
+    viewport.className = 'scanner-viewport';
+
+    const video = document.createElement('video');
+    video.className = 'scanner-video';
+    video.autoplay = true;
+    video.playsinline = true;
+
+    const frame = document.createElement('div');
+    frame.className = 'scanner-frame';
+    const line = document.createElement('div');
+    line.className = 'scanner-line';
+    frame.appendChild(line);
+
+    const torch = document.createElement('button');
+    torch.className = 'scanner-torch';
+    torch.innerHTML = Icons.svg('flash', { size: 20 });
+    torch.addEventListener('click', (e) => {
+      e.preventDefault();
+      torch.classList.toggle('active');
+      this.scanner?.setTorch(torch.classList.contains('active'));
+    });
+
+    viewport.appendChild(video);
+    viewport.appendChild(frame);
+    viewport.appendChild(torch);
+    body.appendChild(viewport);
+
+    const result = document.createElement('div');
+    result.id = 'scanner-result';
+    body.appendChild(result);
+
+    screen.appendChild(body);
+
+    const inputWrap = document.createElement('div');
+    inputWrap.className = 'step-input-wrap';
+    const input = document.createElement('input');
+    input.className = 'step-input';
+    input.placeholder = field.placeholder || 'Escaneado o manual';
+    input.value = this.values[field.id] || '';
+    inputWrap.appendChild(input);
+    screen.appendChild(inputWrap);
+
+    const support = document.createElement('div');
+    support.className = 'step-support';
+    screen.appendChild(support);
+
+    this.container.appendChild(screen);
+
+    this.currentInput = input;
+    this.inputWrapEl = inputWrap;
+    this.errorTargetEl = inputWrap;
+    this.supportEl = support;
+
+    this.scanner = new ScannerEngine(video, (event) => {
+      if (event.error) {
+        this.showError(event.error);
+        return;
+      }
+      if (event.rawValue) {
+        const parsed = ScanParser.parseId(event.rawValue, field.idType);
+        if (parsed) {
+          input.value = parsed;
+          this.clearError();
+        } else {
+          this.showError(`Escaneo no válido para ${field.idType}`);
+          this.inputWrapEl.classList.add('shake');
+        }
+      }
+    });
+
+    this.scanner.start();
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        this.next();
+      }
+    });
+
+    input.addEventListener('input', () => this.clearError());
+
+    this.renderActions(field);
+  }
+
+  renderChoiceStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const optionsDiv = document.createElement('div');
+    optionsDiv.className = 'choice-options';
+
+    field.options?.forEach((opt) => {
+      const label = opt.label || opt;
+      const value = opt.value || opt;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      if (this.values[field.id] === value) btn.classList.add('selected');
+      btn.textContent = label;
+
+      btn.addEventListener('click', () => {
+        this.values[field.id] = value;
+        if (field.resetOnChange) {
+          field.resetOnChange.forEach(f => delete this.values[f]);
+        }
+        this.advance();
+      });
+
+      optionsDiv.appendChild(btn);
+    });
+
+    screen.appendChild(optionsDiv);
+
+    this.container.appendChild(screen);
+
+    this.renderActions(field);
+  }
+
+  renderPhotoStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const photoContainer = document.createElement('div');
+    photoContainer.style.marginTop = 'var(--spacing-lg)';
+
+    const photoEl = document.createElement(this.values[field.id] ? 'img' : 'div');
+    if (this.values[field.id]) {
+      photoEl.className = 'photo-preview';
+      photoEl.src = this.values[field.id];
+    } else {
+      photoEl.className = 'photo-placeholder';
+      photoEl.innerHTML = `${Icons.svg('camera', { size: 32 })}<p style="margin-top: 12px;">Toca o selecciona una foto</p>`;
+    }
+
+    const fileInput = document.createElement('input');
+    fileInput.className = 'photo-capture-file';
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.capture = 'environment';
+
+    photoEl.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) this.loadPhoto(file, field, photoEl, fileInput);
+    });
+
+    photoContainer.appendChild(photoEl);
+    photoContainer.appendChild(fileInput);
+    screen.appendChild(photoContainer);
+
+    this.container.appendChild(screen);
+
+    this.renderActions(field);
+  }
+
+  async loadPhoto(file, field, photoEl, fileInput) {
+    try {
+      const dataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+      });
+
+      const compressed = await this.compressImage(dataUrl);
+      this.values[field.id] = compressed;
+
+      photoEl.className = 'photo-preview';
+      photoEl.src = compressed;
+      photoEl.style.cursor = 'pointer';
+
+      this.clearError();
+    } catch (e) {
+      console.error('Photo error:', e);
+    }
+  }
+
+  async compressImage(dataUrl, maxDim = 1280, quality = 0.6) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > maxDim) { h = (h * maxDim) / w; w = maxDim; }
+        } else {
+          if (h > maxDim) { w = (w * maxDim) / h; h = maxDim; }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+
+        let compressed = canvas.toDataURL('image/webp', quality);
+        if (compressed.startsWith('data:image/webp')) {
+          return resolve(compressed);
+        }
+        compressed = canvas.toDataURL('image/jpeg', quality);
+        resolve(compressed);
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    });
+  }
+
+  renderDestinoStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const searchDiv = document.createElement('div');
+    searchDiv.className = 'picker-search';
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Buscar destino...';
+    searchInput.value = this.values[field.id] || '';
+
+    const optionsDiv = document.createElement('div');
+    optionsDiv.className = 'picker-options';
+
+    const destinoList = Object.keys(this.catalogIndex).sort();
+
+    const renderOptions = (filter = '') => {
+      optionsDiv.innerHTML = '';
+      destinoList
+        .filter(d => d.toLowerCase().includes(filter.toLowerCase()))
+        .forEach(destino => {
+          const opt = document.createElement('div');
+          opt.className = 'picker-option';
+          if (this.values[field.id] === destino) opt.classList.add('selected');
+          opt.textContent = destino;
+          opt.addEventListener('click', () => {
+            this.values[field.id] = destino;
+            this.advance();
+          });
+          optionsDiv.appendChild(opt);
+        });
+    };
+
+    searchInput.addEventListener('input', (e) => {
+      renderOptions(e.target.value);
+    });
+
+    searchDiv.appendChild(searchInput);
+    screen.appendChild(searchDiv);
+    screen.appendChild(optionsDiv);
+
+    this.container.appendChild(screen);
+
+    renderOptions();
+    this.renderActions(field);
+  }
+
+  renderDocaStep(field) {
+    this.container.innerHTML = '';
+
+    const screen = document.createElement('div');
+    screen.className = 'step-screen';
+
+    screen.appendChild(this.buildProgress());
+
+    const h1 = document.createElement('h1');
+    h1.className = 'step-question';
+    h1.textContent = field.label;
+    screen.appendChild(h1);
+
+    const destino = this.values.destino;
+    const docas = destino && this.catalogIndex[destino]?.docas
+      ? this.catalogIndex[destino].docas.split(';').map(d => d.trim()).filter(Boolean)
+      : [];
+
+    if (!docas.length) {
+      const msg = document.createElement('div');
+      msg.style.cssText = 'color: var(--color-error); text-align: center; margin-top: 32px;';
+      msg.textContent = 'No hay docas disponibles para este destino';
+      screen.appendChild(msg);
+      this.container.appendChild(screen);
+      this.renderActions(field);
+      return;
+    }
+
+    const searchDiv = document.createElement('div');
+    searchDiv.className = 'picker-search';
+
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Buscar doca...';
+    searchInput.value = this.values[field.id] || '';
+
+    const optionsDiv = document.createElement('div');
+    optionsDiv.className = 'picker-options';
+
+    const renderOptions = (filter = '') => {
+      optionsDiv.innerHTML = '';
+      docas
+        .filter(d => d.toLowerCase().includes(filter.toLowerCase()))
+        .forEach(doca => {
+          const opt = document.createElement('div');
+          opt.className = 'picker-option';
+          if (this.values[field.id] === doca) opt.classList.add('selected');
+          opt.textContent = doca;
+          opt.addEventListener('click', () => {
+            this.values[field.id] = doca;
+            this.advance();
+          });
+          optionsDiv.appendChild(opt);
+        });
+    };
+
+    searchInput.addEventListener('input', (e) => {
+      renderOptions(e.target.value);
+    });
+
+    searchDiv.appendChild(searchInput);
+    screen.appendChild(searchDiv);
+    screen.appendChild(optionsDiv);
+
+    this.container.appendChild(screen);
+
+    renderOptions();
+    this.renderActions(field);
+  }
+
+  renderActions(field) {
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'step-actions';
+
+    const backBtn = document.createElement('button');
+    backBtn.className = 'btn btn-secondary btn-sm';
+    backBtn.innerHTML = Icons.svg('arrowLeft', { size: 16 });
+    backBtn.addEventListener('click', () => this.back());
+
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'btn btn-primary btn-sm';
+    nextBtn.innerHTML = Icons.svg(this.isLastStep ? 'check' : 'arrowRight', { size: 16 });
+    nextBtn.addEventListener('click', () => this.next());
+
+    actionsEl.appendChild(backBtn);
+    actionsEl.appendChild(nextBtn);
+
+    const existing = document.querySelector('.step-actions');
+    if (existing) existing.replaceWith(actionsEl);
+    else document.body.appendChild(actionsEl);
+
+    this.actionsEl = actionsEl;
+  }
+
+  showError(message) {
+    if (this.errorTargetEl) {
+      this.errorTargetEl.classList.add('error');
+      this.supportEl.classList.add('error');
+      this.supportEl.textContent = message;
+    }
+  }
+
+  clearError() {
+    if (this.errorTargetEl) {
+      this.errorTargetEl.classList.remove('error');
+      this.supportEl.classList.remove('error');
+      this.supportEl.textContent = '';
+    }
+  }
+
+  next() {
+    const field = this.currentField;
+    const value = this.values[field.id];
+
+    if (field.required && !value) {
+      this.showError('Este campo es obligatorio');
+      this.inputWrapEl.classList.add('shake');
+      return;
+    }
+
+    this.clearError();
+    this.advance();
+  }
+
+  back() {
+    do {
+      this.stepIndex--;
+      if (this.stepIndex < 0) {
+        this.onCancel?.();
+        return;
+      }
+    } while (this.isFieldHidden(this.formConfig.fields[this.stepIndex]));
+
+    this.renderStep();
+  }
+
+  advance(opts = {}) {
+    do {
+      this.stepIndex++;
+      if (this.stepIndex >= this.formConfig.fields.length) {
+        this.onComplete?.(this.values);
+        return;
+      }
+    } while (this.isFieldHidden(this.formConfig.fields[this.stepIndex]));
+
+    this.renderStep();
+  }
+}
+
+/**
+ * Form configurations — 5 logs
+ */
+const FORMS_CONFIG = {
+  destino_doca: {
+    id: 'destino_doca',
+    title: 'Pre - Missort',
+    description: 'Escanea HU, valida destino y doca',
+    icon: 'scan',
+    fields: [
+      {
+        id: 'hu',
+        label: '¿Cuál es el HU?',
+        type: 'scanner',
+        idType: 'hu',
+        required: true,
+        placeholder: 'Ej. 2420997802886101',
+      },
+      {
+        id: 'destino',
+        label: '¿Cuál es el destino?',
+        type: 'destino_picker',
+        required: true,
+      },
+      {
+        id: 'doca',
+        label: '¿Cuál es la doca?',
+        type: 'doca_picker',
+        required: true,
+      },
+    ],
+  },
+
+  fury: {
+    id: 'fury',
+    title: 'FURY',
+    description: 'Escanea shipment, foto y situación',
+    icon: 'inbox',
+    fields: [
+      {
+        id: 'shipment',
+        label: '¿Cuál es el Shipment ID?',
+        type: 'scanner',
+        idType: 'shipment',
+        required: true,
+        placeholder: 'Ej. 47326091753',
+      },
+      {
+        id: 'foto',
+        label: 'Toma una foto del paquete',
+        type: 'photo',
+        required: true,
+      },
+      {
+        id: 'situacion',
+        label: '¿Cuál es la situación?',
+        type: 'choice',
+        required: true,
+        options: ['Sin Master', 'Dañado', 'Abierto'],
+      },
+      {
+        id: 'valor',
+        label: 'Valor en USD (opcional)',
+        type: 'number',
+        required: false,
+        placeholder: 'Ej. 120',
+        min: 0,
+      },
+    ],
+  },
+
+  contenerizado: {
+    id: 'contenerizado',
+    title: 'Contenerizado',
+    description: 'Escanea shipment y situación (foto si hay daño)',
+    icon: 'inbox',
+    fields: [
+      {
+        id: 'shipment',
+        label: '¿Cuál es el Shipment ID?',
+        type: 'scanner',
+        idType: 'shipment',
+        required: true,
+        placeholder: 'Ej. 47326091753',
+      },
+      {
+        id: 'situacion',
+        label: '¿Cuál es la situación?',
+        type: 'choice',
+        required: true,
+        options: ['Missort', 'Dañado', 'Correcto'],
+        resetOnChange: ['foto'],
+      },
+      {
+        id: 'foto',
+        label: 'Toma una foto del daño',
+        type: 'photo',
+        required: true,
+        showIf: (v) => v.situacion === 'Dañado',
+      },
+    ],
+  },
+
+  linehaul: {
+    id: 'linehaul',
+    title: 'Posible daño Linehaul',
+    description: 'Escanea HU, área, origen y canalización',
+    icon: 'clipboard',
+    fields: [
+      {
+        id: 'hu',
+        label: '¿Cuál es el HU?',
+        type: 'scanner',
+        idType: 'hu',
+        required: true,
+        placeholder: 'Ej. 2420997802886101',
+      },
+      {
+        id: 'area',
+        label: '¿Cuál es el área?',
+        type: 'choice',
+        required: true,
+        options: ['Despacho', 'Inbound LH', 'Sorting Large', 'Otro'],
+      },
+      {
+        id: 'armado_sitio',
+        label: '¿Se armó en tu sitio?',
+        type: 'choice',
+        required: true,
+        options: ['Sí', 'No'],
+        resetOnChange: ['origen'],
+      },
+      {
+        id: 'origen',
+        label: '¿Cuál es el origen?',
+        type: 'text',
+        required: true,
+        placeholder: 'Escribe el origen',
+        showIf: (v) => v.armado_sitio === 'No',
+        valueWhenHidden: () => 'XMT1',
+      },
+      {
+        id: 'canalizacion',
+        label: '¿Cuál es la canalización?',
+        type: 'text',
+        required: true,
+        placeholder: 'Escribe la canalización',
+      },
+      {
+        id: 'foto',
+        label: 'Foto (opcional)',
+        type: 'photo',
+        required: false,
+      },
+      {
+        id: 'comentarios',
+        label: 'Comentarios (opcional)',
+        type: 'textarea',
+        required: false,
+        placeholder: 'Notas adicionales',
+      },
+    ],
+  },
+
+  inbound_fm: {
+    id: 'inbound_fm',
+    title: 'Inbound FM',
+    description: 'Escanea patente, diferencia y hallazgo',
+    icon: 'truck',
+    fields: [
+      {
+        id: 'patente',
+        label: '¿Cuál es la patente?',
+        type: 'scanner',
+        idType: 'plate',
+        required: true,
+        placeholder: 'Ej. ABC-123',
+      },
+      {
+        id: 'diferencia_shipments',
+        label: '¿Cuál es la diferencia de shipments?',
+        type: 'text',
+        required: true,
+        placeholder: 'Ingresa la diferencia',
+      },
+      {
+        id: 'hallazgo',
+        label: '¿Cuál es el hallazgo?',
+        type: 'choice',
+        required: true,
+        options: ['Correcto', 'Divergencia', 'Falta de probidad'],
+      },
+      {
+        id: 'evidencia',
+        label: 'Evidencia (opcional)',
+        type: 'photo',
+        required: false,
+      },
+    ],
+  },
+};
+
+/**
+ * Main application controller
+ */
+class CapturaApp {
+  constructor() {
+    this.docId = new URLSearchParams(location.search).get('data_doc_id');
+    if (!this.docId) {
+      console.error('Missing data_doc_id parameter');
+    }
+    this.gridClient = new GridClient(this.docId);
+    this.catalogIndex = {};
+    this.outboxRecords = [];
+    this.currentEngine = null;
+    this.userEmail = null;
+    this.pendingCount = 0;
+  }
+
+  async init() {
+    try {
+      const me = await this.gridClient.getMe();
+      this.userEmail = me?.email || 'unknown@mercadolibre.com.mx';
+
+      await this.loadCatalog();
+      await this.loadOutboxFromStorage();
+
+      this.renderMenu();
+    } catch (e) {
+      console.error('Init error:', e);
+      this.renderError(e.message);
+    }
+  }
+
+  async loadCatalog() {
+    try {
+      const data = await this.gridClient.getStateBucket('catalogo_destino_doca');
+      if (data && typeof data === 'object') {
+        this.catalogIndex = data.index || data;
+      }
+    } catch (e) {
+      console.warn('Catalog load error:', e);
+      this.catalogIndex = {};
+    }
+  }
+
+  async loadOutboxFromStorage() {
+    try {
+      const records = await RecordStore.getAll();
+      this.outboxRecords = records.filter(r => !r.synced).map(r => r.data);
+      this.updatePendingBadge();
+      if (this.outboxRecords.length > 0 && navigator.onLine) {
+        await this.flushOutbox();
+      }
+    } catch (e) {
+      console.error('Storage load error:', e);
+    }
+  }
+
+  updatePendingBadge() {
+    this.pendingCount = this.outboxRecords.length;
+    const badge = document.getElementById('pending-count');
+    const icon = document.getElementById('pending-icon');
+    if (this.pendingCount > 0) {
+      badge.textContent = this.pendingCount > 9 ? '9+' : String(this.pendingCount);
+      icon.style.display = 'inline';
+    } else {
+      icon.style.display = 'none';
+    }
+  }
+
+  renderMenu() {
+    const container = document.getElementById('content');
+    const forms = Object.values(FORMS_CONFIG);
+
+    let html = '<div style="display: flex; flex-direction: column; gap: var(--spacing-md);">';
+
+    forms.forEach(form => {
+      html += `
+        <div onclick="window.app.startForm('${form.id}')" class="menu-card">
+          <div class="menu-card-icon">${Icons.svg('scan', { size: 20 })}</div>
+          <div class="menu-card-content">
+            <div class="menu-card-title">${form.title}</div>
+            <div class="menu-card-desc">${form.description}</div>
+          </div>
+          <div class="menu-card-arrow">${Icons.svg('arrowRight', { size: 20 })}</div>
+        </div>
+      `;
+    });
+
+    if (this.outboxRecords.length > 0) {
+      html += `
+        <div style="margin-top: var(--spacing-xl);">
+          <button onclick="window.app.flushOutbox()" class="btn btn-primary btn-block">
+            ${Icons.svg('refresh', { size: 16 })} Sincronizar (${this.pendingCount})
+          </button>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+  }
+
+  startForm(formId) {
+    const form = FORMS_CONFIG[formId];
+    if (!form) return;
+
+    const container = document.getElementById('content');
+    container.innerHTML = '';
+
+    this.currentEngine = new FormEngine(form, {
+      catalogIndex: this.catalogIndex,
+      onComplete: (values) => this.handleFormComplete(formId, values),
+      onCancel: () => {
+        this.currentEngine?.destroy();
+        this.currentEngine = null;
+        this.renderMenu();
+      },
+    });
+
+    this.currentEngine.render('content');
+  }
+
+  async handleFormComplete(formId, values) {
+    this.currentEngine?.destroy();
+    this.currentEngine = null;
+
+    try {
+      const ts = new Date().toISOString();
+      const uid = RecordStore.genUid(formId);
+
+      const record = {
+        uid,
+        ts,
+        formId,
+        ...values,
+        auditoria: `${this.userEmail} - ${ts.split('T')[0]}`,
+      };
+
+      await RecordStore.put(uid, formId, record);
+      this.outboxRecords.push(record);
+      this.updatePendingBadge();
+
+      this.showToast('Registro guardado', 'success');
+
+      if (navigator.onLine) {
+        await this.flushOutbox();
+      } else {
+        this.showToast('Se sincronizará cuando haya conexión', 'info');
+      }
+
+      this.renderMenu();
+    } catch (e) {
+      console.error('Save error:', e);
+      this.showToast('Error al guardar', 'error');
+    }
+  }
+
+  async flushOutbox() {
+    if (this.outboxRecords.length === 0) return;
+
+    let syncedCount = 0;
+    for (const record of this.outboxRecords) {
+      try {
+        await this.syncOneRecord(record);
+        syncedCount++;
+      } catch (e) {
+        if (e.isNetworkError || e.isTimeout) {
+          break;
+        }
+      }
+    }
+
+    this.outboxRecords = this.outboxRecords.slice(syncedCount);
+    this.updatePendingBadge();
+
+    if (syncedCount > 0) {
+      this.showToast(`${syncedCount} registros sincronizados`, 'success');
+    }
+  }
+
+  async syncOneRecord(record, attempt = 0) {
+    const bucketName = `${record.formId}_master`;
+    const maxAttempts = 5;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        if (record.foto && record.foto.startsWith('data:')) {
+          const blob = await this.dataUrlToBlob(record.foto);
+          const docId = await this.gridClient.uploadPublicDocument(blob, `foto_${record.uid}.jpg`);
+          record.foto = docId;
+        }
+        if (record.evidencia && record.evidencia.startsWith('data:')) {
+          const blob = await this.dataUrlToBlob(record.evidencia);
+          const docId = await this.gridClient.uploadPublicDocument(blob, `evidencia_${record.uid}.jpg`);
+          record.evidencia = docId;
+        }
+
+        const bucket = (await this.gridClient.getStateBucket(bucketName)) || { records: [] };
+        if (!Array.isArray(bucket.records)) bucket.records = [];
+
+        const existingIdx = bucket.records.findIndex(r => r.uid === record.uid);
+        if (existingIdx >= 0) {
+          bucket.records[existingIdx] = record;
+        } else {
+          bucket.records.push(record);
+        }
+
+        const result = await this.gridClient.setStateBucket(bucketName, bucket);
+        if (result.conflict) {
+          if (i < maxAttempts - 1) {
+            await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)));
+            continue;
+          }
+        }
+        if (result.ok) {
+          await RecordStore.delete(record.uid);
+          return;
+        }
+      } catch (e) {
+        if (e.isNetworkError || e.isTimeout) throw e;
+        if (i === maxAttempts - 1) throw e;
+        await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)));
+      }
+    }
+  }
+
+  async dataUrlToBlob(dataUrl) {
+    const [header, data] = dataUrl.split(',');
+    const binary = atob(data);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const mimeMatch = header.match(/:(.*?);/);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    return new Blob([bytes], { type: mime });
+  }
+
+  showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  renderError(message) {
+    const container = document.getElementById('content');
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; text-align: center; gap: var(--spacing-lg);">
+        <div style="font-size: 3rem;">⚠️</div>
+        <h1 style="color: var(--color-error);">${message}</h1>
+        <p style="color: var(--color-text-muted);">Verifica tu conexión y recarga la página.</p>
+      </div>
+    `;
+  }
+}
+
+window.app = new CapturaApp();
+window.app.init();
+</script>
+</body>
+</html>

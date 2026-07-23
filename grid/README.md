@@ -1,8 +1,115 @@
-# 📊 Consolidado de Auditoría — Grid
+# 📊 Auditoría Grid — Captura + Dashboard
 
-Dashboard de consolidación en vivo para múltiples tipos de logs (Destino/Doca, FURY, Contenerizado, Linehaul) desde la herramienta de GitHub Pages.
+Sistema completo de auditoría integrado con Grid: captura de formularios en el navegador + dashboard de consolidación en tiempo real.
 
-## 🎯 Qué es
+## 📂 Dos aplicaciones en una carpeta
+
+1. **captura_auditoria.html** — Formulario de captura (esta sección)
+2. **consolidado_auditoria.html** — Dashboard de análisis (documentado abajo)
+
+---
+
+# 🎤 Captura de Auditoría
+
+Aplicación web de captura de auditorías integrada con Grid, soportando 5 logs con sincronización en tiempo real y almacenamiento offline.
+
+## 🎯 Características (Captura)
+
+- **5 Logs integrados**: Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM
+- **Offline-first**: Almacenamiento en IndexedDB, sincronización automática al conectar
+- **Escaneo nativo**: BarcodeDetector para HU, shipment, patente (plate)
+- **Compresión de fotos**: WebP con fallback a JPEG (25% reducción de datos)
+- **Sincronización inteligente**: Manejo de conflictos (409) con reintento exponencial
+- **Diseño responsivo**: OLED minimalist, mobile-first, una pregunta por pantalla
+- **Sin dependencias externas**: HTML/CSS/JS puro, autocontenido
+
+## 🚀 Despliegue (Captura)
+
+### Paso 1: Crear documento de datos en Grid
+
+1. Ve a https://grid.melioffice.com
+2. Crea un documento nuevo
+3. Copia el `DOC_ID` de la URL: `https://grid.melioffice.com/d/{DOC_ID}/...`
+4. Guarda este valor como `DATA_DOC_ID`
+
+### Paso 2: Crear catálogo (opcional, pero recomendado)
+
+Si usas el log "Pre-Missort" (destino/doca), necesitas un catálogo en el State Bucket `catalogo_destino_doca`:
+
+```json
+{
+  "index": {
+    "DESTINO_A": { "docas": "DOCA1;DOCA2;DOCA3" },
+    "DESTINO_B": { "docas": "DOCA4;DOCA5" }
+  }
+}
+```
+
+Publica este JSON en Grid (sección 23 de Biblia, State Buckets).
+
+### Paso 3: Subir captura_auditoria.html a Grid
+
+1. Descarga `captura_auditoria.html` desde este repositorio
+2. En Grid, crea un documento nuevo y sube el HTML
+3. Copia el `HTML_DOC_ID` de la URL
+
+### Paso 4: Abrir la aplicación
+
+Abre con el parámetro `data_doc_id`:
+
+```
+https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}
+```
+
+## 📋 Flujo de Uso (Captura)
+
+1. **Operador abre la app** en Grid con `?data_doc_id=...`
+2. **Elige un log** del menú (Destino/Doca, FURY, Contenerizado, etc.)
+3. **Completa el formulario** — una pregunta por pantalla
+4. **Escanea** HU/shipment/patente o ingresa manualmente
+5. **Captura fotos** si es requerido (comprimidas automáticamente)
+6. **Envía** → se guarda localmente en IndexedDB
+7. **Sincronización automática**: Los registros se sincronizan a State Buckets si hay conexión
+8. **Offline**: Los registros se almacenan en IndexedDB y se sincronizan al reconectar
+9. **Revisa pendientes** en el badge "Sincronizar" en navbar
+
+## 🏗️ Arquitectura (Captura)
+
+### State Buckets (Grid)
+
+Cada log tiene su propio bucket: `{formId}_master`
+
+```javascript
+{
+  records: [
+    {
+      uid: "formId_timestamp_random",
+      ts: "2026-07-23T10:30:00Z",
+      formId: "destino_doca",
+      hu: "2420997802886101",
+      destino: "DESTINO_A",
+      doca: "DOCA1",
+      auditoria: "user@mercadolibre.com.mx - 2026-07-23"
+    }
+  ]
+}
+```
+
+### Fotos
+
+Las fotos se comprimen a WebP (o JPEG como fallback) y se suben como documentos públicos en Grid:
+
+```javascript
+{
+  ...,
+  foto: "01KXHHVWD581MQ567XEBW8HM5B",  // Grid doc_id
+  ...
+}
+```
+
+---
+
+# 📊 Dashboard — Consolidado de Auditoría
 
 Un **dashboard interactivo en Grid** que:
 - Ingiere **CSVs o ZIPs** cargados manualmente (drag & drop)
@@ -14,7 +121,7 @@ Un **dashboard interactivo en Grid** que:
 - Permite **refresh manual** con reintento automático en conflictos
 - **Descarga consolidada** en JSON
 
-## 📋 Tipos de Log Soportados
+## 📋 Tipos de Log Soportados (Dashboard)
 
 | Log | Campos | KPIs | Gráficos |
 |-----|--------|------|----------|
@@ -23,11 +130,11 @@ Un **dashboard interactivo en Grid** que:
 | **Contenerizado** | Shipment, Situación, Foto (cond: si "Dañado") | Total, por Situación | Situación (barras), Top Shipments (barras) |
 | **Linehaul** | HU, Área, Armado Sitio, Origen (cond), Canalización, Foto (opt), Comentarios (opt) | Total, por Área | Área (dona), Canalización (barras) |
 
-## 🚀 Despliegue
+## 🚀 Despliegue (Dashboard)
 
 ### Paso 1: Crear documentos de datos en Grid
 
-Este app requiere **un documento de datos dedicado** para los State Buckets.
+El dashboard (consolidado_auditoria.html) requiere **un documento de datos dedicado** para los State Buckets.
 
 ```
 UI de Grid:
@@ -58,15 +165,16 @@ O hardcodeado en el HTML (editar línea ~490):
 this.docId = params.get('data_doc_id') || '{TU_DATA_DOC_ID}';
 ```
 
-## 📋 Flujo de Uso
+## 📋 Flujo de Uso (Dashboard)
 
-1. **Operador en GitHub Pages**: Llena forma (escanea, captura foto) → exporta CSV o ZIP
-2. **Operador abre dashboard** con `?data_doc_id=...`
-3. **Drag & drop del archivo CSV o ZIP** → auto-detecta tipo, descomprime, valida
-4. **Dashboard actualiza** → tabs de cada log, KPIs, gráficos, tabla
-5. **Busca/filtra** en la tabla
+1. **Operador llena formularios** en captura_auditoria.html (escanea, captura foto, sincroniza)
+2. **Operador abre dashboard** (consolidado_auditoria.html) con `?data_doc_id=...`
+3. **Dashboard se carga automáticamente** desde los 5 State Buckets
+4. **Tabs de cada log** → KPIs, gráficos, tabla de registros
+5. **Busca/filtra** en cada tabla
 6. **Haz click en miniatura** de foto para ver en modal
-7. **Descarga consolidado** como JSON con todos los logs
+7. **Refresh manual** con botón "Actualizar"
+8. **Descarga consolidado** como JSON con todos los logs
 
 ## 🎨 Paleta de Colores (dataviz)
 
