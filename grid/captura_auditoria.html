@@ -1254,6 +1254,9 @@ class ScannerEngine {
       this.videoElement.srcObject = this.stream;
       this.running = true;
       this._lastZxingValue = null;
+      // El atributo autoplay no siempre basta en iOS/Safari para un stream de
+      // cámara; un play() explícito es la forma confiable de arrancarlo.
+      await this.videoElement.play().catch(() => {});
 
       if (this.detectorType === 'zxing') {
         this.startZxing();
@@ -1408,6 +1411,11 @@ class FormEngine {
 
   renderStep() {
     this.stopScanner();
+    // Se resetea en cada paso: los pasos de choice/photo/picker escriben su
+    // valor directo en this.values al hacer clic y no usan currentInput, así
+    // que next() no debe leer aquí la referencia obsoleta del input de texto
+    // (o scanner) del paso anterior.
+    this.currentInput = null;
     const field = this.currentField;
 
     if (this.autoAdvanceFields.includes(field.id) && this._autoAdvancePending[field.id] !== undefined) {
@@ -1554,8 +1562,13 @@ class FormEngine {
 
     const video = document.createElement('video');
     video.className = 'scanner-video';
-    video.autoplay = true;
-    video.playsinline = true;
+    // "playsinline" es un atributo HTML, no una propiedad JS: video.playsinline
+    // (minúscula) no hace nada. Sin setAttribute, iOS/Safari intenta reproducir
+    // el video en pantalla completa nativa en vez de inline, rompiendo el
+    // recuadro de escaneo — además exige "muted" para autoplay sin gesto.
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('autoplay', 'true');
+    video.muted = true;
 
     const frame = document.createElement('div');
     frame.className = 'scanner-frame';
@@ -1576,10 +1589,6 @@ class FormEngine {
     viewport.appendChild(frame);
     viewport.appendChild(torch);
     body.appendChild(viewport);
-
-    const result = document.createElement('div');
-    result.id = 'scanner-result';
-    body.appendChild(result);
 
     screen.appendChild(body);
 
@@ -1603,7 +1612,11 @@ class FormEngine {
     this.errorTargetEl = inputWrap;
     this.supportEl = support;
 
+    this._scanHandled = false;
+
     this.scanner = new ScannerEngine(video, (event) => {
+      if (this._scanHandled) return;
+
       if (event.error) {
         this.showError(event.error);
         return;
@@ -1611,9 +1624,16 @@ class FormEngine {
       if (event.rawValue) {
         const parsed = ScanParser.parseId(event.rawValue, field.idType);
         if (parsed) {
+          this._scanHandled = true;
           this.vibrate(60);
           input.value = parsed;
           this.clearError();
+          this.supportEl.textContent = '✓ Detectado';
+          this.stopScanner();
+          // Pausa breve para que el operador vea la confirmación antes de
+          // saltar de pantalla — sin esto, el auto-avance se siente instantáneo
+          // y no queda claro que el escaneo funcionó.
+          setTimeout(() => this.next(), 450);
         } else {
           this.vibrate(40);
           this.showError(`Escaneo no válido para ${field.idType}`);
@@ -1955,6 +1975,13 @@ class FormEngine {
 
   next() {
     const field = this.currentField;
+    // Para pasos de texto/número/textarea/scanner el valor vive en el DOM
+    // (this.currentInput) y solo se vuelca a this.values aquí; los pasos de
+    // choice/photo/picker ya escriben directo en this.values al hacer clic
+    // y no tienen currentInput (fue reseteado a null en renderStep()).
+    if (this.currentInput) {
+      this.values[field.id] = this.currentInput.value.trim();
+    }
     const value = this.values[field.id];
 
     if (field.required && !value) {
