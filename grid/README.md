@@ -65,13 +65,11 @@ Abre con el parámetro `data_doc_id`:
 https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}
 ```
 
-Opcionalmente, para mostrar un logo compartido en el navbar, sube una imagen a Grid y agrega su doc_id:
+El navbar ya trae por defecto el logo compartido de MercadoLibre (mismo doc_id que usa Auditorias_SVC). Si quieres usar otro logo, agrega `&logo_doc_id={LOGO_DOC_ID}` a la URL:
 
 ```
 https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}&logo_doc_id={LOGO_DOC_ID}
 ```
-
-Si no se pasa `logo_doc_id`, el navbar simplemente no muestra logo (sin errores).
 
 ## 📋 Flujo de Uso (Captura)
 

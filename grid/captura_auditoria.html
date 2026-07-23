@@ -2217,7 +2217,7 @@ class CapturaApp {
     if (!this.docId) {
       DebugConsole.log('Falta el parámetro data_doc_id en la URL', 'error');
     }
-    this.logoDocId = params.get('logo_doc_id');
+    this.logoDocId = params.get('logo_doc_id') || '01KTD4Q8GC7Y620F9F9WEXGDE4';
     this.gridClient = new GridClient(this.docId);
     this.catalogIndex = {};
     this.outboxRecords = [];
