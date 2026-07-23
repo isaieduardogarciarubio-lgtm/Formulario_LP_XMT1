@@ -17,11 +17,15 @@ Aplicación web de captura de auditorías integrada con Grid, soportando 5 logs 
 
 - **5 Logs integrados**: Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM
 - **Offline-first**: Almacenamiento en IndexedDB, sincronización automática al conectar
-- **Escaneo nativo**: BarcodeDetector para HU, shipment, patente (plate)
+- **Escaneo con fallback iOS/Safari**: BarcodeDetector nativo (Android/Chrome) con ZXing vendorizado inline como respaldo (Safari/Firefox no implementan BarcodeDetector)
+- **Feedback táctil**: Vibración corta al escanear un código válido/no válido
 - **Compresión de fotos**: WebP con fallback a JPEG (25% reducción de datos)
 - **Sincronización inteligente**: Manejo de conflictos (409) con reintento exponencial
+- **Navbar con identidad**: Logo compartido (opcional) + avatar con iniciales del email del operador
+- **Botón atrás nativo**: El gesto/botón "atrás" de Android o el navegador navega dentro del formulario en vez de salir de Grid
+- **Historial reciente**: Panel en el menú con las últimas capturas (filtrable por ventana de 5/15/30/60 min), independiente de la cola de sincronización
 - **Diseño responsivo**: OLED minimalist, mobile-first, una pregunta por pantalla
-- **Sin dependencias externas**: HTML/CSS/JS puro, autocontenido
+- **Sin dependencias externas**: HTML/CSS/JS puro, autocontenido (ZXing vendorizado inline)
 
 ## 🚀 Despliegue (Captura)
 
@@ -60,6 +64,14 @@ Abre con el parámetro `data_doc_id`:
 ```
 https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}
 ```
+
+Opcionalmente, para mostrar un logo compartido en el navbar, sube una imagen a Grid y agrega su doc_id:
+
+```
+https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}&logo_doc_id={LOGO_DOC_ID}
+```
+
+Si no se pasa `logo_doc_id`, el navbar simplemente no muestra logo (sin errores).
 
 ## 📋 Flujo de Uso (Captura)
 
