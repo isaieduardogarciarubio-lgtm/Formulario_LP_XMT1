@@ -59,17 +59,19 @@ Publica este JSON en Grid (sección 23 de Biblia, State Buckets). El "Resultado"
 
 ### Paso 4: Abrir la aplicación
 
-Abre con el parámetro `data_doc_id`:
+El documento de datos ya viene por defecto (`01KY8F1NQ0CGK80JNEN1DPNFVF`), así que basta con abrir el HTML directo:
 
 ```
-https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}
+https://grid.melioffice.com/d/{HTML_DOC_ID}/
 ```
 
-El navbar ya trae por defecto el logo compartido de MercadoLibre (mismo doc_id que usa Auditorias_SVC). Si quieres usar otro logo, agrega `&logo_doc_id={LOGO_DOC_ID}` a la URL:
+Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id={DATA_DOC_ID}`:
 
 ```
-https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}&logo_doc_id={LOGO_DOC_ID}
+https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={OTRO_DATA_DOC_ID}
 ```
+
+El navbar ya trae por defecto el logo compartido de MercadoLibre (mismo doc_id que usa Auditorias_SVC). Si quieres usar otro logo, agrega `&logo_doc_id={LOGO_DOC_ID}` a la URL.
 
 ## 📋 Flujo de Uso (Captura)
 
