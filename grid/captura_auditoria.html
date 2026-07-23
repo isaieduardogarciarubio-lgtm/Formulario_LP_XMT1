@@ -1092,11 +1092,13 @@ class ScannerEngine {
  * FormEngine — dynamic form rendering
  */
 class FormEngine {
-  constructor(formConfig, { onComplete, onCancel, catalogIndex } = {}) {
+  constructor(formConfig, { onComplete, onCancel, catalogIndex, initialValues, autoAdvanceFields } = {}) {
     this.formConfig = formConfig;
     this.onComplete = onComplete;
     this.onCancel = onCancel;
     this.catalogIndex = catalogIndex || {};
+    this.initialValues = initialValues || {};
+    this.autoAdvanceFields = autoAdvanceFields || [];
     this.stepIndex = 0;
     this.values = {};
     this.container = null;
@@ -1112,6 +1114,10 @@ class FormEngine {
     return !!(field && field.showIf && !field.showIf(this.values));
   }
 
+  isNum(s) {
+    return /^[0-9]+$/.test(String(s).trim());
+  }
+
   get isLastStep() {
     for (let i = this.stepIndex + 1; i < this.formConfig.fields.length; i++) {
       if (!this.isFieldHidden(this.formConfig.fields[i])) return false;
@@ -1122,7 +1128,8 @@ class FormEngine {
   render(containerId) {
     this.container = document.getElementById(containerId);
     this.stepIndex = 0;
-    this.values = {};
+    this.values = { ...this.initialValues };
+    this._autoAdvancePending = { ...this.initialValues };
     this.renderStep();
   }
 
@@ -1140,6 +1147,12 @@ class FormEngine {
   renderStep() {
     this.stopScanner();
     const field = this.currentField;
+
+    if (this.autoAdvanceFields.includes(field.id) && this._autoAdvancePending[field.id] !== undefined) {
+      delete this._autoAdvancePending[field.id];
+      this.advance({ silent: true });
+      return;
+    }
 
     if (this.isFieldHidden(field)) {
       this.values[field.id] = field.valueWhenHidden ? field.valueWhenHidden(this.values) : '';
@@ -1535,6 +1548,10 @@ class FormEngine {
           if (this.values[field.id] === destino) opt.classList.add('selected');
           opt.textContent = destino;
           opt.addEventListener('click', () => {
+            if (this.values.destino && this.values.destino !== destino) {
+              delete this.values.doca;
+              delete this.values.resultado;
+            }
             this.values[field.id] = destino;
             this.advance();
           });
@@ -1570,9 +1587,14 @@ class FormEngine {
     screen.appendChild(h1);
 
     const destino = this.values.destino;
-    const docas = destino && this.catalogIndex[destino]?.docas
-      ? this.catalogIndex[destino].docas.split(';').map(d => d.trim()).filter(Boolean)
-      : [];
+    const docas = (this.catalogIndex[destino] || []).slice().sort((a, b) => {
+      const an = this.isNum(a);
+      const bn = this.isNum(b);
+      if (an && bn) return Number(a) - Number(b);
+      if (an && !bn) return -1;
+      if (!an && bn) return 1;
+      return a.localeCompare(b, 'es');
+    });
 
     if (!docas.length) {
       const msg = document.createElement('div');
@@ -1606,6 +1628,7 @@ class FormEngine {
           opt.textContent = doca;
           opt.addEventListener('click', () => {
             this.values[field.id] = doca;
+            this.values.resultado = this.isNum(doca) ? 'Sin incidencia' : 'Erroneo';
             this.advance();
           });
           optionsDiv.appendChild(opt);
@@ -1922,6 +1945,7 @@ class CapturaApp {
     this.currentEngine = null;
     this.userEmail = null;
     this.pendingCount = 0;
+    this.lastDestino = null;
   }
 
   async init() {
@@ -2016,8 +2040,17 @@ class CapturaApp {
     const container = document.getElementById('content');
     container.innerHTML = '';
 
+    const initialValues = {};
+    const autoAdvanceFields = [];
+    if (formId === 'destino_doca' && this.lastDestino) {
+      initialValues.destino = this.lastDestino;
+      autoAdvanceFields.push('destino');
+    }
+
     this.currentEngine = new FormEngine(form, {
       catalogIndex: this.catalogIndex,
+      initialValues,
+      autoAdvanceFields,
       onComplete: (values) => this.handleFormComplete(formId, values),
       onCancel: () => {
         this.currentEngine?.destroy();
@@ -2034,6 +2067,10 @@ class CapturaApp {
     this.currentEngine = null;
 
     try {
+      if (formId === 'destino_doca') {
+        this.lastDestino = values.destino;
+      }
+
       const ts = new Date().toISOString();
       const uid = RecordStore.genUid(formId);
 

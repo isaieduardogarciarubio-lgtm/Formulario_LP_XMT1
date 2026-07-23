@@ -39,13 +39,13 @@ Si usas el log "Pre-Missort" (destino/doca), necesitas un catálogo en el State 
 ```json
 {
   "index": {
-    "DESTINO_A": { "docas": "DOCA1;DOCA2;DOCA3" },
-    "DESTINO_B": { "docas": "DOCA4;DOCA5" }
+    "DESTINO_A": ["DOCA1", "DOCA2", "DOCA3"],
+    "DESTINO_B": ["DOCA4", "DOCA5"]
   }
 }
 ```
 
-Publica este JSON en Grid (sección 23 de Biblia, State Buckets).
+Publica este JSON en Grid (sección 23 de Biblia, State Buckets). El "Resultado" del registro se calcula automáticamente: si la doca elegida es puramente numérica → "Sin incidencia"; si no → "Erroneo" (mismo criterio que la app original).
 
 ### Paso 3: Subir captura_auditoria.html a Grid
 
