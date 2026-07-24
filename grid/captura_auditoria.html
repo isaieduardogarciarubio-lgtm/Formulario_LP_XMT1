@@ -939,6 +939,18 @@ select.step-input {
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
         <span class="status-badge" id="status-badge">0 pendientes</span>
+        <button class="icon-btn-plain" id="btn-debug-console" title="Consola de errores" style="position: relative;">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="4 17 10 11 4 5"/>
+            <line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+          <span id="debug-console-inline-badge" style="
+            display: none; position: absolute; top: -2px; right: -2px;
+            width: 14px; height: 14px; border-radius: 50%; background: #ff453a;
+            color: #fff; font-size: 9px; font-weight: 700;
+            align-items: center; justify-content: center;
+          "></span>
+        </button>
         <div class="user-avatar" id="user-avatar" title=""></div>
       </div>
     </div>
@@ -2764,11 +2776,16 @@ class DebugConsole {
       `<div style="color:${colors[e.level] || colors.info};">[${e.ts}] ${this.escapeHtml(e.message)}</div>`
     ).join('');
     el.scrollTop = el.scrollHeight;
+    const errorCount = this.entries.filter(e => e.level === 'error').length;
     const badge = document.getElementById('debug-console-badge');
     if (badge) {
-      const errorCount = this.entries.filter(e => e.level === 'error').length;
       badge.style.display = errorCount > 0 ? 'flex' : 'none';
       badge.textContent = errorCount > 9 ? '9+' : String(errorCount);
+    }
+    const inlineBadge = document.getElementById('debug-console-inline-badge');
+    if (inlineBadge) {
+      inlineBadge.style.display = errorCount > 0 ? 'flex' : 'none';
+      inlineBadge.textContent = errorCount > 9 ? '9+' : String(errorCount);
     }
   }
 
@@ -2906,19 +2923,28 @@ class GridClient {
    * seguir intentando registro por registro contra una red caída).
    */
   async getStateBucket(name) {
-    const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
-      credentials: 'include',
-    });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`${res.status}`);
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+    if (res.status === 404) {
+      DebugConsole.log(`GET ${name}: 404 (bucket no existe todavía)`, 'info');
+      return null;
+    }
+    if (!res.ok) {
+      DebugConsole.log(`GET ${name}: HTTP ${res.status} — ${await res.text().catch(() => '')}`, 'error');
+      throw new Error(`${res.status}`);
+    }
     const body = await res.json();
     this._updatedAtByName[name] = body.updated_at || '';
+    const count = Array.isArray(body.state?.records) ? body.state.records.length : 'n/a';
+    DebugConsole.log(`GET ${name}: OK, updated_at=${body.updated_at || '(vacío)'}, records=${count}`, 'info');
     return body.state ?? null;
   }
 
   async setStateBucket(name, data) {
     const ifUpdatedAt = this._updatedAtByName[name] || '';
-    const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+    DebugConsole.log(`PUT ${name}: if_updated_at="${ifUpdatedAt}", records=${data.records?.length ?? 'n/a'}`, 'info');
+    const res = await this._fetchWithTimeout(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ state: data, if_updated_at: ifUpdatedAt }),
@@ -2930,12 +2956,16 @@ class GridClient {
       if (conflictBody.current_updated_at) {
         this._updatedAtByName[name] = conflictBody.current_updated_at;
       }
-      console.warn('Conflict on state bucket update — retrying');
+      DebugConsole.log(`PUT ${name}: 409 conflict, current_updated_at=${conflictBody.current_updated_at || '?'}`, 'warn');
       return { conflict: true };
     }
-    if (!res.ok) throw new Error(`${res.status}`);
+    if (!res.ok) {
+      DebugConsole.log(`PUT ${name}: HTTP ${res.status} — ${await res.text().catch(() => '')}`, 'error');
+      throw new Error(`${res.status}`);
+    }
     const body = await res.json();
     this._updatedAtByName[name] = body.updated_at || '';
+    DebugConsole.log(`PUT ${name}: OK, new updated_at=${body.updated_at || '(vacío)'}`, 'info');
     return { ok: true };
   }
 }
@@ -2967,6 +2997,16 @@ class CapturaApp {
 
     DebugConsole.setup();
     DebugConsole.log(`Documento: ${this.docId}`, 'info');
+
+    // Botón siempre visible en el navbar: antes solo se podía abrir la
+    // consola de debug tocando el círculo rojo, que solo aparece si hubo
+    // errores — sin eso, no había forma de ver el log (ej. a qué
+    // documento apunta, o si de verdad sincronizó) cuando todo "parecía"
+    // funcionar bien.
+    const debugBtn = document.getElementById('btn-debug-console');
+    if (debugBtn) {
+      debugBtn.addEventListener('click', () => DebugConsole.toggle());
+    }
   }
 
   /**
