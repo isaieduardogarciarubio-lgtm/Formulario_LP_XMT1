@@ -1314,20 +1314,46 @@ const FORMS_CONFIG = {
         options: ['Despacho', 'Inbound LH', 'Sorting Large', 'Otro'],
       },
       {
-        id: 'armado_sitio',
-        label: '¿Se armó en tu sitio?',
+        id: 'direccion',
+        label: '¿Es Inbound o Outbound?',
+        type: 'choice',
+        required: true,
+        options: ['Inbound', 'Outbound'],
+        resetOnChange: ['es_transfer', 'tipo_transfer', 'origen'],
+      },
+      {
+        // Inbound siempre es transfer (no se pregunta): se salta directo
+        // a elegir el tipo. Outbound sí pregunta si es transfer o no.
+        id: 'es_transfer',
+        label: '¿Es transfer?',
         type: 'choice',
         required: true,
         options: ['Sí', 'No'],
-        resetOnChange: ['origen'],
+        showIf: (v) => v.direccion === 'Outbound',
+        valueWhenHidden: (v) => (v.direccion === 'Inbound' ? 'Sí' : ''),
+        resetOnChange: ['tipo_transfer', 'origen'],
       },
       {
+        // Outbound + transfer siempre es V3 (no se pregunta). Outbound sin
+        // transfer no aplica (no hay tipo de transfer que registrar).
+        id: 'tipo_transfer',
+        label: '¿Qué tipo de transfer es?',
+        type: 'choice',
+        required: true,
+        options: ['V3', 'V4'],
+        showIf: (v) => v.direccion === 'Inbound',
+        valueWhenHidden: (v) => (v.direccion === 'Outbound' && v.es_transfer === 'Sí' ? 'V3' : ''),
+      },
+      {
+        // Un transfer (Inbound siempre, u Outbound marcado como transfer)
+        // nunca se arma en el sitio, así que el origen se escribe a mano.
+        // Outbound sin transfer se asume armado en XMT1, sin preguntar.
         id: 'origen',
         label: '¿Cuál es el origen?',
         type: 'text',
         required: true,
         placeholder: 'Escribe el origen',
-        showIf: (v) => v.armado_sitio === 'No',
+        showIf: (v) => v.direccion === 'Inbound' || (v.direccion === 'Outbound' && v.es_transfer === 'Sí'),
         valueWhenHidden: () => 'XMT1',
       },
       {
