@@ -15,17 +15,29 @@ Aplicación web de captura de auditorías integrada con Grid, soportando 5 logs 
 
 ## 🎯 Características (Captura)
 
-- **5 Logs integrados**: Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM
+- **Motor de captura**: el mismo de Auditorias_SVC (probado en iOS/Android), con los 5 logs de esta app adaptados sobre él
+- **5 Logs**: FURY, Contenerizado, Linehaul, Inbound FM activos — **Pre-Missort (Destino/Doca) deshabilitado temporalmente** hasta republicar el catálogo en el formato correcto (ver sección abajo)
 - **Offline-first**: Almacenamiento en IndexedDB, sincronización automática al conectar
-- **Escaneo con fallback iOS/Safari**: BarcodeDetector nativo (Android/Chrome) con ZXing vendorizado inline como respaldo (Safari/Firefox no implementan BarcodeDetector)
-- **Feedback táctil**: Vibración corta al escanear un código válido/no válido
-- **Compresión de fotos**: WebP con fallback a JPEG (25% reducción de datos)
+- **Escaneo robusto**: cámara (BarcodeDetector nativo o ZXing vendorizado inline como respaldo en iOS/Safari/Firefox), entrada manual con reenfoque automático (lector físico HID), y escaneo desde imagen cargada si la cámara no está disponible
+- **Confirmación visual de escaneo**: muestra el código detectado y pide confirmar antes de avanzar (evita falsos positivos)
+- **Feedback táctil**: vibración al escanear/validar
+- **Compresión de fotos**: WebP con fallback a JPEG (25% reducción de datos), con retomar/reintentar
 - **Sincronización inteligente**: Manejo de conflictos (409) con reintento exponencial
-- **Navbar con identidad**: Logo compartido (opcional) + avatar con iniciales del email del operador
-- **Botón atrás nativo**: El gesto/botón "atrás" de Android o el navegador navega dentro del formulario en vez de salir de Grid
-- **Historial reciente**: Panel en el menú con las últimas capturas (filtrable por ventana de 5/15/30/60 min), independiente de la cola de sincronización
+- **Navbar con identidad**: Logo compartido + avatar con iniciales del email del operador
+- **Botón atrás visible + nativo**: botón explícito en cada paso (necesario en iOS, que no tiene gesto de sistema) y también intercepta el atrás de Android/navegador
+- **Historial reciente**: Panel en el menú con las últimas capturas de todos los logs (filtrable por ventana de 5/15/30/60 min), independiente de la cola de sincronización
 - **Diseño responsivo**: OLED minimalist, mobile-first, una pregunta por pantalla
 - **Sin dependencias externas**: HTML/CSS/JS puro, autocontenido (ZXing vendorizado inline)
+
+## ⏸️ Pre-Missort deshabilitado temporalmente
+
+El log "Pre - Missort" (Destino/Doca) aparece atenuado en el menú y no se puede abrir hasta que se publique el catálogo `catalogo_destino_doca` en el State Bucket con el formato:
+
+```json
+{ "index": { "DESTINO_A": ["DOCA1", "DOCA2"], "DESTINO_B": ["DOCA3"] } }
+```
+
+Para reactivarlo: en `captura_auditoria.html`, busca `FORMS_CONFIG.destino_doca` y elimina la línea `disabled: true`.
 
 ## 🚀 Despliegue (Captura)
 
