@@ -135,70 +135,47 @@ Las fotos se comprimen a WebP (o JPEG como fallback) y se suben como documentos 
 
 # 📊 Dashboard — Consolidado de Auditoría
 
-Un **dashboard interactivo en Grid** que:
-- Ingiere **CSVs o ZIPs** cargados manualmente (drag & drop)
-- **Auto-detecta** tipo de log por headers CSV
-- Descomprime ZIPs con fotos integradas (JSZip)
-- Deduplica automático por timestamp + identificadores de log
-- Consolida en **4 State Buckets independientes** (uno por tipo de log)
+Un **dashboard de solo lectura en Grid** que:
+- **Lee en tiempo real** los 5 State Buckets que alimenta la app de captura ({log}_master) — sin cargar nada a mano, sin CSV, sin ZIP
+- Sin cifrado: la captura ya no encripta nada, así que el dashboard tampoco necesita contraseña ni descifrado
 - Muestra **KPIs + gráficos Plotly + tabla filtrable** por log en tiempo real
 - Permite **refresh manual** con reintento automático en conflictos
-- **Descarga consolidada** en JSON
+- Permite **borrar un registro** individual (tabla → ícono de basura), escribiendo el bucket actualizado
+- **Descarga consolidada** en CSV
 
-## 📋 Tipos de Log Soportados (Dashboard)
+## 📋 Logs Soportados (Dashboard)
 
 | Log | Campos | KPIs | Gráficos |
 |-----|--------|------|----------|
-| **Destino/Doca** | HU, Destino, Doca, Resultado (auto) | Total, Sin incidencia, Erroneo | Resultado (dona), Top Destinos (barras), Top Docas (barras) |
+| **Destino/Doca** (deshabilitado en captura por ahora) | HU, Destino, Doca, Resultado (auto) | Total, Sin incidencia, Erroneo | Resultado (dona), Top Destinos (barras), Top Docas (barras) |
 | **FURY** | Shipment, Foto, Situación, Valor (opt) | Total, por Situación | Situación (barras), Top Shipments (barras) |
 | **Contenerizado** | Shipment, Situación, Foto (cond: si "Dañado") | Total, por Situación | Situación (barras), Top Shipments (barras) |
 | **Linehaul** | HU, Área, Armado Sitio, Origen (cond), Canalización, Foto (opt), Comentarios (opt) | Total, por Área | Área (dona), Canalización (barras) |
+| **Inbound FM** | Patente, Diferencia de Shipments, Hallazgo, Evidencia (opt) | Total, por Hallazgo | Hallazgo (barras) |
 
 ## 🚀 Despliegue (Dashboard)
 
-### Paso 1: Crear documentos de datos en Grid
+Comparte el mismo documento de datos que la app de captura — por defecto ya apunta a `01KY8F1NQ0CGK80JNEN1DPNFVF`, no hace falta configurar nada.
 
-El dashboard (consolidado_auditoria.html) requiere **un documento de datos dedicado** para los State Buckets.
-
-```
-UI de Grid:
-1. Sube un archivo CSV vacío (o cualquier archivo pequeño)
-2. Copia su doc_id de la URL: https://grid.melioffice.com/d/{DOC_ID}/...
-```
-
-Guarda ese `{DOC_ID}`.
-
-### Paso 2: Subir el HTML a Grid
+### Subir el HTML a Grid
 
 1. Descarga `grid/consolidado_auditoria.html`
 2. Ve a https://grid.melioffice.com
 3. Sube el archivo HTML como documento nuevo
+4. Ábrelo directo — ya lee los mismos buckets que escribe la captura
 
-Copia el `{HTML_DOC_ID}` de la URL.
-
-### Paso 3: Abrir Dashboard
-
-Abre con el data_doc_id en la URL:
-
-```
-https://grid.melioffice.com/d/{HTML_DOC_ID}/?data_doc_id={DATA_DOC_ID}
-```
-
-O hardcodeado en el HTML (editar línea ~490):
-```javascript
-this.docId = params.get('data_doc_id') || '{TU_DATA_DOC_ID}';
-```
+Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id={OTRO_DATA_DOC_ID}` a la URL.
 
 ## 📋 Flujo de Uso (Dashboard)
 
-1. **Operador llena formularios** en captura_auditoria.html (escanea, captura foto, sincroniza)
-2. **Operador abre dashboard** (consolidado_auditoria.html) con `?data_doc_id=...`
-3. **Dashboard se carga automáticamente** desde los 5 State Buckets
+1. **Operador llena formularios** en captura_auditoria.html (escanea, captura foto, sincroniza automáticamente)
+2. **Cualquiera abre el dashboard** — no necesita ningún parámetro ni archivo
+3. **Se carga solo** desde los 5 State Buckets, sin intervención manual
 4. **Tabs de cada log** → KPIs, gráficos, tabla de registros
 5. **Busca/filtra** en cada tabla
 6. **Haz click en miniatura** de foto para ver en modal
-7. **Refresh manual** con botón "Actualizar"
-8. **Descarga consolidado** como JSON con todos los logs
+7. **Refresh manual** con botón "Actualizar" si quieres forzar una recarga
+8. **Descarga consolidado** como CSV con todos los logs
 
 ## 🎨 Paleta de Colores (dataviz)
 
@@ -214,76 +191,31 @@ this.docId = params.get('data_doc_id') || '{TU_DATA_DOC_ID}';
 
 ## 🔒 Seguridad & Restricciones (Biblia)
 
-✅ **Sin localStorage**: 4 State Buckets independientes  
-✅ **Identidad**: `GET /api/v1/me` para obtener email/avatar  
-✅ **Optimistic concurrency**: `if_updated_at` en PUT → 409 = reintento automático  
-✅ **Modales propios**: No usa `alert/confirm/prompt`  
-✅ **Librerías locales**: Plotly + JSZip desde `/d/_libs/`  
-✅ **Sin CDNs externos**: CSS + JS autocontenidos en HTML  
+✅ **Sin localStorage**: 5 State Buckets independientes, uno por log
+✅ **Identidad**: `GET /api/v1/me` para obtener email/avatar
+✅ **Optimistic concurrency**: `if_updated_at` en PUT → 409 = reintento automático
+✅ **Librerías locales**: Plotly desde `/d/_libs/`
+✅ **Sin CDNs externos, sin JSZip**: la captura sube fotos directo a Grid como documentos, el dashboard nunca maneja ZIPs
 
 ## 💾 Almacenamiento
 
-**4 State Buckets** en el documento de datos:
+**5 State Buckets** en el documento de datos, uno por log, escritos por la app de captura:
 
 ```json
 {
   "destino_doca_master": {
-    "version": 1,
     "records": [
-      {
-        "ts": "2026-07-14T10:30:45Z",
-        "hu": "HU123",
-        "destino": "MXAMT1",
-        "doca": "134",
-        "resultado": "Sin incidencia"
-      }
+      { "ts": "2026-07-24T10:30:45Z", "hu": "HU123", "destino": "MXAMT1", "doca": "134", "resultado": "Sin incidencia" }
     ]
   },
-  "fury_master": { "version": 1, "records": [...] },
-  "contenerizado_master": { "version": 1, "records": [...] },
-  "linehaul_master": { "version": 1, "records": [...] }
+  "fury_master": { "records": [...] },
+  "contenerizado_master": { "records": [...] },
+  "linehaul_master": { "records": [...] },
+  "inbound_fm_master": { "records": [...] }
 }
 ```
 
-**Cada bucket:**
-- Límite ~1 MB → ~16k registros @ 60 bytes c/u
-- Deduplicación por: ts + hu + shipment + destino + doca
-- Reintento automático en conflictos (409)
-
-## 📥 Formatos de Entrada
-
-### CSV
-```
-Fecha/Hora,HU,Destino,Doca,Resultado
-2026-07-14 10:30:45,HU123,MXAMT1,134,Sin incidencia
-```
-
-Auto-detecta tipo por headers (case-insensitive):
-- `resultado` → destino_doca
-- `shipment + situacion + foto + valor` → fury
-- `shipment + situacion + foto` (sin valor) → contenerizado
-- `hu + area + canalizacion` → linehaul
-
-### ZIP
-```
-destino_doca_2026-07-14/
-├── data.csv
-└── fotos/
-    ├── 001_HU123.jpg
-    └── 002_HU124.jpg
-
-fury_2026-07-14/
-├── data.csv
-└── fotos/
-    ├── 001_SHIP123.jpg
-    └── 002_SHIP124.jpg
-```
-
-Los ZIPs contienen CSVs + subcarpeta `fotos/` con imágenes JPEG. El app:
-1. Descomprime ZIP
-2. Lee CSV de cada carpeta → detecta log type
-3. Extrae fotos → las convierte a data URLs
-4. Inserta datos + fotos en State Bucket
+Cada bucket tiene límite ~1 MB; las fotos viven como documentos aparte en Grid (el registro solo guarda el doc_id).
 
 ## 📊 Gráficos Por Log
 
@@ -293,18 +225,17 @@ Los ZIPs contienen CSVs + subcarpeta `fotos/` con imágenes JPEG. El app:
 | **FURY** | Situación (barras) | Top 10 Shipments (barras) | — |
 | **Contenerizado** | Situación (barras) | Top 10 Shipments (barras) | — |
 | **Linehaul** | Área (dona) | Canalización (barras) | — |
+| **Inbound FM** | Hallazgo (barras) | — | — |
 
-Todos con tema Nocturne: fondo #1a1a19, texto blanco, sin modo bar.
+Todos con tema Nocturne: fondo #1a1a19, texto blanco.
 
 ## 🐛 Troubleshooting
 
 | Problema | Causa | Solución |
 |----------|-------|----------|
 | "No autenticado" | No en VPN Grid | Conecta a VPN + inicia sesión en Grid UI |
-| Tabla vacía | No se cargó el bucket | Verifica `data_doc_id` en URL |
-| "JSZip undefined" | `/d/_libs/jszip.min.js` falta | Contacta admin Grid |
-| CSV rechazado | Headers no coinciden | Verifica headers exactos (mayús/minús) |
-| Fotos no se ven | Nombres de archivo no coinciden | Chequea CSV referencia foto: `001_SHIPID.jpg` |
+| Tabla vacía | Todavía no llegan registros, o `data_doc_id` no coincide con el de captura | Revisa la consola de debug (ícono en el header): muestra qué documento está leyendo y cuántos registros encontró por bucket |
+| Fotos no se ven | La foto no terminó de sincronizar (sigue como data:URL local en el dispositivo del operador) | Espera a que ese dispositivo tenga conexión y sincronice |
 | 409 Conflict | Dos usuarios escriben simultáneamente | App reintenta automático en 500-1000ms |
 | Gráficos en blanco | Plotly no cargó | Verifica `/d/_libs/plotly.min.js` |
 
@@ -315,9 +246,9 @@ Todos con tema Nocturne: fondo #1a1a19, texto blanco, sin modo bar.
 
 ## 📤 Descarga
 
-- **JSON consolidado**: Botón "Descargar" en navbar
-- Contiene: `{ logs: { destino_doca: [...], fury: [...], contenerizado: [...], linehaul: [...] } }`
-- Timestamp: `consolidado_AAAA-MM-DD.json`
+- **CSV consolidado**: Botón "Descargar" en navbar
+- Contiene todos los logs con columna "Tipo de Log"
+- Timestamp: `consolidado_AAAA-MM-DD.csv`
 
 ## 📝 Licencia
 
@@ -325,6 +256,5 @@ Uso interno MercadoLibre.
 
 ## 🔗 Links
 
-- **Generador de CSV (GitHub Pages)**: https://isaieduardogarciarubio-lgtm.github.io/formulario_lp_xmt1/
 - **Biblia Grid V11.4**: Sección 23 (State Buckets), Sección 19 (Concurrency), Sección 24 (Folders API)
 - **dataviz skill**: Asignación de colores por job (categorical, sequential, status)
