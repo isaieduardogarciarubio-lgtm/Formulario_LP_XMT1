@@ -901,6 +901,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return body.state ?? null;
       } catch (e) {
         console.error(`getStateBucket ${name}:`, e);
+        if (typeof DebugConsole !== 'undefined') {
+          DebugConsole.log(`getStateBucket ${name}: ${e.message}`, 'error');
+        }
         return null;
       }
     }
@@ -1114,15 +1117,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
 
     async loadAllLogs() {
+      DebugConsole.log(`Cargando logs desde documento: ${this.docId}`, 'info');
       for (const logType of Object.keys(this.logs)) {
         const bucket = `${logType}_master`;
         const data = await this.gridClient.getStateBucket(bucket);
         if (data && data.records) {
           this.logs[logType] = data.records;
+          DebugConsole.log(`${bucket}: ${data.records.length} registro(s)`, 'info');
         } else {
           this.logs[logType] = [];
+          DebugConsole.log(`${bucket}: vacío, no publicado, o error (ver arriba)`, 'warn');
         }
       }
+      const total = Object.values(this.logs).reduce((sum, r) => sum + r.length, 0);
+      DebugConsole.log(`Total combinado: ${total} registro(s)`, 'info');
       this.render();
     }
 
