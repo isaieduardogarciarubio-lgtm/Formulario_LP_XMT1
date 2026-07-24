@@ -1525,7 +1525,31 @@ class ScannerEngine {
 
   async startZxing() {
     this.engine = 'zxing';
-    this.zxingReader = new window.ZXing.BrowserMultiFormatReader();
+
+    // Sin hints explícitos, BrowserMultiFormatReader detecta QR de forma
+    // confiable pero es inconsistente con códigos de barras 1D (EAN, Code
+    // 128, Code 39, etc.) — en iOS/Safari (que siempre cae en este motor,
+    // nunca tiene BarcodeDetector nativo) esto se veía como "solo funciona
+    // el QR". TRY_HARDER además ayuda a leer barras 1D con más intentos
+    // por frame, más lentas de detectar que un QR.
+    const hints = new Map();
+    hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      window.ZXing.BarcodeFormat.QR_CODE,
+      window.ZXing.BarcodeFormat.EAN_13,
+      window.ZXing.BarcodeFormat.EAN_8,
+      window.ZXing.BarcodeFormat.UPC_A,
+      window.ZXing.BarcodeFormat.UPC_E,
+      window.ZXing.BarcodeFormat.CODE_128,
+      window.ZXing.BarcodeFormat.CODE_39,
+      window.ZXing.BarcodeFormat.CODE_93,
+      window.ZXing.BarcodeFormat.CODABAR,
+      window.ZXing.BarcodeFormat.ITF,
+      window.ZXing.BarcodeFormat.DATA_MATRIX,
+      window.ZXing.BarcodeFormat.PDF_417,
+      window.ZXing.BarcodeFormat.AZTEC,
+    ]);
+    hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+    this.zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
 
     // Intercept console methods to silence ZXing frame errors
     const originalError = console.error;
@@ -1785,7 +1809,22 @@ class FormEngine {
       }
     });
 
-    input.addEventListener('input', () => this.clearError());
+    // Campos de texto libre (origen, canalización, diferencia de
+    // shipments) se normalizan a mayúsculas al escribir, igual que los
+    // códigos escaneados — evita "xmt1" y "XMT1" siendo tratados como
+    // valores distintos en el consolidado. No aplica a textarea
+    // (comentarios es texto libre, no un código operativo).
+    if (field.type === 'text') {
+      input.addEventListener('input', () => {
+        const start = input.selectionStart;
+        const end = input.selectionEnd;
+        input.value = input.value.toUpperCase();
+        input.setSelectionRange(start, end);
+        this.clearError();
+      });
+    } else {
+      input.addEventListener('input', () => this.clearError());
+    }
 
     this.renderActions(field);
 
