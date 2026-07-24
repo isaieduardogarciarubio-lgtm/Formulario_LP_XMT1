@@ -1530,8 +1530,12 @@ class ScannerEngine {
     // confiable pero es inconsistente con códigos de barras 1D (EAN, Code
     // 128, Code 39, etc.) — en iOS/Safari (que siempre cae en este motor,
     // nunca tiene BarcodeDetector nativo) esto se veía como "solo funciona
-    // el QR". TRY_HARDER además ayuda a leer barras 1D con más intentos
-    // por frame, más lentas de detectar que un QR.
+    // el QR". Deliberadamente SIN TRY_HARDER: ese hint prueba múltiples
+    // rotaciones/escalas por frame, que es demasiado costoso para
+    // decodificar en vivo sobre un stream de video en hardware de gama
+    // media — en la práctica volvía el escaneo tan lento que el QR
+    // "dejaba de leerse" (probado: TRY_HARDER no aporta nada frente a
+    // una sola imagen estática, el costo solo se nota en video continuo).
     const hints = new Map();
     hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
       window.ZXing.BarcodeFormat.QR_CODE,
@@ -1548,7 +1552,6 @@ class ScannerEngine {
       window.ZXing.BarcodeFormat.PDF_417,
       window.ZXing.BarcodeFormat.AZTEC,
     ]);
-    hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
     this.zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
 
     // Intercept console methods to silence ZXing frame errors
