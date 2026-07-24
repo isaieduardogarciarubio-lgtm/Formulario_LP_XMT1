@@ -935,7 +935,6 @@ select.step-input {
     <div class="navbar-inner">
       <div style="display: flex; align-items: center; gap: var(--spacing-sm); min-width: 0;">
         <img id="navbar-logo" class="navbar-logo" alt="Logo" style="display: none;" />
-        <h1 class="navbar-title">Captura de Auditoría</h1>
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
         <span class="status-badge" id="status-badge">0 pendientes</span>
@@ -1115,6 +1114,12 @@ class RecordStore {
           .sort((a, b) => (a.uid < b.uid ? -1 : 1))
           .forEach((row) => {
             if (!grouped[row.formId]) grouped[row.formId] = [];
+            // Respaldo: row.formId es la fuente de verdad (columna propia
+            // del índice); si row.data.formId falta (registros guardados
+            // antes de incluirlo en el objeto, o dispositivos con la cola
+            // pendiente de antes de este fix) se repara aquí para que
+            // syncOneRecord no vuelva a escribir en "undefined_master".
+            if (!row.data.formId) row.data.formId = row.formId;
             grouped[row.formId].push(row.data);
           });
         resolve(grouped);
@@ -1289,7 +1294,7 @@ const FORMS_CONFIG = {
 
   linehaul: {
     id: 'linehaul',
-    title: 'Posible daño Linehaul',
+    title: 'Posible daño LH',
     description: 'Escanea HU, área, origen y canalización',
     icon: 'clipboard',
     fields: [
@@ -2735,7 +2740,17 @@ class FormEngine {
   }
 
   finish() {
+    // Guard contra doble envío: guardar+sincronizar toma uno o dos segundos
+    // (red variable) y hasta ahora no había ningún indicio visual de que el
+    // toque ya se había registrado, así que un segundo toque mientras
+    // todavía estaba procesando duplicaba el registro completo.
+    if (this._finished) return;
+    this._finished = true;
+
     this.stopScanner();
+    if (this.actionsEl) {
+      this.actionsEl.querySelectorAll('button').forEach((btn) => { btn.disabled = true; });
+    }
     this.formConfig.fields.forEach((f) => {
       if (this.values[f.id] === undefined) {
         this.values[f.id] = this.isFieldHidden(f) && f.valueWhenHidden ? f.valueWhenHidden(this.values) : '';
@@ -3083,7 +3098,7 @@ class CapturaApp {
    * ambas apps de Auditorías SVC compartan marca en el navbar.
    */
   async loadHeaderLogo() {
-    const logoDocId = '01KTD4Q8GC7Y620F9F9WEXGDE4';
+    const logoDocId = '01KY8S5Z97W0YTQVTX59DDBC05';
     const objectUrl = await this.gridClient.downloadDocumentAsObjectUrl(logoDocId);
     if (objectUrl) {
       const img = document.getElementById('navbar-logo');
@@ -3288,6 +3303,7 @@ class CapturaApp {
   async onFormComplete(formId, values) {
     try {
       DebugConsole.log('Procesando registro...', 'info');
+      this.showToast('Guardando...', 'info');
 
       if (formId === 'destino_doca') {
         this.lastDestino = values.destino;
@@ -3299,6 +3315,7 @@ class CapturaApp {
       const record = {
         uid,
         ts,
+        formId,
         ...values,
         auditoria: this.userEmail,
       };
