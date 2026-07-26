@@ -92,12 +92,22 @@
 
     .navbar-brand {
       order: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 18px;
       font-weight: 700;
     }
 
     .navbar-brand b {
       color: var(--accent);
+    }
+
+    .navbar-logo {
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+      border-radius: var(--r-sm);
     }
 
     .navbar-actions {
@@ -674,6 +684,85 @@
       color: var(--text-sub);
     }
 
+    /* ──── MORPH OVERLAY (animación de carga al guardar) ──── */
+    /* Reskin en tokens Nocturne del componente "botón morphing bloqueante": */
+    /* botón → orbe de carga → estado de éxito/error, con capa que bloquea  */
+    /* la pantalla mientras se guarda el registro.                          */
+    .morph-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 12, 14, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 200;
+      opacity: 1;
+      transition: opacity 0.25s ease;
+    }
+
+    .morph-overlay.hidden {
+      display: none;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .morph-btn {
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: var(--on-accent);
+      border: none;
+      padding: 0 24px;
+      height: 48px;
+      border-radius: var(--r-pill);
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 160px;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: var(--shadow);
+    }
+
+    .morph-btn.is-saving {
+      min-width: 48px;
+      width: 48px;
+      padding: 0;
+      border-radius: 50%;
+      background: transparent;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      color: transparent;
+      animation: morph-spin 0.9s linear infinite;
+      pointer-events: none;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .morph-btn.is-saved {
+      background: var(--c-green);
+      color: #06251b;
+      min-width: 160px;
+      border-radius: var(--r-pill);
+      border: none;
+      box-shadow: 0 0 20px rgba(0, 214, 137, 0.5);
+    }
+
+    .morph-btn.is-error {
+      background: var(--c-red);
+      color: #2b0a0d;
+      min-width: 160px;
+      border-radius: var(--r-pill);
+      border: none;
+      box-shadow: 0 0 20px rgba(255, 92, 108, 0.5);
+    }
+
+    @keyframes morph-spin {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
     /* ──── RESPONSIVE ──── */
     /* Mobile-first: los estilos base ya son los de móvil.        */
     /* Este breakpoint solo añade mejoras progresivas en pantallas */
@@ -734,7 +823,10 @@
 <body>
   <!-- NAVBAR -->
   <nav class="navbar">
-    <div class="navbar-brand">Device<b>Hub</b></div>
+    <div class="navbar-brand">
+      <img id="navbar-logo-img" class="navbar-logo" alt="" style="display: none;" />
+      Device<b>Hub</b>
+    </div>
     <!-- MENUBAR: pastillas Nocturne (Registro / Historial) -->
     <div class="menubar">
       <button class="menubar-btn active" data-tab="registro">
@@ -994,6 +1086,11 @@
   <!-- CANVAS TEMPORAL PARA QR -->
   <canvas id="qr-canvas" style="display: none;"></canvas>
 
+  <!-- MORPH OVERLAY: animación de carga al guardar -->
+  <div id="morph-overlay" class="morph-overlay hidden">
+    <button id="morph-btn" class="morph-btn" disabled>Guardando...</button>
+  </div>
+
   <!-- ──────────────────────────────────────────────────────────────────────────── -->
   <!-- SCRIPT -->
   <!-- ──────────────────────────────────────────────────────────────────────────── -->
@@ -1197,6 +1294,18 @@
         }
         return await res.json();
       }
+
+      async getDownloadUrl(docId) {
+        const res = await this._fetchWithTimeout(
+          `${this.baseUrl}/api/v1/documents/${docId}/download`,
+          { credentials: "include" }
+        );
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const meta = await res.json();
+        return meta.download_url || meta.agent_download_url;
+      }
     }
 
     /* ─────────────────────────────────────────────────────────────────────── */
@@ -1264,6 +1373,44 @@
     }
 
     /* ─────────────────────────────────────────────────────────────────────── */
+    /* LOGO — mismo doc_id para el logo del título y el logo central del QR */
+    /* ─────────────────────────────────────────────────────────────────────── */
+    const LOGO_DOC_ID = "01KYGC20BZ3Q47PTQH41Z38SNV";
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* MORPH CONTROLLER — animación de carga bloqueante al guardar */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    const MorphController = {
+      overlay: document.getElementById("morph-overlay"),
+      btn: document.getElementById("morph-btn"),
+
+      start() {
+        this.overlay.classList.remove("hidden");
+        this.btn.classList.remove("is-saved", "is-error");
+        this.btn.classList.add("is-saving");
+        this.btn.textContent = "Guardando...";
+      },
+
+      success(label) {
+        this.btn.classList.remove("is-saving");
+        this.btn.classList.add("is-saved");
+        this.btn.textContent = label || "Guardado";
+      },
+
+      error(label) {
+        this.btn.classList.remove("is-saving");
+        this.btn.classList.add("is-error");
+        this.btn.textContent = label || "Error";
+      },
+
+      close() {
+        this.overlay.classList.add("hidden");
+        this.btn.classList.remove("is-saving", "is-saved", "is-error");
+      },
+    };
+
+    /* ─────────────────────────────────────────────────────────────────────── */
     /* MAIN APP */
     /* ─────────────────────────────────────────────────────────────────────── */
 
@@ -1273,6 +1420,7 @@
           new URLSearchParams(location.search).get("data_doc_id") ||
           "01KY8F1NQ0CGK80JNEN1DPNFVF";
         this.gridClient = new GridClient(this.docId);
+        this.logoImage = null;
         this.currentUser = null;
         this.scanner = null;
         this.fotoData = null;
@@ -1287,6 +1435,31 @@
         this.bindModal();
         this.loadUser();
         this.loadHistorial();
+        this.loadLogo();
+      }
+
+      async loadLogo() {
+        try {
+          const url = await this.gridClient.getDownloadUrl(LOGO_DOC_ID);
+          if (!url) return;
+
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = url;
+          });
+
+          this.logoImage = img;
+
+          const navImg = document.getElementById("navbar-logo-img");
+          if (navImg) {
+            navImg.src = url;
+            navImg.style.display = "block";
+          }
+        } catch (e) {
+          console.error("No se pudo cargar el logo:", e);
+        }
       }
 
       bindTabs() {
@@ -1393,9 +1566,16 @@
           puesto ? "block" : "none";
         document.getElementById("imei-section").style.display =
           tipoDisp === "smartphone" ? "block" : "none";
+        // Bug: estas dos secciones nunca se revelaban, así que Descripción
+        // y Foto quedaban ocultas (display:none) para siempre y el usuario
+        // no podía llenarlas aunque la validación de guardar() las exigiera.
+        document.getElementById("descripcion-section").style.display =
+          tipoDisp ? "block" : "none";
+        document.getElementById("foto-section").style.display = tipoDisp
+          ? "block"
+          : "none";
 
-        const allRequired = document.getElementById("puesto").value;
-        document.getElementById("btn-guardar").style.display = allRequired
+        document.getElementById("btn-guardar").style.display = tipoDisp
           ? "block"
           : "none";
 
@@ -1567,6 +1747,14 @@
           return;
         }
 
+        // Bloquear UI con la animación de carga mientras se procesa
+        // (foto, QR, guardado en bucket pueden tardar varios segundos).
+        MorphController.start();
+
+        let record = null;
+        let qrDataUrl = null;
+        let saveError = null;
+
         try {
           // 1. Generar ID único para el dispositivo
           const deviceId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1579,7 +1767,7 @@
           );
 
           // 3. Construir registro
-          const record = {
+          record = {
             id: deviceId,
             timestamp: new Date().toISOString(),
             puesto,
@@ -1598,38 +1786,48 @@
             if (tipoDisp === "smartphone") {
               record.imei = document.getElementById("imei").value;
             }
-            // Generar QR para Otro
-            const qrDataUrl = await this.generarQR(deviceId);
+            // Generar QR para Otro (con logo central del doc_id configurado)
+            qrDataUrl = await this.generarQR(deviceId);
             const qrBlob = await this.dataUrlToBlob(qrDataUrl);
             record.qr_doc_id = await this.gridClient.uploadPublicDocument(
               qrBlob,
               `qr_${deviceId}.png`
             );
-
-            // Mostrar QR en modal
-            this.mostrarQRModal(qrDataUrl, record);
           }
 
           // 4. Guardar en bucket
           await this.guardarEnBucket(record);
 
-          // 5. Feedback
-          this.showAlert(
-            "registro",
-            `Dispositivo registrado (ID: ${deviceId})`,
-            "success"
-          );
-
-          if (puesto === "driver") {
-            document.getElementById("modal-resultado").classList.add("active");
-            document.getElementById("modal-titulo").textContent = "Driver registrado";
-            document.getElementById("modal-mensaje").textContent =
-              `Driver ID ${record.driver_id} autorizado correctamente.`;
-            document.getElementById("qr-preview-modal").style.display = "none";
-          }
+          MorphController.success();
         } catch (e) {
           console.error("Error al guardar:", e);
-          this.showAlert("registro", `Error: ${e.message}`, "error");
+          saveError = e;
+          MorphController.error();
+        } finally {
+          // Dejar ver el estado final del botón (éxito/error) antes de
+          // desbloquear la UI y recién ahí abrir el modal correspondiente.
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          MorphController.close();
+
+          if (saveError) {
+            this.showAlert("registro", `Error: ${saveError.message}`, "error");
+          } else {
+            this.showAlert(
+              "registro",
+              `Dispositivo registrado (ID: ${record.id})`,
+              "success"
+            );
+
+            if (record.puesto === "driver") {
+              document.getElementById("modal-resultado").classList.add("active");
+              document.getElementById("modal-titulo").textContent = "Driver registrado";
+              document.getElementById("modal-mensaje").textContent =
+                `Driver ID ${record.driver_id} autorizado correctamente.`;
+              document.getElementById("qr-preview-modal").style.display = "none";
+            } else {
+              this.mostrarQRModal(qrDataUrl, record);
+            }
+          }
         }
       }
 
@@ -1643,11 +1841,21 @@
         });
 
         // Copiar el canvas generado
-        const srcCtx = qr.canvas.getContext("2d");
         canvas.width = qr.canvas.width;
         canvas.height = qr.canvas.height;
         const dstCtx = canvas.getContext("2d");
         dstCtx.drawImage(qr.canvas, 0, 0);
+
+        // Logo central (mismo doc_id que el logo del título)
+        if (this.logoImage) {
+          const logoSize = canvas.width * 0.26;
+          const x = (canvas.width - logoSize) / 2;
+          const y = (canvas.height - logoSize) / 2;
+          const pad = 6;
+          dstCtx.fillStyle = "#FFFFFF";
+          dstCtx.fillRect(x - pad, y - pad, logoSize + pad * 2, logoSize + pad * 2);
+          dstCtx.drawImage(this.logoImage, x, y, logoSize, logoSize);
+        }
 
         return canvas.toDataURL("image/png");
       }
