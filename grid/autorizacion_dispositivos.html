@@ -74,17 +74,16 @@
     }
 
     /* ──── NAVBAR ──── */
-    /* Mobile-first: brand + actions en una fila, menubar (pastillas) */
-    /* debajo en su propia fila centrada. En escritorio se acomodan   */
-    /* las tres piezas en una sola fila (brand · menubar · actions).  */
+    /* Mobile-first: las tres piezas (brand · menubar · actions) van    */
+    /* siempre en una sola hilera. En móvil el menubar muestra solo los */
+    /* íconos SVG (labels ocultos) para caber al nivel del logo.        */
     .navbar {
       position: sticky;
       top: 0;
       z-index: 50;
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       padding: 12px 16px;
       background: linear-gradient(180deg, rgba(9, 12, 14, 0.85), rgba(9, 12, 14, 0));
       backdrop-filter: blur(10px);
@@ -114,16 +113,17 @@
     }
 
     .navbar-actions {
-      order: 2;
-      margin-left: auto;
+      order: 3;
+      flex-shrink: 0;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .icon-btn {
-      width: 40px;
-      height: 40px;
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
       display: grid;
       place-items: center;
       border: 1px solid var(--border);
@@ -139,6 +139,24 @@
       border-color: var(--accent-dim);
     }
 
+    /* Avatar con iniciales del email (reemplaza el ícono de config) */
+    .user-avatar {
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--r-pill);
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: var(--on-accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      user-select: none;
+    }
+
     /* ──── CONTAINER ──── */
     .container {
       max-width: 1200px;
@@ -150,8 +168,8 @@
     /* Botonera media en píldora: patrón característico de Nocturne para */
     /* navegación entre secciones (aquí: Registro / Historial).          */
     .menubar {
-      order: 3;
-      width: 100%;
+      order: 2;
+      margin: 0 auto;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -159,7 +177,6 @@
       border: 1px solid var(--border);
       border-radius: var(--r-pill);
       padding: 5px;
-      overflow-x: auto;
       justify-content: center;
     }
 
@@ -174,7 +191,7 @@
       font-family: inherit;
       font-size: 13px;
       font-weight: 500;
-      padding: 8px 14px;
+      padding: 8px 12px;
       white-space: nowrap;
       border-radius: var(--r-pill);
       cursor: pointer;
@@ -183,6 +200,12 @@
 
     .menubar-btn svg {
       flex-shrink: 0;
+    }
+
+    /* Móvil: solo íconos en las pastillas para que quepan al nivel del */
+    /* logo. Los labels reaparecen desde tablet/escritorio.            */
+    .menubar-label {
+      display: none;
     }
 
     .menubar-btn:hover {
@@ -772,12 +795,7 @@
     /* más grandes (tablet / escritorio).                          */
     @media (min-width: 769px) {
       .navbar {
-        flex-wrap: nowrap;
         padding: 16px 24px;
-      }
-
-      .navbar-brand {
-        flex: 0 0 auto;
       }
 
       .navbar-logo {
@@ -786,21 +804,17 @@
       }
 
       .menubar {
-        order: 2;
-        width: auto;
-        flex: 1;
         margin: 0 20px;
-      }
-
-      .navbar-actions {
-        order: 3;
-        margin-left: 0;
-        flex: 0 0 auto;
       }
 
       .menubar-btn {
         padding: 8px 16px;
         font-size: 14px;
+      }
+
+      /* Reaparecen los labels de las pastillas en pantallas grandes */
+      .menubar-label {
+        display: inline;
       }
 
       .container {
@@ -835,25 +849,29 @@
       <img id="navbar-logo-img" class="navbar-logo" alt="DeviceHub" style="display: none;" />
     </div>
     <!-- MENUBAR: pastillas Nocturne (Registro / Historial) -->
+    <!-- En móvil se muestran solo los íconos SVG (labels ocultos) para -->
+    <!-- que quepan al nivel del logo en la misma hilera.                -->
     <div class="menubar">
       <button class="menubar-btn active" data-tab="registro">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-        Registro
+        <span class="menubar-label">Registro</span>
       </button>
       <button class="menubar-btn" data-tab="historial">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6a1 1 0 011 1v1H8V4a1 1 0 011-1z"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 11h6M9 15h6"/></svg>
-        Historial
+        <span class="menubar-label">Historial</span>
       </button>
     </div>
 
     <div class="navbar-actions">
-      <button class="icon-btn" id="btn-debug" title="Debug">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.77z"/></svg>
-      </button>
-      <div id="pending-badge" style="display: none; align-items: center; gap: 6px; font-size: 12px; color: var(--c-orange); margin-left: 8px;">
+      <div id="pending-badge" style="display: none; align-items: center; gap: 6px; font-size: 12px; color: var(--c-orange);">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
         <span id="pending-count">0</span>
       </div>
+      <button class="icon-btn" id="btn-debug-console" title="Consola de depuración" style="position: relative;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span id="debug-console-inline-badge" style="display: none; position: absolute; top: -2px; right: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--c-red); color: #fff; font-size: 9px; font-weight: 700; align-items: center; justify-content: center;"></span>
+      </button>
+      <div class="user-avatar" id="user-avatar" title="">?</div>
     </div>
   </nav>
 
@@ -1098,6 +1116,23 @@
     <button id="morph-btn" class="morph-btn" disabled>Guardando...</button>
   </div>
 
+  <!-- DEBUG CONSOLE (oculta por defecto) -->
+  <div id="debug-console-panel" style="position: fixed; bottom: 20px; right: 20px; width: 320px; max-width: calc(100vw - 40px); max-height: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); display: flex; flex-direction: column; z-index: 1000; transform: translateY(470px); transition: transform 0.3s ease; box-shadow: var(--shadow);">
+    <div style="padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-weight: 600; font-size: 13px; color: var(--text-sub);">Debug</span>
+      <button onclick="DebugConsole.toggle()" style="background: none; border: none; color: var(--text-sub); cursor: pointer; padding: 4px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="debug-console-body" style="flex: 1; overflow-y: auto; font-size: 11px; font-family: monospace; padding: 10px; line-height: 1.4; color: var(--text-sub);"></div>
+    <div style="padding: 8px; border-top: 1px solid var(--border); display: flex; gap: 6px;">
+      <button onclick="DebugConsole.copyToClipboard()" style="flex: 1; padding: 7px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-sub); border-radius: var(--r-sm); cursor: pointer; font-size: 12px;">Copiar</button>
+      <button onclick="DebugConsole.toggle()" style="flex: 1; padding: 7px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-sub); border-radius: var(--r-sm); cursor: pointer; font-size: 12px;">Cerrar</button>
+    </div>
+  </div>
+
+  <div id="debug-console-badge" style="position: fixed; bottom: 20px; right: 20px; width: 34px; height: 34px; background: var(--c-red); border-radius: 50%; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 12px; cursor: pointer; z-index: 999; display: none;" onclick="DebugConsole.toggle()"></div>
+
   <!-- ──────────────────────────────────────────────────────────────────────────── -->
   <!-- SCRIPT -->
   <!-- ──────────────────────────────────────────────────────────────────────────── -->
@@ -1202,6 +1237,85 @@
     }
 
     /* ─────────────────────────────────────────────────────────────────────── */
+    /* DEBUG CONSOLE — igual que las otras apps de Grid */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class DebugConsole {
+      static entries = [];
+      static maxEntries = 300;
+
+      static log(message, level = "info") {
+        const ts = new Date().toISOString().split("T")[1].slice(0, 8);
+        this.entries.push({ ts, level, message: String(message) });
+        if (this.entries.length > this.maxEntries) this.entries.shift();
+        this.render();
+        if (level === "error") console.error(message);
+        else if (level === "warn") console.warn(message);
+        else console.log(message);
+      }
+
+      static escapeHtml(s) {
+        const div = document.createElement("div");
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      static render() {
+        const el = document.getElementById("debug-console-body");
+        if (!el) return;
+        const colors = { error: "#FF5C6C", warn: "#FFD100", info: "#6B757D" };
+        el.innerHTML = this.entries
+          .map(
+            (e) =>
+              `<div style="color:${colors[e.level] || colors.info};">[${e.ts}] ${this.escapeHtml(e.message)}</div>`
+          )
+          .join("");
+        el.scrollTop = el.scrollHeight;
+        const errorCount = this.entries.filter((e) => e.level === "error").length;
+        const badge = document.getElementById("debug-console-badge");
+        if (badge) {
+          badge.style.display = errorCount > 0 ? "flex" : "none";
+          badge.textContent = errorCount > 9 ? "9+" : String(errorCount);
+        }
+        const inlineBadge = document.getElementById("debug-console-inline-badge");
+        if (inlineBadge) {
+          inlineBadge.style.display = errorCount > 0 ? "flex" : "none";
+          inlineBadge.textContent = errorCount > 9 ? "9+" : String(errorCount);
+        }
+      }
+
+      static toggle() {
+        const panel = document.getElementById("debug-console-panel");
+        panel.classList.toggle("open");
+        const isOpen = panel.classList.contains("open");
+        panel.style.transform = isOpen ? "translateY(0)" : "translateY(470px)";
+      }
+
+      static copyToClipboard() {
+        const text = this.entries
+          .map((e) => `[${e.ts}] [${e.level}] ${e.message}`)
+          .join("\n");
+        navigator.clipboard
+          .writeText(text)
+          .then(() => this.log("Log copiado al portapapeles", "info"))
+          .catch(() =>
+            this.log("No se pudo copiar — selecciona el texto manualmente", "warn")
+          );
+      }
+
+      static setup() {
+        window.addEventListener("error", (e) => {
+          this.log(`Error no capturado: ${e.message} (${e.filename}:${e.lineno})`, "error");
+        });
+        window.addEventListener("unhandledrejection", (e) => {
+          const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+          this.log(`Promesa rechazada sin capturar: ${reason}`, "error");
+        });
+        this.log("Consola de depuración iniciada", "info");
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
     /* GRID CLIENT — State Buckets */
     /* ─────────────────────────────────────────────────────────────────────── */
 
@@ -1232,19 +1346,30 @@
           credentials: "include",
         });
         if (res.status === 404) {
+          DebugConsole.log(`GET ${name}: 404 (bucket no existe todavía)`, "info");
           return null;
         }
         if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          DebugConsole.log(`GET ${name}: HTTP ${res.status} — ${body}`, "error");
           throw new Error(`HTTP ${res.status}`);
         }
         const body = await res.json();
         this._updatedAtByName[name] = body.updated_at || "";
+        const count = Array.isArray(body.state?.records)
+          ? body.state.records.length
+          : "n/a";
+        DebugConsole.log(`GET ${name}: OK, records=${count}`, "info");
         return body.state ?? null;
       }
 
       async setStateBucket(name, data) {
         const ifUpdatedAt = this._updatedAtByName[name] || "";
         const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+        DebugConsole.log(
+          `PUT ${name}: if_updated_at="${ifUpdatedAt}", records=${data.records?.length ?? "n/a"}`,
+          "info"
+        );
         const res = await this._fetchWithTimeout(
           url,
           {
@@ -1261,34 +1386,46 @@
           if (conflictBody.current_updated_at) {
             this._updatedAtByName[name] = conflictBody.current_updated_at;
           }
+          DebugConsole.log(`PUT ${name}: 409 conflicto, reintentando`, "warn");
           return { conflict: true };
         }
 
         if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          DebugConsole.log(`PUT ${name}: HTTP ${res.status} — ${body}`, "error");
           throw new Error(`HTTP ${res.status}`);
         }
 
         const body = await res.json();
         this._updatedAtByName[name] = body.updated_at || "";
+        DebugConsole.log(`PUT ${name}: OK`, "info");
         return { ok: true };
       }
 
       async uploadPublicDocument(blob, filename) {
         const fd = new FormData();
         fd.append("file", blob, filename);
+        fd.append("title", filename);
+        fd.append("description", "Autorización de dispositivos");
+        fd.append("visibility", "public");
         const res = await this._fetchWithTimeout(
           `${this.baseUrl}/api/v1/documents`,
           {
             method: "POST",
             credentials: "include",
             body: fd,
-          }
+          },
+          30000
         );
         if (!res.ok) {
-          throw new Error(`Upload failed: HTTP ${res.status}`);
+          const err = await res.text().catch(() => "");
+          DebugConsole.log(`Upload ${filename}: HTTP ${res.status} — ${err}`, "error");
+          throw new Error(`Upload falló: HTTP ${res.status}`);
         }
         const body = await res.json();
-        return body.id || body.doc_id;
+        const docId = body.id || body.doc_id || (body.document && body.document.id);
+        DebugConsole.log(`Upload ${filename}: OK, doc_id=${docId}`, "info");
+        return docId;
       }
 
       async getCurrentUser() {
@@ -1434,7 +1571,20 @@
         this.fotoData = null;
         this.outboxRecords = [];
 
+        DebugConsole.setup();
+        DebugConsole.log(`Documento de datos: ${this.docId}`, "info");
+
         this.init();
+      }
+
+      static getInitials(email) {
+        if (!email) return "?";
+        const local = email.split("@")[0] || "";
+        const parts = local.split(/[._-]+/).filter(Boolean);
+        if (parts.length >= 2) {
+          return (parts[0][0] + parts[1][0]).toUpperCase();
+        }
+        return local.slice(0, 2).toUpperCase() || "?";
       }
 
       async init() {
@@ -1543,13 +1693,9 @@
           this.stopScanner();
         });
 
-        document.getElementById("btn-debug").addEventListener("click", () => {
-          document.getElementById("qr-preview-modal").style.display = "none";
-          document.getElementById("modal-titulo").textContent = "Debug";
-          document.getElementById("modal-mensaje").textContent =
-            `docId: ${this.docId} · Usuario: ${this.currentUser?.ldap || "?"} · Outbox: ${this.outboxRecords.length}`;
-          document.getElementById("modal-resultado").classList.add("active");
-        });
+        document
+          .getElementById("btn-debug-console")
+          .addEventListener("click", () => DebugConsole.toggle());
       }
 
       bindModal() {
@@ -1668,9 +1814,25 @@
         try {
           this.currentUser = await this.gridClient.getCurrentUser();
           document.getElementById("usuario").value = this.currentUser?.ldap || "unknown";
+          this.renderUserAvatar();
+          DebugConsole.log(
+            `Usuario: ${this.currentUser?.ldap || "?"} <${this.currentUser?.email || "?"}>`,
+            "info"
+          );
         } catch (e) {
-          console.error("Error cargando usuario:", e);
+          DebugConsole.log(`Error cargando usuario: ${e.message}`, "error");
         }
+      }
+
+      renderUserAvatar() {
+        const el = document.getElementById("user-avatar");
+        if (!el) return;
+        const email = this.currentUser?.email || this.currentUser?.ldap || "";
+        el.textContent = AutorizacionApp.getInitials(email);
+        el.title = email;
+        el.addEventListener("click", () => {
+          this.showAlert("registro", `Sesión: ${email || "desconocido"}`, "info");
+        });
       }
 
       async loadHistorial() {
@@ -1744,13 +1906,27 @@
         const puesto = document.getElementById("puesto").value;
         const tipoDisp = document.getElementById("tipo-dispositivo").value;
         const descripcion = document.getElementById("descripcion").value.toUpperCase();
+        const driverId = document.getElementById("driver-id").value;
+
+        DebugConsole.log(
+          `Guardar -> puesto=${puesto || "?"}, tipo=${tipoDisp || "?"}, desc="${descripcion}", foto=${this.fotoData ? "sí" : "no"}, driver_id=${driverId || "-"}`,
+          "info"
+        );
 
         if (!puesto || !tipoDisp || !descripcion || !this.fotoData) {
+          DebugConsole.log("Validación: faltan campos obligatorios", "warn");
           this.showAlert("registro", "Completa todos los campos requeridos", "error");
           return;
         }
 
+        if (puesto === "driver" && !driverId) {
+          DebugConsole.log("Validación: falta escanear el QR del driver", "warn");
+          this.showAlert("registro", "Escanea el QR del driver primero", "error");
+          return;
+        }
+
         if (puesto === "otro" && !document.getElementById("correo").value) {
+          DebugConsole.log("Validación: falta correo de autorización", "warn");
           this.showAlert("registro", "Ingresa el correo de autorización", "error");
           return;
         }
@@ -1760,6 +1936,7 @@
           (!document.getElementById("imei").value ||
             document.getElementById("imei").value.length !== 15)
         ) {
+          DebugConsole.log("Validación: IMEI inválido", "warn");
           this.showAlert("registro", "IMEI inválido (15 dígitos)", "error");
           return;
         }
@@ -1815,9 +1992,10 @@
           // 4. Guardar en bucket
           await this.guardarEnBucket(record);
 
+          DebugConsole.log(`Registro guardado (ID: ${record.id})`, "info");
           MorphController.success();
         } catch (e) {
-          console.error("Error al guardar:", e);
+          DebugConsole.log(`Error al guardar: ${e.message}`, "error");
           saveError = e;
           MorphController.error();
         } finally {
