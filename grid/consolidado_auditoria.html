@@ -626,6 +626,14 @@
 
         <!-- Table -->
         <div class="table-wrapper">
+          <!-- Date Range Filter -->
+          <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+            <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
+            <input type="date" id="date-from" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+            <span style="color: var(--text-mut);">hasta</span>
+            <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+            <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
+          </div>
           <div class="table-controls">
             <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
           </div>
@@ -633,6 +641,11 @@
             <thead id="table-head"></thead>
             <tbody id="table-body"></tbody>
           </table>
+          <!-- Pagination -->
+          <div style="display: flex; gap: 12px; margin-top: 12px; justify-content: center; align-items: center;">
+            <button id="btn-load-more" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px; display: none;">Cargar más</button>
+            <span id="pagination-info" style="color: var(--text-mut); font-size: 0.85rem;"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -896,6 +909,10 @@
         inbound_fm: [],
       };
       this.currentLog = 'destino_doca';
+      // Filtros y paginación
+      this.dateFrom = null;
+      this.dateTo = null;
+      this.displayedCount = 10;
       this.init();
     }
 
@@ -907,6 +924,13 @@
     async init() {
       this.setupEventListeners();
       this.loadHeaderLogo();
+
+      // Rango de fechas por defecto: mes actual (desde el día 1 hasta hoy)
+      const today = new Date();
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      this.dateFrom = firstDayOfMonth;
+      document.getElementById('date-from').value = firstDayOfMonth.toISOString().split('T')[0];
+
       await this.loadAllLogs();
       const firstWithData = Object.entries(this.logs).find(([, r]) => r.length > 0);
       if (firstWithData) {
@@ -930,6 +954,29 @@
       document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
       document.getElementById('photo-modal-close').addEventListener('click', () => {
         document.getElementById('photo-modal').classList.remove('active');
+      });
+
+      document.getElementById('date-from').addEventListener('change', (e) => {
+        this.dateFrom = e.target.value ? new Date(e.target.value) : null;
+        this.displayedCount = 10;
+        this.render();
+      });
+      document.getElementById('date-to').addEventListener('change', (e) => {
+        this.dateTo = e.target.value ? new Date(e.target.value) : null;
+        this.displayedCount = 10;
+        this.render();
+      });
+      document.getElementById('btn-clear-filters').addEventListener('click', () => {
+        this.dateFrom = null;
+        this.dateTo = null;
+        document.getElementById('date-from').value = '';
+        document.getElementById('date-to').value = '';
+        this.displayedCount = 10;
+        this.render();
+      });
+      document.getElementById('btn-load-more').addEventListener('click', () => {
+        this.displayedCount += 10;
+        this.render();
       });
     }
 
@@ -998,6 +1045,7 @@
         tab.textContent = this.getLogTitle(logType);
         tab.addEventListener('click', () => {
           this.currentLog = logType;
+          this.displayedCount = 10;
           this.render();
         });
         container.appendChild(tab);
@@ -1005,9 +1053,17 @@
     }
 
     renderAnalysis() {
-      const records = this.logs[this.currentLog];
+      const allRecords = this.logs[this.currentLog];
 
-      if (records.length === 0) {
+      if (!allRecords || allRecords.length === 0) {
+        document.getElementById('no-data-message').style.display = 'block';
+        document.getElementById('analysis-content').style.display = 'none';
+        return;
+      }
+
+      const filteredRecords = this.getFilteredRecords();
+
+      if (filteredRecords.length === 0) {
         document.getElementById('no-data-message').style.display = 'block';
         document.getElementById('analysis-content').style.display = 'none';
         return;
@@ -1016,9 +1072,53 @@
       document.getElementById('no-data-message').style.display = 'none';
       document.getElementById('analysis-content').style.display = 'block';
 
-      this.renderKpis(records);
-      this.renderTable(records);
-      this.renderCharts(records);
+      // KPIs y gráficas usan todos los registros filtrados por fecha (no
+      // paginados); la tabla sí pagina, para no renderizar cientos de filas.
+      this.renderKpis(filteredRecords);
+
+      const displayedRecords = filteredRecords.slice(0, this.displayedCount);
+      this.renderTable(displayedRecords);
+
+      const btnLoadMore = document.getElementById('btn-load-more');
+      const paginationInfo = document.getElementById('pagination-info');
+      if (filteredRecords.length > this.displayedCount) {
+        btnLoadMore.style.display = 'inline-block';
+        paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
+      } else {
+        btnLoadMore.style.display = 'none';
+        paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+      }
+
+      this.renderCharts(filteredRecords);
+    }
+
+    /**
+     * Registros del log actual filtrados por rango de fecha (this.dateFrom/
+     * dateTo) y ordenados por más reciente primero. KPIs/gráficas/búsqueda
+     * usan esta lista completa; solo la tabla pagina sobre ella.
+     */
+    getFilteredRecords() {
+      let records = this.logs[this.currentLog] || [];
+
+      if (this.dateFrom || this.dateTo) {
+        records = records.filter(r => {
+          const recDate = r.ts ? new Date(r.ts) : null;
+          if (!recDate) return true;
+          if (this.dateFrom && recDate < this.dateFrom) return false;
+          if (this.dateTo) {
+            const dateToEndOfDay = new Date(this.dateTo);
+            dateToEndOfDay.setHours(23, 59, 59, 999);
+            if (recDate > dateToEndOfDay) return false;
+          }
+          return true;
+        });
+      }
+
+      return records.slice().sort((a, b) => {
+        const aDate = a.ts ? new Date(a.ts).getTime() : 0;
+        const bDate = b.ts ? new Date(b.ts).getTime() : 0;
+        return bDate - aDate;
+      });
     }
 
     renderKpis(records) {
@@ -1294,9 +1394,9 @@
       tr.appendChild(thActions);
       thead.appendChild(tr);
 
-      records.forEach((record, index) => {
+      records.forEach((record) => {
         const tr = document.createElement('tr');
-        tr.setAttribute('data-index', index);
+        tr.setAttribute('data-uid', record.uid || '');
 
         config.csvColumns.forEach(col => {
           const td = document.createElement('td');
@@ -1335,7 +1435,7 @@
         btnDelete.className = 'btn-action btn-delete';
         btnDelete.title = 'Borrar registro';
         btnDelete.innerHTML = SVG_ICONS.trash;
-        btnDelete.addEventListener('click', () => this.deleteRecord(this.currentLog, index));
+        btnDelete.addEventListener('click', () => this.deleteRecord(this.currentLog, record.uid));
 
         tdActions.appendChild(btnDelete);
         tr.appendChild(tdActions);
@@ -1344,26 +1444,29 @@
       });
     }
 
-    async deleteRecord(logType, index) {
+    async deleteRecord(logType, uid) {
       if (!confirm('¿Estás seguro de que quieres borrar este registro? Se eliminará tanto de la tabla como del consolidado.')) {
         return;
       }
 
       const records = this.logs[logType];
-      if (index < 0 || index >= records.length) {
+      const recordIndex = records.findIndex(r => r.uid === uid);
+      if (recordIndex < 0) {
         alert('Registro no encontrado');
         return;
       }
 
+      const deletedRecord = records[recordIndex];
+
       // Borrar del array local
-      records.splice(index, 1);
+      records.splice(recordIndex, 1);
 
       // Actualizar el bucket en Grid
       try {
         await this.gridClient.setStateBucket(`${logType}_master`, { version: 1, records });
         this.showNotification('Registro borrado exitosamente', 'success');
       } catch (error) {
-        this.logs[logType].splice(index, 0, records[index]); // Restaurar si falla
+        records.splice(recordIndex, 0, deletedRecord); // Restaurar si falla
         this.showNotification('Error al borrar: ' + error.message, 'error');
         return;
       }
@@ -1372,13 +1475,34 @@
       this.render();
     }
 
+    /**
+     * Busca en los registros filtrados por fecha (en memoria, no en el DOM
+     * ya renderizado) para que la búsqueda alcance registros fuera de la
+     * página actual, y muestra todos los resultados sin paginar.
+     */
     filterTable(query) {
-      const tbody = document.getElementById('table-body');
-      const rows = tbody.querySelectorAll('tr');
-      rows.forEach(row => {
-        const text = row.textContent.toLowerCase();
-        row.style.display = text.includes(query.toLowerCase()) ? '' : 'none';
+      if (!query.trim()) {
+        this.displayedCount = 10;
+        this.render();
+        return;
+      }
+
+      const filteredRecords = this.getFilteredRecords();
+      const queryLower = query.toLowerCase();
+      const config = FORMS_CONFIG[this.currentLog];
+      const searchResults = filteredRecords.filter(r => {
+        const recordText = (config.csvColumns || [])
+          .map(col => String(r[col.field] || '').toLowerCase())
+          .join(' ');
+        return recordText.includes(queryLower);
       });
+
+      this.renderTable(searchResults);
+
+      const btnLoadMore = document.getElementById('btn-load-more');
+      const paginationInfo = document.getElementById('pagination-info');
+      btnLoadMore.style.display = 'none';
+      paginationInfo.textContent = `${searchResults.length} resultado${searchResults.length !== 1 ? 's' : ''} encontrado${searchResults.length !== 1 ? 's' : ''}`;
     }
 
     /** ¿El registro tiene al menos una foto (doc ID o data URL legacy)? */
