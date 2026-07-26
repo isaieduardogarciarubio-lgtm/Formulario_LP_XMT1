@@ -1373,9 +1373,10 @@
     }
 
     /* ─────────────────────────────────────────────────────────────────────── */
-    /* LOGO — mismo doc_id para el logo del título y el logo central del QR */
+    /* LOGOS — doc_ids independientes: título del navbar vs. logo del QR */
     /* ─────────────────────────────────────────────────────────────────────── */
-    const LOGO_DOC_ID = "01KYGC20BZ3Q47PTQH41Z38SNV";
+    const NAVBAR_LOGO_DOC_ID = "01KYGCGRZHJT8JP7Q1WRZKRX6C";
+    const QR_LOGO_DOC_ID = "01KYGC20BZ3Q47PTQH41Z38SNV";
 
     /* ─────────────────────────────────────────────────────────────────────── */
     /* MORPH CONTROLLER — animación de carga bloqueante al guardar */
@@ -1439,26 +1440,35 @@
       }
 
       async loadLogo() {
+        // Logo del título (navbar)
         try {
-          const url = await this.gridClient.getDownloadUrl(LOGO_DOC_ID);
-          if (!url) return;
+          const url = await this.gridClient.getDownloadUrl(NAVBAR_LOGO_DOC_ID);
+          if (url) {
+            const navImg = document.getElementById("navbar-logo-img");
+            if (navImg) {
+              navImg.src = url;
+              navImg.style.display = "block";
+            }
+          }
+        } catch (e) {
+          console.error("No se pudo cargar el logo del navbar:", e);
+        }
+
+        // Logo central del QR (independiente del logo del navbar)
+        try {
+          const qrUrl = await this.gridClient.getDownloadUrl(QR_LOGO_DOC_ID);
+          if (!qrUrl) return;
 
           const img = new Image();
           await new Promise((resolve, reject) => {
             img.onload = resolve;
             img.onerror = reject;
-            img.src = url;
+            img.src = qrUrl;
           });
 
           this.logoImage = img;
-
-          const navImg = document.getElementById("navbar-logo-img");
-          if (navImg) {
-            navImg.src = url;
-            navImg.style.display = "block";
-          }
         } catch (e) {
-          console.error("No se pudo cargar el logo:", e);
+          console.error("No se pudo cargar el logo del QR:", e);
         }
       }
 
