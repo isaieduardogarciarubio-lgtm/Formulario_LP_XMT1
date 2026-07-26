@@ -82,7 +82,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 20px;
-      padding: 16px 24px;
+      padding: 12px 16px;
       background: linear-gradient(180deg, rgba(9, 12, 14, 0.85), rgba(9, 12, 14, 0));
       backdrop-filter: blur(10px);
     }
@@ -128,29 +128,39 @@
     .container {
       max-width: 1200px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 16px;
     }
 
     /* ──── TABS (Pastillas) ──── */
     .tabs {
       display: flex;
-      gap: 12px;
+      gap: 8px;
       margin-bottom: 24px;
       border-bottom: 1px solid var(--border);
       padding-bottom: 0;
+      overflow-x: auto;
     }
 
     .tab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       background: transparent;
       border: none;
       color: var(--text-sub);
-      font-size: 15px;
+      font-family: inherit;
+      font-size: 13px;
       font-weight: 600;
-      padding: 12px 20px;
+      padding: 10px 14px;
+      white-space: nowrap;
       cursor: pointer;
       transition: all 0.16s;
       border-bottom: 2px solid transparent;
       margin-bottom: -1px;
+    }
+
+    .tab-btn svg {
+      flex-shrink: 0;
     }
 
     .tab-btn:hover {
@@ -175,7 +185,7 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r-lg);
-      padding: 24px;
+      padding: 16px;
       margin-bottom: 20px;
     }
 
@@ -233,6 +243,10 @@
 
     /* ──── BUTTONS ──── */
     .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
       font-family: inherit;
       font-size: 14px;
       font-weight: 600;
@@ -241,6 +255,10 @@
       cursor: pointer;
       border: 1px solid transparent;
       transition: all 0.16s;
+    }
+
+    .btn svg {
+      flex-shrink: 0;
     }
 
     .btn-primary {
@@ -312,7 +330,9 @@
     }
 
     .dropzone-icon {
-      font-size: 24px;
+      display: flex;
+      justify-content: center;
+      color: var(--text-sub);
       margin-bottom: 8px;
       opacity: 0.6;
     }
@@ -346,13 +366,18 @@
       right: 4px;
       width: 28px;
       height: 28px;
+      display: grid;
+      place-items: center;
       background: rgba(0, 0, 0, 0.6);
       border: none;
       border-radius: 4px;
       color: var(--c-red);
       cursor: pointer;
-      font-weight: bold;
       transition: background 0.16s;
+    }
+
+    .photo-remove svg {
+      pointer-events: none;
     }
 
     .photo-remove:hover {
@@ -445,7 +470,8 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--r-lg);
-      padding: 24px;
+      padding: 16px;
+      width: 90vw;
       max-width: 500px;
       max-height: 90vh;
       overflow-y: auto;
@@ -481,7 +507,7 @@
 
     #scanner-video {
       width: 100%;
-      height: 300px;
+      height: 240px;
       background: #000;
       display: block;
     }
@@ -603,35 +629,37 @@
     }
 
     /* ──── RESPONSIVE ──── */
-    @media (max-width: 768px) {
+    /* Mobile-first: los estilos base ya son los de móvil.        */
+    /* Este breakpoint solo añade mejoras progresivas en pantallas */
+    /* más grandes (tablet / escritorio).                          */
+    @media (min-width: 769px) {
       .navbar {
-        padding: 12px 16px;
+        padding: 16px 24px;
       }
 
       .container {
-        padding: 16px;
+        padding: 20px;
       }
 
       .card {
-        padding: 16px;
+        padding: 24px;
       }
 
       #scanner-video {
-        height: 240px;
+        height: 300px;
       }
 
       .modal {
-        max-width: 90%;
-        padding: 16px;
+        padding: 24px;
       }
 
       .tabs {
-        gap: 8px;
+        gap: 12px;
       }
 
       .tab-btn {
-        padding: 10px 14px;
-        font-size: 13px;
+        padding: 12px 20px;
+        font-size: 15px;
       }
     }
 
@@ -649,9 +677,12 @@
     <div class="navbar-brand">Device<b>Hub</b></div>
     <div class="navbar-spacer"></div>
     <div class="navbar-actions">
-      <button class="icon-btn" id="btn-debug" title="Debug">🔧</button>
-      <div id="pending-badge" style="display: none; font-size: 12px; color: var(--c-orange); margin-left: 8px;">
-        ⏳ <span id="pending-count">0</span>
+      <button class="icon-btn" id="btn-debug" title="Debug">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.77z"/></svg>
+      </button>
+      <div id="pending-badge" style="display: none; align-items: center; gap: 6px; font-size: 12px; color: var(--c-orange); margin-left: 8px;">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <span id="pending-count">0</span>
       </div>
     </div>
   </nav>
@@ -660,8 +691,14 @@
   <div class="container">
     <!-- TABS -->
     <div class="tabs">
-      <button class="tab-btn active" data-tab="registro">📝 Registro</button>
-      <button class="tab-btn" data-tab="historial">📋 Historial</button>
+      <button class="tab-btn active" data-tab="registro">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        Registro
+      </button>
+      <button class="tab-btn" data-tab="historial">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6a1 1 0 011 1v1H8V4a1 1 0 011-1z"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 11h6M9 15h6"/></svg>
+        Historial
+      </button>
     </div>
 
     <!-- TAB: REGISTRO -->
@@ -695,8 +732,14 @@
           <div class="scanner-container">
             <video id="scanner-video"></video>
             <div class="scanner-controls">
-              <button class="btn btn-secondary" id="btn-start-scanner">📷 Iniciar Escáner</button>
-              <button class="btn btn-ghost" id="btn-stop-scanner" style="display: none;">⏹️ Detener</button>
+              <button class="btn btn-secondary" id="btn-start-scanner">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                Iniciar escáner
+              </button>
+              <button class="btn btn-ghost" id="btn-stop-scanner" style="display: none;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+                Detener
+              </button>
             </div>
           </div>
 
@@ -705,7 +748,8 @@
           <input type="hidden" id="driver-id" />
           <div id="driver-scan-confirm" style="display: none;">
             <div class="alert success">
-              ✓ Driver ID detectado: <strong id="detected-driver-id"></strong>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              Driver ID detectado: <strong id="detected-driver-id"></strong>
             </div>
           </div>
         </div>
@@ -778,7 +822,9 @@
           <div class="form-group">
             <label>Foto del Dispositivo *</label>
             <div class="dropzone" id="dropzone-foto">
-              <div class="dropzone-icon">📸</div>
+              <div class="dropzone-icon">
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+              </div>
               <div class="dropzone-text">Arrastra una imagen o haz click para seleccionar</div>
               <input type="file" id="input-foto" accept="image/*" required />
             </div>
@@ -791,9 +837,12 @@
         <input type="hidden" id="usuario" />
 
         <!-- BOTONES -->
-        <div style="display: flex; gap: 12px; margin-top: 24px;">
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px;">
           <button class="btn btn-secondary" id="btn-reset">Limpiar</button>
-          <button class="btn btn-primary" id="btn-guardar" style="display: none;">💾 Guardar Registro</button>
+          <button class="btn btn-primary" id="btn-guardar" style="display: none;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+            Guardar registro
+          </button>
         </div>
       </div>
     </div>
@@ -856,7 +905,10 @@
   <!-- MODAL: RESULTADO GUARDADO -->
   <div class="modal-bg" id="modal-resultado">
     <div class="modal">
-      <div class="modal-title" id="modal-titulo">✓ Éxito</div>
+      <div class="modal-title">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--c-green); vertical-align: -3px; margin-right: 6px;"><path d="M20 6L9 17l-5-5"/></svg>
+        <span id="modal-titulo">Éxito</span>
+      </div>
       <div class="modal-body" id="modal-mensaje"></div>
 
       <div id="qr-preview-modal" class="qr-preview" style="display: none;">
@@ -1238,9 +1290,11 @@
         });
 
         document.getElementById("btn-debug").addEventListener("click", () => {
-          alert(
-            `docId: ${this.docId}\nUser: ${this.currentUser?.ldap || "?"}\nOutbox: ${this.outboxRecords.length}`
-          );
+          document.getElementById("qr-preview-modal").style.display = "none";
+          document.getElementById("modal-titulo").textContent = "Debug";
+          document.getElementById("modal-mensaje").textContent =
+            `docId: ${this.docId} · Usuario: ${this.currentUser?.ldap || "?"} · Outbox: ${this.outboxRecords.length}`;
+          document.getElementById("modal-resultado").classList.add("active");
         });
       }
 
@@ -1303,7 +1357,9 @@
           preview.innerHTML = `
             <div class="photo-preview-item">
               <img src="${this.fotoData}" alt="preview" />
-              <button class="photo-remove" onclick="app.removeFoto()">×</button>
+              <button class="photo-remove" onclick="app.removeFoto()" aria-label="Quitar foto">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </button>
             </div>
           `;
         };
@@ -1394,7 +1450,7 @@
             <td>${rec.descripcion || "-"}</td>
             <td>${rec.correo || "-"}</td>
             <td>${rec.usuario || "-"}</td>
-            <td>${rec.qr_doc_id ? "✓" : "-"}</td>
+            <td>${rec.qr_doc_id ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--c-green);"><path d="M20 6L9 17l-5-5"/></svg>' : "-"}</td>
           `;
           tbody.appendChild(row);
         });
@@ -1496,13 +1552,13 @@
           // 5. Feedback
           this.showAlert(
             "registro",
-            `✓ Dispositivo registrado (ID: ${deviceId})`,
+            `Dispositivo registrado (ID: ${deviceId})`,
             "success"
           );
 
           if (puesto === "driver") {
             document.getElementById("modal-resultado").classList.add("active");
-            document.getElementById("modal-titulo").textContent = "✓ Driver Registrado";
+            document.getElementById("modal-titulo").textContent = "Driver registrado";
             document.getElementById("modal-mensaje").textContent =
               `Driver ID ${record.driver_id} autorizado correctamente.`;
             document.getElementById("qr-preview-modal").style.display = "none";
@@ -1534,7 +1590,7 @@
 
       mostrarQRModal(qrDataUrl, record) {
         document.getElementById("modal-resultado").classList.add("active");
-        document.getElementById("modal-titulo").textContent = "✓ QR Generado";
+        document.getElementById("modal-titulo").textContent = "QR generado";
         document.getElementById("modal-mensaje").textContent =
           `Dispositivo autorizado. ID: ${record.id}`;
 
@@ -1574,8 +1630,18 @@
       }
 
       showAlert(tabId, message, type) {
+        const icons = {
+          success:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+          error:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
+          warn:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>',
+          info:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>',
+        };
         const alertEl = document.getElementById(`alert-${tabId}`);
-        alertEl.textContent = message;
+        alertEl.innerHTML = `${icons[type] || icons.info}<span>${message}</span>`;
         alertEl.className = `alert ${type}`;
         alertEl.style.display = "flex";
       }
