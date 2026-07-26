@@ -567,6 +567,63 @@ select.step-input {
   color: var(--color-text-muted);
 }
 
+/* Sesión de escaneo rápido (Pre-Missort): destino/doca fijos, HU en loop */
+
+.session-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  background: var(--color-surface);
+  border-radius: var(--radius-pill);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.session-pill-info {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.session-manual-link {
+  display: block;
+  text-align: center;
+  margin-top: var(--spacing-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.session-counter {
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-sm);
+}
+
+.session-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease-out;
+}
+
+.session-flash.active-ok {
+  opacity: 1;
+  background: rgba(52, 199, 89, 0.55);
+}
+
+.session-flash.active-error {
+  opacity: 1;
+  background: rgba(255, 59, 48, 0.55);
+}
+
 /* Picker (list selection) */
 
 .picker-search {
@@ -2829,6 +2886,245 @@ class FormEngine {
 }
 
 /**
+ * DestinoDocaSession — flujo de escaneo rápido y continuo para Pre-Missort.
+ *
+ * Deliberadamente NO se construye sobre FormEngine para el loop de HU: ese
+ * motor sigue intacto para el resto de los logs (un campo por pantalla,
+ * confirmación explícita). Acá el destino y la doca se declaran UNA vez por
+ * sesión (reutilizando FormEngine solo para ese par de pantallas, ya que
+ * 'destino_picker'/'doca_picker' ya viven ahí) y después el HU se escanea en
+ * loop continuo: la cámara se pide una sola vez con getUserMedia, cada
+ * detección válida guarda el registro y retoma el escaneo sola, sin pedir
+ * confirmación — la velocidad contrarreloj es el punto de este log.
+ */
+class DestinoDocaSession {
+  constructor(opts = {}) {
+    this.catalogIndex = opts.catalogIndex || {};
+    this.onScan = opts.onScan;
+    this.onExit = opts.onExit;
+    this.initialDestino = opts.initialDestino || null;
+    this.initialDoca = opts.initialDoca || null;
+    this.destino = null;
+    this.doca = null;
+    this.container = null;
+    this.scanner = null;
+    this.pickerEngine = null;
+    this.locked = false;
+    this.count = 0;
+  }
+
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.pickDestinoDoca();
+  }
+
+  destroy() {
+    this.stopScanner();
+    if (this.pickerEngine) this.pickerEngine.destroy();
+  }
+
+  stopScanner() {
+    if (this.scanner) {
+      this.scanner.stop();
+      this.scanner = null;
+    }
+  }
+
+  isNum(v) {
+    return /^[0-9]+$/.test(String(v || '').trim());
+  }
+
+  vibrate(pattern) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  pickDestinoDoca() {
+    this.stopScanner();
+
+    const initialValues = {};
+    const autoAdvanceFields = [];
+    if (this.initialDestino) {
+      initialValues.destino = this.initialDestino;
+      autoAdvanceFields.push('destino');
+    }
+
+    this.container.innerHTML = '<div id="dd-session-picker"></div>';
+    this.pickerEngine = new FormEngine(
+      {
+        fields: [
+          { id: 'destino', type: 'destino_picker', label: '¿Cuál es el destino?', required: true },
+          { id: 'doca', type: 'doca_picker', label: '¿Cuál es la doca?', required: true },
+        ],
+      },
+      {
+        catalogIndex: this.catalogIndex,
+        initialValues,
+        autoAdvanceFields,
+        onComplete: (values) => {
+          this.destino = values.destino;
+          this.doca = values.doca;
+          this.initialDestino = values.destino;
+          this.initialDoca = values.doca;
+          this.renderLoop();
+        },
+        onCancel: () => {
+          if (this.onExit) this.onExit();
+        },
+      }
+    );
+    this.pickerEngine.render('dd-session-picker');
+  }
+
+  renderLoop() {
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Pre-Missort</div>
+        </div>
+        <div class="session-pill">
+          <div class="session-pill-info">Destino: ${this.destino} · Doca: ${this.doca}</div>
+          <button type="button" class="btn btn-secondary session-change-btn">Cambiar</button>
+        </div>
+        <h1 class="step-question">Escanea el HU</h1>
+        <div class="scanner-body">
+          <div class="scanner-viewport">
+            <video class="scanner-video" playsinline muted></video>
+            <div class="scanner-frame"><span class="scanner-line"></span></div>
+          </div>
+        </div>
+        <div class="step-support">Escaneando... apunta la cámara al HU.</div>
+        <button type="button" class="session-manual-link">Entrada manual</button>
+        <div class="session-counter">${this.count} HU escaneados en esta sesión</div>
+      </div>
+      <div class="session-flash"></div>
+    `;
+
+    this.flashEl = this.container.querySelector('.session-flash');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.counterEl = this.container.querySelector('.session-counter');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+    this.container.querySelector('.session-change-btn').addEventListener('click', () => {
+      this.pickDestinoDoca();
+    });
+    this.container.querySelector('.session-manual-link').addEventListener('click', () => {
+      this.enterManualEntry();
+    });
+
+    this.startCamera();
+  }
+
+  async startCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — usa entrada manual.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+
+    try {
+      await this.scanner.start(video, (text) => this.handleScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — usa entrada manual.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  handleScan(rawText) {
+    if (this.locked) return;
+
+    const hu = ScanParser.parse(rawText, 'hu');
+    if (!hu) {
+      this.vibrate(40);
+      this.flash('error', 'Código no reconocido — no es un HU válido.');
+      return;
+    }
+
+    this.processHu(hu);
+  }
+
+  enterManualEntry() {
+    if (this.scanner) this.scanner.pause();
+
+    this.container.querySelector('.scanner-body').innerHTML = `
+      <div class="step-input-wrap">
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el HU" />
+      </div>
+    `;
+    const input = this.container.querySelector('.session-manual-input');
+    this.supportEl.textContent = 'Escribe el HU y presiona Enter.';
+    this.supportEl.classList.remove('error');
+
+    input.addEventListener('input', () => {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      input.value = input.value.toUpperCase();
+      input.setSelectionRange(start, end);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const hu = ScanParser.parse(input.value, 'hu');
+      if (!hu) {
+        this.supportEl.textContent = 'HU inválido. Verifica el número e intenta de nuevo.';
+        this.supportEl.classList.add('error');
+        return;
+      }
+      this.processHu(hu).then(() => this.renderLoop());
+    });
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  async processHu(hu) {
+    this.locked = true;
+    if (this.scanner) this.scanner.pause();
+
+    const resultado = this.isNum(this.doca) ? 'Sin incidencia' : 'Erroneo';
+    this.vibrate(resultado === 'Sin incidencia' ? 60 : [40, 60, 40]);
+    this.flash(resultado === 'Sin incidencia' ? 'ok' : 'error', `${hu} · ${resultado}`);
+
+    if (this.onScan) {
+      await this.onScan({ hu, destino: this.destino, doca: this.doca, resultado });
+    }
+    this.count += 1;
+    if (this.counterEl) this.counterEl.textContent = `${this.count} HU escaneados en esta sesión`;
+
+    setTimeout(() => {
+      this.locked = false;
+      if (this.supportEl) {
+        this.supportEl.classList.remove('error');
+        this.supportEl.textContent = 'Escaneando... apunta la cámara al HU.';
+      }
+      if (this.scanner) this.scanner.resume();
+    }, 900);
+  }
+
+  flash(kind, message) {
+    if (this.supportEl) {
+      this.supportEl.textContent = message;
+      this.supportEl.classList.toggle('error', kind === 'error');
+    }
+    if (!this.flashEl) return;
+    const cls = kind === 'ok' ? 'active-ok' : 'active-error';
+    this.flashEl.classList.add(cls);
+    setTimeout(() => {
+      if (this.flashEl) this.flashEl.classList.remove(cls);
+    }, 550);
+  }
+}
+
+/**
  * Debug console — log events to an on-screen panel
  */
 class DebugConsole {
@@ -3068,6 +3364,7 @@ class CapturaApp {
     this.userEmail = null;
     this.pendingCount = 0;
     this.lastDestino = null;
+    this.lastDoca = null;
     this.folderId = null; // carpeta fija para organizar fotos
 
     // Guard de historial: intercepta el botón/gesto "atrás" del sistema
@@ -3379,19 +3676,25 @@ class CapturaApp {
     const root = document.getElementById('app-root');
     root.innerHTML = '<div id="form-container"></div>';
 
-    // Al capturar varias HU seguidas para el mismo destino (Pre-Missort),
-    // el destino se mantiene fijo entre capturas y ese paso se salta solo.
-    const initialValues = {};
-    const autoAdvanceFields = [];
-    if (formId === 'destino_doca' && this.lastDestino) {
-      initialValues.destino = this.lastDestino;
-      autoAdvanceFields.push('destino');
+    // Pre-Missort no usa el wizard genérico de un campo por pantalla: el
+    // destino y la doca se declaran una vez por sesión y el HU se escanea
+    // en loop continuo (ver DestinoDocaSession), ya que ahí la velocidad
+    // contrarreloj es el punto — no tiene sentido reconfirmar destino/doca
+    // en cada HU.
+    if (formId === 'destino_doca') {
+      this.currentEngine = new DestinoDocaSession({
+        catalogIndex: this.catalogIndex,
+        initialDestino: this.lastDestino,
+        initialDoca: this.lastDoca,
+        onScan: (values) => this.onFormComplete(formId, values, { stayInSession: true }),
+        onExit: () => this.renderMenu(),
+      });
+      this.currentEngine.render('form-container');
+      return;
     }
 
     this.currentEngine = new FormEngine(formConfig, {
       catalogIndex: this.catalogIndex,
-      initialValues,
-      autoAdvanceFields,
       onComplete: (values) => this.onFormComplete(formId, values),
       onCancel: () => this.renderMenu(),
     });
@@ -3399,13 +3702,14 @@ class CapturaApp {
     this.currentEngine.render('form-container');
   }
 
-  async onFormComplete(formId, values) {
+  async onFormComplete(formId, values, { stayInSession = false } = {}) {
     try {
       DebugConsole.log('Procesando registro...', 'info');
-      this.showToast('Guardando...', 'info');
+      if (!stayInSession) this.showToast('Guardando...', 'info');
 
       if (formId === 'destino_doca') {
         this.lastDestino = values.destino;
+        this.lastDoca = values.doca;
       }
 
       const ts = new Date().toISOString();
@@ -3443,11 +3747,11 @@ class CapturaApp {
       // Try to sync immediately if online
       if (navigator.onLine) {
         await this.flushOutbox();
-      } else {
+      } else if (!stayInSession) {
         this.showToast('Guardado local — se sincronizará al reconectar', 'info');
       }
 
-      this.renderMenu();
+      if (!stayInSession) this.renderMenu();
     } catch (e) {
       DebugConsole.log(`Error al guardar: ${e.message}`, 'error');
       this.showToast('Error al guardar el registro', 'error');
