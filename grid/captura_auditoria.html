@@ -3068,6 +3068,7 @@ class CapturaApp {
     this.userEmail = null;
     this.pendingCount = 0;
     this.lastDestino = null;
+    this.folderId = null; // carpeta fija para organizar fotos
 
     // Guard de historial: intercepta el botón/gesto "atrás" del sistema
     // (Android, o el back del navegador) para navegar dentro de la app
@@ -3143,6 +3144,35 @@ class CapturaApp {
     el.addEventListener('click', () => this.showToast(this.userEmail, 'info'));
   }
 
+  /**
+   * Carpeta fija en Grid para mantener las fotos organizadas en vez de
+   * sueltas entre todos los documentos. No es bloqueante: si falla, la
+   * app sigue funcionando normalmente, solo sin esa organización.
+   */
+  async ensureFolderId() {
+    try {
+      DebugConsole.log('Creando/obteniendo carpeta de fotos...', 'info');
+      const res = await this.gridClient._fetchWithTimeout(
+        `${location.origin}/api/v1/folders`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ name: 'Auditoría Grid' }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data.folder_id) {
+        this.folderId = data.folder_id;
+        DebugConsole.log(`Carpeta lista: ${this.folderId}`, 'info');
+      } else {
+        DebugConsole.log(`No se pudo crear carpeta: ${res.status}`, 'warn');
+      }
+    } catch (e) {
+      DebugConsole.log(`Error creando carpeta: ${e.message}`, 'warn');
+    }
+  }
+
   async init() {
     try {
       const me = await this.gridClient.getMe();
@@ -3153,6 +3183,7 @@ class CapturaApp {
 
       await this.loadCatalog();
       await this.loadOutboxFromStorage();
+      await this.ensureFolderId();
 
       this.renderMenu();
     } catch (e) {
@@ -3443,6 +3474,25 @@ class CapturaApp {
         const blob = await this.dataUrlToBlob(value);
         const docId = await this.gridClient.uploadPublicDocument(blob, `${field.id}_${record.uid}.jpg`);
         record[field.id] = docId;
+
+        // Asociar la foto a la carpeta fija (si existe) — no es bloqueante,
+        // la foto ya quedó subida aunque esto falle, solo sin organizar.
+        if (this.folderId && docId) {
+          try {
+            await this.gridClient._fetchWithTimeout(
+              `${location.origin}/api/v1/folders/${this.folderId}/documents`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ doc_id: docId }),
+              }
+            );
+            DebugConsole.log(`Foto asociada a carpeta: ${docId}`, 'info');
+          } catch (e) {
+            DebugConsole.log(`No se pudo asociar foto a carpeta: ${e.message}`, 'warn');
+          }
+        }
       }
     }
 
