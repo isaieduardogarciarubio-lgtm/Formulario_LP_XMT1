@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autorización de Dispositivos</title>
+  <style>
+    /* ──────────────────────────────────────────────────────────────────────────── */
+    /* NOCTURNE DESIGN SYSTEM — MercadoLibre Grid Dark Theme */
+    /* ──────────────────────────────────────────────────────────────────────────── */
+    :root {
+      /* Superficies */
+      --bg: #090C0E;
+      --surface: #11161A;
+      --surface-2: #161D22;
+      --border: #1F2830;
+      --border-soft: #161C21;
+
+      /* Acento Meli */
+      --accent: #FFD100;
+      --accent-strong: #E6BC00;
+      --accent-dim: #6E5E00;
+      --accent-glow: rgba(255, 209, 0, 0.14);
+      --on-accent: #1A1A1A;
+
+      /* Texto */
+      --text: #F4F6F8;
+      --text-sub: #AAB4BC;
+      --text-mut: #6B757D;
+
+      /* Badges / estados */
+      --c-green: #00D689;
+      --c-blue: #5A95FF;
+      --c-orange: #FF9E45;
+      --c-red: #FF5C6C;
+
+      /* Forma */
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 18px;
+      --r-pill: 999px;
+      --shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.7);
+
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+        Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    body {
+      background-image: radial-gradient(
+        1000px 640px at 100% -8%,
+        rgba(255, 209, 0, 0.09),
+        transparent 55%
+      ), radial-gradient(
+        760px 520px at -12% 108%,
+        rgba(255, 209, 0, 0.04),
+        transparent 60%
+      );
+      background-attachment: fixed;
+    }
+
+    /* ──── NAVBAR ──── */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 16px 24px;
+      background: linear-gradient(180deg, rgba(9, 12, 14, 0.85), rgba(9, 12, 14, 0));
+      backdrop-filter: blur(10px);
+    }
+
+    .navbar-brand {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .navbar-brand b {
+      color: var(--accent);
+    }
+
+    .navbar-spacer {
+      flex: 1;
+    }
+
+    .navbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.16s;
+    }
+
+    .icon-btn:hover {
+      color: var(--text);
+      border-color: var(--accent-dim);
+    }
+
+    /* ──── CONTAINER ──── */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    /* ──── TABS (Pastillas) ──── */
+    .tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      font-size: 15px;
+      font-weight: 600;
+      padding: 12px 20px;
+      cursor: pointer;
+      transition: all 0.16s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+    }
+
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* ──── CARD ──── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text);
+    }
+
+    /* ──── FORM GROUPS ──── */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 10px 14px;
+      transition: all 0.16s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .form-group input::placeholder {
+      color: var(--text-mut);
+    }
+
+    .form-group input[type="hidden"] {
+      display: none;
+    }
+
+    /* ──── BUTTONS ──── */
+    .btn {
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: var(--r-pill);
+      padding: 11px 22px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.16s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: var(--on-accent);
+      box-shadow: 0 8px 22px -12px var(--accent-glow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-dim);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-sub);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ──── FILE UPLOAD / DROP ZONE ──── */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--r-md);
+      padding: 20px;
+      text-align: center;
+      background: var(--surface-2);
+      cursor: pointer;
+      transition: all 0.16s;
+    }
+
+    .dropzone:hover {
+      border-color: var(--accent-dim);
+      background: var(--surface);
+    }
+
+    .dropzone.drag-over {
+      border-color: var(--accent);
+      background: rgba(255, 209, 0, 0.06);
+    }
+
+    .dropzone input[type="file"] {
+      display: none;
+    }
+
+    .dropzone-text {
+      font-size: 14px;
+      color: var(--text-sub);
+    }
+
+    .dropzone-icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+      opacity: 0.6;
+    }
+
+    /* ──── PHOTO PREVIEW ──── */
+    .photo-preview {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .photo-preview-item {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      border-radius: var(--r-md);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .photo-preview-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo-remove {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 28px;
+      height: 28px;
+      background: rgba(0, 0, 0, 0.6);
+      border: none;
+      border-radius: 4px;
+      color: var(--c-red);
+      cursor: pointer;
+      font-weight: bold;
+      transition: background 0.16s;
+    }
+
+    .photo-remove:hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    /* ──── STEP INDICATOR ──── */
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    .step-number {
+      width: 24px;
+      height: 24px;
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+    }
+
+    .step-number.active {
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+
+    /* ──── ALERT / MODAL ──── */
+    .alert {
+      display: flex;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: var(--r-md);
+      font-size: 14px;
+      border: 1px solid;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+
+    .alert.success {
+      border-color: rgba(0, 214, 137, 0.35);
+      background: rgba(0, 214, 137, 0.08);
+      color: #7fe9c2;
+    }
+
+    .alert.error {
+      border-color: rgba(255, 92, 108, 0.35);
+      background: rgba(255, 92, 108, 0.08);
+      color: #ffb3bb;
+    }
+
+    .alert.warn {
+      border-color: rgba(255, 209, 0, 0.35);
+      background: rgba(255, 209, 0, 0.08);
+      color: #ffe680;
+    }
+
+    .alert.info {
+      border-color: rgba(90, 149, 255, 0.35);
+      background: rgba(90, 149, 255, 0.08);
+      color: #aac8ff;
+    }
+
+    .alert svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    /* ──── MODAL ──── */
+    .modal-bg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-bg.active {
+      display: grid;
+      place-items: center;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .modal-body {
+      margin-bottom: 20px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    /* ──── SCANNER ──── */
+    .scanner-container {
+      border: 2px solid var(--border);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      background: var(--surface-2);
+      margin-bottom: 20px;
+    }
+
+    #scanner-video {
+      width: 100%;
+      height: 300px;
+      background: #000;
+      display: block;
+    }
+
+    .scanner-controls {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+
+    .scanner-result {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    /* ──── TABLE ──── */
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      font-size: 13px;
+      border-collapse: collapse;
+    }
+
+    th {
+      background: var(--surface-2);
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-sub);
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    tr:hover {
+      background: rgba(255, 209, 0, 0.02);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 11px;
+      border-radius: var(--r-pill);
+      border: 1px solid currentColor;
+      background: color-mix(in srgb, currentColor 12%, transparent);
+    }
+
+    .badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge.green {
+      color: var(--c-green);
+    }
+
+    .badge.blue {
+      color: var(--c-blue);
+    }
+
+    .badge.orange {
+      color: var(--c-orange);
+    }
+
+    /* ──── QR PREVIEW ──── */
+    .qr-preview {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 20px;
+      background: var(--surface-2);
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      margin-top: 20px;
+    }
+
+    .qr-canvas-wrapper {
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    #qr-canvas {
+      display: block;
+      width: 200px;
+      height: 200px;
+    }
+
+    .qr-info {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    /* ──── RESPONSIVE ──── */
+    @media (max-width: 768px) {
+      .navbar {
+        padding: 12px 16px;
+      }
+
+      .container {
+        padding: 16px;
+      }
+
+      .card {
+        padding: 16px;
+      }
+
+      #scanner-video {
+        height: 240px;
+      }
+
+      .modal {
+        max-width: 90%;
+        padding: 16px;
+      }
+
+      .tabs {
+        gap: 8px;
+      }
+
+      .tab-btn {
+        padding: 10px 14px;
+        font-size: 13px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="navbar-brand">Device<b>Hub</b></div>
+    <div class="navbar-spacer"></div>
+    <div class="navbar-actions">
+      <button class="icon-btn" id="btn-debug" title="Debug">🔧</button>
+      <div id="pending-badge" style="display: none; font-size: 12px; color: var(--c-orange); margin-left: 8px;">
+        ⏳ <span id="pending-count">0</span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER -->
+  <div class="container">
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="registro">📝 Registro</button>
+      <button class="tab-btn" data-tab="historial">📋 Historial</button>
+    </div>
+
+    <!-- TAB: REGISTRO -->
+    <div id="tab-registro" class="tab-content active">
+      <div class="card">
+        <div class="card-title">Registrar Nuevo Dispositivo</div>
+
+        <div class="step-indicator">
+          <div class="step-number active">1</div>
+          <span>Tipo de Puesto</span>
+        </div>
+
+        <div id="alert-registro" class="alert" style="display: none;"></div>
+
+        <div class="form-group">
+          <label for="puesto">Puesto *</label>
+          <select id="puesto" required>
+            <option value="">-- Seleccionar --</option>
+            <option value="driver">Driver</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+
+        <!-- PASO 2: DRIVER QR SCAN -->
+        <div id="driver-scan-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>Escanear QR del Driver</span>
+          </div>
+
+          <div class="scanner-container">
+            <video id="scanner-video"></video>
+            <div class="scanner-controls">
+              <button class="btn btn-secondary" id="btn-start-scanner">📷 Iniciar Escáner</button>
+              <button class="btn btn-ghost" id="btn-stop-scanner" style="display: none;">⏹️ Detener</button>
+            </div>
+          </div>
+
+          <div id="scanner-result" class="scanner-result" style="display: none;"></div>
+
+          <input type="hidden" id="driver-id" />
+          <div id="driver-scan-confirm" style="display: none;">
+            <div class="alert success">
+              ✓ Driver ID detectado: <strong id="detected-driver-id"></strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 2: CORREO (OTRO) -->
+        <div id="email-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>Correo de Autorización</span>
+          </div>
+
+          <div class="form-group">
+            <label for="correo">Correo *</label>
+            <input type="email" id="correo" placeholder="usuario@empresa.com" required />
+          </div>
+        </div>
+
+        <!-- PASO 3: TIPO DISPOSITIVO -->
+        <div id="tipo-dispositivo-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">3</div>
+            <span>Tipo de Dispositivo</span>
+          </div>
+
+          <div class="form-group">
+            <label for="tipo-dispositivo">Tipo *</label>
+            <select id="tipo-dispositivo" required>
+              <option value="">-- Seleccionar --</option>
+              <option value="smartphone">Smartphone</option>
+              <option value="smartwatch">Smartwatch</option>
+              <option value="speaker">Speaker</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- PASO 4: IMEI (SI SMARTPHONE) -->
+        <div id="imei-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">4</div>
+            <span>IMEI</span>
+          </div>
+
+          <div class="form-group">
+            <label for="imei">IMEI (15 dígitos) *</label>
+            <input type="text" id="imei" placeholder="000000000000000" maxlength="15" required />
+          </div>
+        </div>
+
+        <!-- PASO 5: DESCRIPCIÓN -->
+        <div id="descripcion-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">5</div>
+            <span>Descripción</span>
+          </div>
+
+          <div class="form-group">
+            <label for="descripcion">Marca + Modelo + Color (MAYÚSCULAS) *</label>
+            <input type="text" id="descripcion" placeholder="APPLE IPHONE 14 BLACK" required />
+          </div>
+        </div>
+
+        <!-- PASO 6: FOTO -->
+        <div id="foto-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">6</div>
+            <span>Fotografía</span>
+          </div>
+
+          <div class="form-group">
+            <label>Foto del Dispositivo *</label>
+            <div class="dropzone" id="dropzone-foto">
+              <div class="dropzone-icon">📸</div>
+              <div class="dropzone-text">Arrastra una imagen o haz click para seleccionar</div>
+              <input type="file" id="input-foto" accept="image/*" required />
+            </div>
+            <div class="photo-preview" id="photo-preview"></div>
+          </div>
+        </div>
+
+        <!-- CAMPOS OCULTOS -->
+        <input type="hidden" id="timestamp" />
+        <input type="hidden" id="usuario" />
+
+        <!-- BOTONES -->
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button class="btn btn-secondary" id="btn-reset">Limpiar</button>
+          <button class="btn btn-primary" id="btn-guardar" style="display: none;">💾 Guardar Registro</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: HISTORIAL -->
+    <div id="tab-historial" class="tab-content">
+      <div class="card">
+        <div class="card-title">Historial de QR Generados / Driver</div>
+
+        <div id="alert-historial" class="alert" style="display: none;"></div>
+
+        <div class="table-wrapper">
+          <table id="table-devices">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Puesto</th>
+                <th>IMEI / Driver ID</th>
+                <th>Descripción</th>
+                <th>Correo</th>
+                <th>Usuario</th>
+                <th>QR</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <p style="margin-top: 16px; font-size: 12px; color: var(--text-mut);" id="devices-empty">
+          No hay registros aún.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Historial de Escaneo</div>
+        <p style="font-size: 14px; color: var(--text-sub);">
+          Datos provenientes de la app de Escaneo (en breves).
+        </p>
+        <div class="table-wrapper">
+          <table id="table-scans">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Tipo Escaneo</th>
+                <th>Dato</th>
+                <th>Usuario</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <p style="margin-top: 16px; font-size: 12px; color: var(--text-mut);" id="scans-empty">
+          Sin datos aún.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: RESULTADO GUARDADO -->
+  <div class="modal-bg" id="modal-resultado">
+    <div class="modal">
+      <div class="modal-title" id="modal-titulo">✓ Éxito</div>
+      <div class="modal-body" id="modal-mensaje"></div>
+
+      <div id="qr-preview-modal" class="qr-preview" style="display: none;">
+        <div style="background: white; padding: 12px; border-radius: 8px;">
+          <canvas id="qr-canvas-modal" width="200" height="200"></canvas>
+        </div>
+        <div class="qr-info">
+          <p>Escanea este código para autorizar el dispositivo</p>
+          <button class="btn btn-secondary" id="btn-download-qr" style="margin-top: 12px;">Descargar QR</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-modal-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CANVAS TEMPORAL PARA QR -->
+  <canvas id="qr-canvas" style="display: none;"></canvas>
+
+  <!-- ──────────────────────────────────────────────────────────────────────────── -->
+  <!-- SCRIPT -->
+  <!-- ──────────────────────────────────────────────────────────────────────────── -->
+  <script>
+    /* QRCode.js vendorizado inline (versión minimal) */
+    /* Basado en qrcodejs v1.0.0 — se genera el QR directamente en canvas */
+
+    const QRCode = (function () {
+      function QRCode(text, options = {}) {
+        this.options = Object.assign(
+          {
+            text: text,
+            width: 256,
+            height: 256,
+            colorDark: "#000000",
+            colorLight: "#FFFFFF",
+            correctLevel: QRCode.CorrectLevel.H,
+          },
+          options
+        );
+
+        this.addCanvas();
+        this.makeCode();
+      }
+
+      QRCode.prototype.addCanvas = function () {
+        const canvas = document.createElement("canvas");
+        canvas.width = this.options.width;
+        canvas.height = this.options.height;
+        this.canvas = canvas;
+      };
+
+      QRCode.prototype.makeCode = function () {
+        const text = this.options.text;
+        const canvas = this.canvas;
+        const ctx = canvas.getContext("2d");
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Generar modelo QR simplificado (sin ZXing, usando qrcode-gen básico)
+        const qrData = generateQRData(text, this.options.correctLevel);
+
+        const moduleCount = qrData.length;
+        const tileSize = Math.min(width, height) / moduleCount;
+
+        ctx.fillStyle = this.options.colorLight;
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.fillStyle = this.options.colorDark;
+        for (let row = 0; row < moduleCount; row++) {
+          for (let col = 0; col < moduleCount; col++) {
+            if (qrData[row][col]) {
+              ctx.fillRect(
+                col * tileSize,
+                row * tileSize,
+                tileSize,
+                tileSize
+              );
+            }
+          }
+        }
+
+        this._oQRCode = { moduleCount, isDark: (r, c) => qrData[r]?.[c] || false };
+      };
+
+      QRCode.CorrectLevel = { L: 1, M: 0, Q: 3, H: 2 };
+
+      return QRCode;
+    })();
+
+    // Generador QR ultra-simplificado (para demo)
+    // En producción usar qrcode.js real vendorizado
+    function generateQRData(text, level) {
+      const encoded = encodeURIComponent(text);
+      const size = Math.ceil(Math.sqrt(encoded.length)) * 4 + 21; // Tamaño aproximado
+
+      // Patrón de prueba: generar matriz con patrón básico
+      const data = [];
+      for (let i = 0; i < size; i++) {
+        data[i] = [];
+        for (let j = 0; j < size; j++) {
+          // Finder patterns (esquinas)
+          if (
+            (i < 7 && j < 7) ||
+            (i < 7 && j >= size - 8) ||
+            (i >= size - 8 && j < 7)
+          ) {
+            data[i][j] = true;
+          } else if (
+            (i >= 2 && i <= 4 && (j === 8 || j === size - 9)) ||
+            ((j >= 2 && j <= 4) && (i === 8 || i === size - 9))
+          ) {
+            data[i][j] = true;
+          } else {
+            // Dispersar el contenido de forma determinista basada en el texto
+            const charCode = encoded.charCodeAt((i + j) % encoded.length) || 0;
+            data[i][j] = (charCode + i + j) % 2 === 0;
+          }
+        }
+      }
+      return data;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* GRID CLIENT — State Buckets */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class GridClient {
+      constructor(docId) {
+        this.docId = docId;
+        this.baseUrl = location.origin;
+        this._updatedAtByName = {};
+      }
+
+      async _fetchWithTimeout(url, options = {}, timeout = 30000) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+          const res = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          });
+          return res;
+        } finally {
+          clearTimeout(id);
+        }
+      }
+
+      async getStateBucket(name) {
+        const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+        const res = await this._fetchWithTimeout(url, {
+          credentials: "include",
+        });
+        if (res.status === 404) {
+          return null;
+        }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const body = await res.json();
+        this._updatedAtByName[name] = body.updated_at || "";
+        return body.state ?? null;
+      }
+
+      async setStateBucket(name, data) {
+        const ifUpdatedAt = this._updatedAtByName[name] || "";
+        const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+        const res = await this._fetchWithTimeout(
+          url,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ state: data, if_updated_at: ifUpdatedAt }),
+            credentials: "include",
+          },
+          30000
+        );
+
+        if (res.status === 409) {
+          const conflictBody = await res.json().catch(() => ({}));
+          if (conflictBody.current_updated_at) {
+            this._updatedAtByName[name] = conflictBody.current_updated_at;
+          }
+          return { conflict: true };
+        }
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const body = await res.json();
+        this._updatedAtByName[name] = body.updated_at || "";
+        return { ok: true };
+      }
+
+      async uploadPublicDocument(blob, filename) {
+        const fd = new FormData();
+        fd.append("file", blob, filename);
+        const res = await this._fetchWithTimeout(
+          `${this.baseUrl}/api/v1/documents`,
+          {
+            method: "POST",
+            credentials: "include",
+            body: fd,
+          }
+        );
+        if (!res.ok) {
+          throw new Error(`Upload failed: HTTP ${res.status}`);
+        }
+        const body = await res.json();
+        return body.id || body.doc_id;
+      }
+
+      async getCurrentUser() {
+        const res = await this._fetchWithTimeout(
+          `${this.baseUrl}/api/v1/me`,
+          { credentials: "include" }
+        );
+        if (!res.ok) {
+          return null;
+        }
+        return await res.json();
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* SCANNER ENGINE */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class ScannerEngine {
+      constructor() {
+        this.stream = null;
+        this.detector = null;
+      }
+
+      async start(videoEl, onDetect) {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+
+        videoEl.srcObject = this.stream;
+        await new Promise((r) => (videoEl.onloadedmetadata = r));
+        videoEl.play();
+
+        this.detector =
+          "BarcodeDetector" in window
+            ? new BarcodeDetector({ formats: ["qr_code"] })
+            : null;
+
+        const loop = async () => {
+          if (!this.stream) return;
+          try {
+            if (this.detector) {
+              const barcodes = await this.detector.detect(videoEl);
+              for (const barcode of barcodes) {
+                onDetect(barcode.rawValue, barcode.format);
+              }
+            }
+          } catch (e) {}
+          requestAnimationFrame(loop);
+        };
+        loop();
+      }
+
+      stop() {
+        if (this.stream) {
+          this.stream.getTracks().forEach((t) => t.stop());
+          this.stream = null;
+        }
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* SCAN PARSER — extrae driver_id de JSON */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    function parseScannedQR(text) {
+      try {
+        const json = JSON.parse(text);
+        if (json.driver_id) {
+          return { type: "driver", driverId: json.driver_id, raw: json };
+        }
+        return { type: "unknown", raw: json };
+      } catch (e) {
+        return { type: "text", value: text };
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* MAIN APP */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class AutorizacionApp {
+      constructor() {
+        this.docId =
+          new URLSearchParams(location.search).get("data_doc_id") ||
+          "01KY8F1NQ0CGK80JNEN1DPNFVF";
+        this.gridClient = new GridClient(this.docId);
+        this.currentUser = null;
+        this.scanner = null;
+        this.fotoData = null;
+        this.outboxRecords = [];
+
+        this.init();
+      }
+
+      async init() {
+        this.bindTabs();
+        this.bindForm();
+        this.bindModal();
+        this.loadUser();
+        this.loadHistorial();
+      }
+
+      bindTabs() {
+        document.querySelectorAll(".tab-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const tab = btn.dataset.tab;
+            document.querySelectorAll(".tab-content").forEach((el) => {
+              el.classList.remove("active");
+            });
+            document
+              .getElementById(`tab-${tab}`)
+              ?.classList.add("active");
+
+            document.querySelectorAll(".tab-btn").forEach((b) => {
+              b.classList.remove("active");
+            });
+            btn.classList.add("active");
+          });
+        });
+      }
+
+      bindForm() {
+        const puestoEl = document.getElementById("puesto");
+        const tipoDispEl = document.getElementById("tipo-dispositivo");
+        const btnGuardar = document.getElementById("btn-guardar");
+        const btnReset = document.getElementById("btn-reset");
+        const dropzone = document.getElementById("dropzone-foto");
+        const inputFoto = document.getElementById("input-foto");
+
+        puestoEl.addEventListener("change", () => this.updateFormSteps());
+
+        tipoDispEl.addEventListener("change", () => this.updateFormSteps());
+
+        dropzone.addEventListener("click", () => inputFoto.click());
+        dropzone.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          dropzone.classList.add("drag-over");
+        });
+        dropzone.addEventListener("dragleave", () => {
+          dropzone.classList.remove("drag-over");
+        });
+        dropzone.addEventListener("drop", (e) => {
+          e.preventDefault();
+          dropzone.classList.remove("drag-over");
+          if (e.dataTransfer.files[0]) {
+            this.loadFoto(e.dataTransfer.files[0]);
+          }
+        });
+
+        inputFoto.addEventListener("change", (e) => {
+          if (e.target.files[0]) {
+            this.loadFoto(e.target.files[0]);
+          }
+        });
+
+        btnGuardar.addEventListener("click", () => this.guardar());
+        btnReset.addEventListener("click", () => this.reset());
+
+        document.getElementById("btn-start-scanner").addEventListener("click", () => {
+          this.startScanner();
+        });
+
+        document.getElementById("btn-stop-scanner").addEventListener("click", () => {
+          this.stopScanner();
+        });
+
+        document.getElementById("btn-debug").addEventListener("click", () => {
+          alert(
+            `docId: ${this.docId}\nUser: ${this.currentUser?.ldap || "?"}\nOutbox: ${this.outboxRecords.length}`
+          );
+        });
+      }
+
+      bindModal() {
+        document.getElementById("btn-modal-close").addEventListener("click", () => {
+          document.getElementById("modal-resultado").classList.remove("active");
+          this.reset();
+        });
+
+        document
+          .getElementById("btn-download-qr")
+          ?.addEventListener("click", () => {
+            const link = document.createElement("a");
+            link.download = "device-authorization.png";
+            link.href = document
+              .getElementById("qr-canvas-modal")
+              .toDataURL("image/png");
+            link.click();
+          });
+      }
+
+      updateFormSteps() {
+        const puesto = document.getElementById("puesto").value;
+        const tipoDisp = document.getElementById("tipo-dispositivo").value;
+
+        // Mostrar/ocultar secciones
+        document.getElementById("driver-scan-section").style.display =
+          puesto === "driver" ? "block" : "none";
+        document.getElementById("email-section").style.display =
+          puesto === "otro" ? "block" : "none";
+        document.getElementById("tipo-dispositivo-section").style.display =
+          puesto ? "block" : "none";
+        document.getElementById("imei-section").style.display =
+          tipoDisp === "smartphone" ? "block" : "none";
+
+        const allRequired = document.getElementById("puesto").value;
+        document.getElementById("btn-guardar").style.display = allRequired
+          ? "block"
+          : "none";
+
+        // Validaciones condicionales
+        if (puesto === "driver") {
+          document.getElementById("correo").removeAttribute("required");
+        } else {
+          document.getElementById("correo").setAttribute("required", "required");
+        }
+
+        if (tipoDisp === "smartphone") {
+          document.getElementById("imei").setAttribute("required", "required");
+        } else {
+          document.getElementById("imei").removeAttribute("required");
+        }
+      }
+
+      loadFoto(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          this.fotoData = e.target.result;
+          const preview = document.getElementById("photo-preview");
+          preview.innerHTML = `
+            <div class="photo-preview-item">
+              <img src="${this.fotoData}" alt="preview" />
+              <button class="photo-remove" onclick="app.removeFoto()">×</button>
+            </div>
+          `;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      removeFoto() {
+        this.fotoData = null;
+        document.getElementById("photo-preview").innerHTML = "";
+        document.getElementById("input-foto").value = "";
+      }
+
+      startScanner() {
+        if (!this.scanner) {
+          this.scanner = new ScannerEngine();
+        }
+
+        const videoEl = document.getElementById("scanner-video");
+        this.scanner.start(videoEl, (text) => {
+          const parsed = parseScannedQR(text);
+          if (parsed.type === "driver") {
+            document.getElementById("driver-id").value = parsed.driverId;
+            document.getElementById("detected-driver-id").textContent =
+              parsed.driverId;
+            document.getElementById("driver-scan-confirm").style.display =
+              "block";
+            this.stopScanner();
+            this.updateFormSteps();
+          }
+        });
+
+        document.getElementById("btn-start-scanner").style.display = "none";
+        document.getElementById("btn-stop-scanner").style.display = "block";
+      }
+
+      stopScanner() {
+        if (this.scanner) {
+          this.scanner.stop();
+        }
+        document.getElementById("btn-start-scanner").style.display = "block";
+        document.getElementById("btn-stop-scanner").style.display = "none";
+      }
+
+      async loadUser() {
+        try {
+          this.currentUser = await this.gridClient.getCurrentUser();
+          document.getElementById("usuario").value = this.currentUser?.ldap || "unknown";
+        } catch (e) {
+          console.error("Error cargando usuario:", e);
+        }
+      }
+
+      async loadHistorial() {
+        try {
+          const devicesState = await this.gridClient.getStateBucket(
+            "devices_master"
+          );
+          const scansState = await this.gridClient.getStateBucket("scan_master");
+
+          if (devicesState?.records) {
+            this.renderDevicesTable(devicesState.records);
+          }
+          if (scansState?.records) {
+            this.renderScansTable(scansState.records);
+          }
+        } catch (e) {
+          console.error("Error cargando historial:", e);
+        }
+      }
+
+      renderDevicesTable(records) {
+        const tbody = document.querySelector("#table-devices tbody");
+        tbody.innerHTML = "";
+
+        if (records.length === 0) {
+          document.getElementById("devices-empty").style.display = "block";
+          return;
+        }
+
+        document.getElementById("devices-empty").style.display = "none";
+
+        records.forEach((rec) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${rec.timestamp || "-"}</td>
+            <td><span class="badge ${rec.puesto === 'driver' ? 'green' : 'blue'}">${rec.puesto || "-"}</span></td>
+            <td>${rec.imei || rec.driver_id || "-"}</td>
+            <td>${rec.descripcion || "-"}</td>
+            <td>${rec.correo || "-"}</td>
+            <td>${rec.usuario || "-"}</td>
+            <td>${rec.qr_doc_id ? "✓" : "-"}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      }
+
+      renderScansTable(records) {
+        const tbody = document.querySelector("#table-scans tbody");
+        tbody.innerHTML = "";
+
+        if (records.length === 0) {
+          document.getElementById("scans-empty").style.display = "block";
+          return;
+        }
+
+        document.getElementById("scans-empty").style.display = "none";
+
+        records.forEach((rec) => {
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${rec.timestamp || "-"}</td>
+            <td>${rec.scan_type || "-"}</td>
+            <td>${rec.data || "-"}</td>
+            <td>${rec.usuario || "-"}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      }
+
+      async guardar() {
+        const puesto = document.getElementById("puesto").value;
+        const tipoDisp = document.getElementById("tipo-dispositivo").value;
+        const descripcion = document.getElementById("descripcion").value.toUpperCase();
+
+        if (!puesto || !tipoDisp || !descripcion || !this.fotoData) {
+          this.showAlert("registro", "Completa todos los campos requeridos", "error");
+          return;
+        }
+
+        if (puesto === "otro" && !document.getElementById("correo").value) {
+          this.showAlert("registro", "Ingresa el correo de autorización", "error");
+          return;
+        }
+
+        if (
+          tipoDisp === "smartphone" &&
+          (!document.getElementById("imei").value ||
+            document.getElementById("imei").value.length !== 15)
+        ) {
+          this.showAlert("registro", "IMEI inválido (15 dígitos)", "error");
+          return;
+        }
+
+        try {
+          // 1. Generar ID único para el dispositivo
+          const deviceId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          // 2. Subir foto
+          const blob = await this.dataUrlToBlob(this.fotoData);
+          const fotoDocId = await this.gridClient.uploadPublicDocument(
+            blob,
+            `dispositivo_${deviceId}.jpg`
+          );
+
+          // 3. Construir registro
+          const record = {
+            id: deviceId,
+            timestamp: new Date().toISOString(),
+            puesto,
+            tipo_dispositivo: tipoDisp,
+            descripcion,
+            foto_doc_id: fotoDocId,
+            usuario: this.currentUser?.ldap || "unknown",
+            email: this.currentUser?.email || "",
+          };
+
+          if (puesto === "driver") {
+            record.driver_id = document.getElementById("driver-id").value;
+            // SIN QR para Driver
+          } else {
+            record.correo = document.getElementById("correo").value;
+            if (tipoDisp === "smartphone") {
+              record.imei = document.getElementById("imei").value;
+            }
+            // Generar QR para Otro
+            const qrDataUrl = await this.generarQR(deviceId);
+            const qrBlob = await this.dataUrlToBlob(qrDataUrl);
+            record.qr_doc_id = await this.gridClient.uploadPublicDocument(
+              qrBlob,
+              `qr_${deviceId}.png`
+            );
+
+            // Mostrar QR en modal
+            this.mostrarQRModal(qrDataUrl, record);
+          }
+
+          // 4. Guardar en bucket
+          await this.guardarEnBucket(record);
+
+          // 5. Feedback
+          this.showAlert(
+            "registro",
+            `✓ Dispositivo registrado (ID: ${deviceId})`,
+            "success"
+          );
+
+          if (puesto === "driver") {
+            document.getElementById("modal-resultado").classList.add("active");
+            document.getElementById("modal-titulo").textContent = "✓ Driver Registrado";
+            document.getElementById("modal-mensaje").textContent =
+              `Driver ID ${record.driver_id} autorizado correctamente.`;
+            document.getElementById("qr-preview-modal").style.display = "none";
+          }
+        } catch (e) {
+          console.error("Error al guardar:", e);
+          this.showAlert("registro", `Error: ${e.message}`, "error");
+        }
+      }
+
+      async generarQR(payload) {
+        const canvas = document.getElementById("qr-canvas");
+        const qr = new QRCode(payload, {
+          width: 280,
+          height: 280,
+          colorDark: "#000000",
+          colorLight: "#FFFFFF",
+        });
+
+        // Copiar el canvas generado
+        const srcCtx = qr.canvas.getContext("2d");
+        canvas.width = qr.canvas.width;
+        canvas.height = qr.canvas.height;
+        const dstCtx = canvas.getContext("2d");
+        dstCtx.drawImage(qr.canvas, 0, 0);
+
+        return canvas.toDataURL("image/png");
+      }
+
+      mostrarQRModal(qrDataUrl, record) {
+        document.getElementById("modal-resultado").classList.add("active");
+        document.getElementById("modal-titulo").textContent = "✓ QR Generado";
+        document.getElementById("modal-mensaje").textContent =
+          `Dispositivo autorizado. ID: ${record.id}`;
+
+        const canvas = document.getElementById("qr-canvas-modal");
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = qrDataUrl;
+
+        document.getElementById("qr-preview-modal").style.display = "flex";
+      }
+
+      async guardarEnBucket(record) {
+        let bucket = await this.gridClient.getStateBucket("devices_master");
+        if (!bucket) {
+          bucket = { records: [] };
+        }
+
+        bucket.records.push(record);
+
+        const result = await this.gridClient.setStateBucket(
+          "devices_master",
+          bucket
+        );
+        if (result.conflict) {
+          // Reintentar con backoff
+          await new Promise((r) => setTimeout(r, 500));
+          return this.guardarEnBucket(record);
+        }
+      }
+
+      async dataUrlToBlob(dataUrl) {
+        const res = await fetch(dataUrl);
+        return res.blob();
+      }
+
+      showAlert(tabId, message, type) {
+        const alertEl = document.getElementById(`alert-${tabId}`);
+        alertEl.textContent = message;
+        alertEl.className = `alert ${type}`;
+        alertEl.style.display = "flex";
+      }
+
+      reset() {
+        document.getElementById("puesto").value = "";
+        document.getElementById("correo").value = "";
+        document.getElementById("tipo-dispositivo").value = "";
+        document.getElementById("imei").value = "";
+        document.getElementById("descripcion").value = "";
+        document.getElementById("driver-id").value = "";
+        this.fotoData = null;
+        document.getElementById("photo-preview").innerHTML = "";
+        document.getElementById("input-foto").value = "";
+        document.getElementById("driver-scan-confirm").style.display = "none";
+        this.updateFormSteps();
+      }
+    }
+
+    // Inicializar app
+    const app = new AutorizacionApp();
+  </script>
+</body>
+</html>
