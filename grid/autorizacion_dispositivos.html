@@ -83,7 +83,7 @@
       z-index: 50;
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: space-between;
       gap: 10px;
       padding: 12px 16px;
       background: linear-gradient(180deg, rgba(9, 12, 14, 0.85), rgba(9, 12, 14, 0));
@@ -170,6 +170,8 @@
     /* navegación entre secciones (aquí: Registro / Historial).          */
     .menubar {
       order: 2;
+      flex: 1;
+      min-width: 0;
       display: flex;
       align-items: center;
       gap: 4px;
@@ -382,6 +384,13 @@
     }
 
     /* ──── FILE UPLOAD / DROP ZONE ──── */
+    .photo-source-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
     .dropzone {
       border: 2px dashed var(--border);
       border-radius: var(--r-md);
@@ -997,13 +1006,34 @@
 
           <div class="form-group">
             <label>Foto del Dispositivo *</label>
-            <div class="dropzone" id="dropzone-foto">
-              <div class="dropzone-icon">
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
-              </div>
-              <div class="dropzone-text">Arrastra una imagen o haz click para seleccionar</div>
-              <input type="file" id="input-foto" accept="image/*" required />
+            <div class="photo-source-actions">
+              <button type="button" class="btn btn-secondary" id="btn-open-camera">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                Tomar foto
+              </button>
+              <button type="button" class="btn btn-ghost" id="btn-upload-foto">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Subir archivo
+              </button>
             </div>
+            <input type="file" id="input-foto" accept="image/*" style="display: none;" />
+
+            <!-- CÁMARA EN VIVO -->
+            <div class="scanner-container" id="camera-container" style="display: none;">
+              <video id="camera-video" autoplay playsinline muted></video>
+              <div class="scanner-controls">
+                <button type="button" class="btn btn-primary" id="btn-capture-foto">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg>
+                  Capturar
+                </button>
+                <button type="button" class="btn btn-ghost" id="btn-cancel-camera">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+            <canvas id="camera-canvas" style="display: none;"></canvas>
+
             <div class="photo-preview" id="photo-preview"></div>
           </div>
         </div>
@@ -1563,7 +1593,7 @@
       constructor() {
         this.docId =
           new URLSearchParams(location.search).get("data_doc_id") ||
-          "01KY8F1NQ0CGK80JNEN1DPNFVF";
+          "01KYBPWY7AYSXC0MGZVH1JT2TV";
         this.gridClient = new GridClient(this.docId);
         this.logoImage = null;
         this.currentUser = null;
@@ -1653,34 +1683,31 @@
         const tipoDispEl = document.getElementById("tipo-dispositivo");
         const btnGuardar = document.getElementById("btn-guardar");
         const btnReset = document.getElementById("btn-reset");
-        const dropzone = document.getElementById("dropzone-foto");
         const inputFoto = document.getElementById("input-foto");
 
         puestoEl.addEventListener("change", () => this.updateFormSteps());
 
         tipoDispEl.addEventListener("change", () => this.updateFormSteps());
 
-        dropzone.addEventListener("click", () => inputFoto.click());
-        dropzone.addEventListener("dragover", (e) => {
-          e.preventDefault();
-          dropzone.classList.add("drag-over");
-        });
-        dropzone.addEventListener("dragleave", () => {
-          dropzone.classList.remove("drag-over");
-        });
-        dropzone.addEventListener("drop", (e) => {
-          e.preventDefault();
-          dropzone.classList.remove("drag-over");
-          if (e.dataTransfer.files[0]) {
-            this.loadFoto(e.dataTransfer.files[0]);
-          }
-        });
+        document
+          .getElementById("btn-upload-foto")
+          .addEventListener("click", () => inputFoto.click());
 
         inputFoto.addEventListener("change", (e) => {
           if (e.target.files[0]) {
             this.loadFoto(e.target.files[0]);
           }
         });
+
+        document
+          .getElementById("btn-open-camera")
+          .addEventListener("click", () => this.openCamera());
+        document
+          .getElementById("btn-capture-foto")
+          .addEventListener("click", () => this.captureFoto());
+        document
+          .getElementById("btn-cancel-camera")
+          .addEventListener("click", () => this.closeCamera());
 
         btnGuardar.addEventListener("click", () => this.guardar());
         btnReset.addEventListener("click", () => this.reset());
@@ -1759,18 +1786,58 @@
       loadFoto(file) {
         const reader = new FileReader();
         reader.onload = (e) => {
-          this.fotoData = e.target.result;
-          const preview = document.getElementById("photo-preview");
-          preview.innerHTML = `
-            <div class="photo-preview-item">
-              <img src="${this.fotoData}" alt="preview" />
-              <button class="photo-remove" onclick="app.removeFoto()" aria-label="Quitar foto">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-          `;
+          this.setFotoPreview(e.target.result);
         };
         reader.readAsDataURL(file);
+      }
+
+      setFotoPreview(dataUrl) {
+        this.fotoData = dataUrl;
+        const preview = document.getElementById("photo-preview");
+        preview.innerHTML = `
+          <div class="photo-preview-item">
+            <img src="${this.fotoData}" alt="preview" />
+            <button class="photo-remove" onclick="app.removeFoto()" aria-label="Quitar foto">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        `;
+      }
+
+      async openCamera() {
+        try {
+          this.cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false,
+          });
+          const videoEl = document.getElementById("camera-video");
+          videoEl.srcObject = this.cameraStream;
+          await videoEl.play();
+          document.getElementById("camera-container").style.display = "block";
+          DebugConsole.log("Cámara abierta para foto de dispositivo", "info");
+        } catch (e) {
+          DebugConsole.log(`No se pudo abrir la cámara: ${e.message}`, "error");
+          alert("No se pudo acceder a la cámara. Puedes subir un archivo en su lugar.");
+        }
+      }
+
+      closeCamera() {
+        if (this.cameraStream) {
+          this.cameraStream.getTracks().forEach((t) => t.stop());
+          this.cameraStream = null;
+        }
+        document.getElementById("camera-container").style.display = "none";
+      }
+
+      captureFoto() {
+        const videoEl = document.getElementById("camera-video");
+        const canvas = document.getElementById("camera-canvas");
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        canvas.getContext("2d").drawImage(videoEl, 0, 0);
+        this.setFotoPreview(canvas.toDataURL("image/jpeg", 0.9));
+        this.closeCamera();
+        DebugConsole.log("Foto capturada desde la cámara", "info");
       }
 
       removeFoto() {
