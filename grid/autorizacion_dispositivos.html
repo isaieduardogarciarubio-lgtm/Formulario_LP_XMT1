@@ -958,7 +958,63 @@
           </div>
         </div>
 
-        <!-- PASO 2: CORREO (OTRO) -->
+        <!-- PASO 2: OTRO — ¿YA TIENE REGISTRO? -->
+        <div id="otro-check-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>¿Ya tiene un registro?</span>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <button type="button" class="btn btn-secondary" id="btn-otro-existente">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 14h3v3h-3zM14 18h3v3h-3zM18 18h3v3h-3z"/></svg>
+              Sí, escanear QR existente
+            </button>
+            <button type="button" class="btn btn-ghost" id="btn-otro-nuevo">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              No, es nuevo
+            </button>
+          </div>
+        </div>
+
+        <!-- PASO 2b: OTRO — ESCANEAR QR DE UN DISPOSITIVO YA REGISTRADO -->
+        <div id="otro-scan-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>Escanear QR de un dispositivo ya registrado</span>
+          </div>
+
+          <div class="scanner-container">
+            <video id="otro-scanner-video"></video>
+            <div class="scanner-controls">
+              <button type="button" class="btn btn-secondary" id="btn-otro-start-scanner">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                Iniciar escáner
+              </button>
+              <button type="button" class="btn btn-ghost" id="btn-otro-stop-scanner" style="display: none;">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+                Detener
+              </button>
+            </div>
+          </div>
+
+          <div id="otro-scan-result" class="scanner-result" style="display: none;"></div>
+        </div>
+
+        <!-- CONFIRMACIÓN: LA PERSONA YA TIENE DISPOSITIVO(S) -->
+        <div id="existing-devices-card" style="display: none;">
+          <div class="alert success" id="existing-devices-info"></div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+            <button type="button" class="btn btn-primary" id="btn-add-another-device">
+              Sí, agregar otro dispositivo
+            </button>
+            <button type="button" class="btn btn-ghost" id="btn-cancel-existing">
+              Cancelar
+            </button>
+          </div>
+        </div>
+
+        <!-- PASO 2: CORREO (OTRO, PRIMER REGISTRO) -->
         <div id="email-section" style="display: none;">
           <div class="step-indicator">
             <div class="step-number active">2</div>
@@ -1643,8 +1699,17 @@
         this.logoImage = null;
         this.currentUser = null;
         this.scanner = null;
+        this.otroScanner = null;
         this.fotoData = null;
         this.outboxRecords = [];
+
+        // Estado del flujo guiado: ¿ya se identificó a la persona y puede
+        // avanzar a los pasos de tipo/foto/descripción del dispositivo?
+        this.otroMode = null; // "nuevo" | "existente"
+        this.readyForDevice = false;
+        this.existingCorreo = null;
+        this._existingContext = null;
+        this._existingOwnerKey = null;
 
         DebugConsole.setup();
         DebugConsole.log(`Documento de datos: ${this.docId}`, "info");
@@ -1723,7 +1788,10 @@
         const btnReset = document.getElementById("btn-reset");
         const inputFoto = document.getElementById("input-foto");
 
-        puestoEl.addEventListener("change", () => this.updateFormSteps());
+        puestoEl.addEventListener("change", () => {
+          this.resetFlowState();
+          this.updateFormSteps();
+        });
 
         tipoDispEl.addEventListener("change", () => this.updateFormSteps());
 
@@ -1762,36 +1830,133 @@
           .getElementById("btn-debug-console")
           .addEventListener("click", () => DebugConsole.toggle());
 
-        // Detectar si ya existen dispositivos de esta persona
-        document.getElementById("driver-id").addEventListener("change", () => {
-          const driverId = document.getElementById("driver-id").value;
-          if (driverId) this.checkExistingDevices("driver", driverId);
+        // "Otro": ¿ya tiene un registro previo?
+        document.getElementById("btn-otro-existente").addEventListener("click", () => {
+          this.otroMode = "existente";
+          this.updateFormSteps();
         });
 
-        document.getElementById("correo").addEventListener("change", () => {
-          const correo = document.getElementById("correo").value;
-          if (correo) this.checkExistingDevices("otro", correo);
+        document.getElementById("btn-otro-nuevo").addEventListener("click", () => {
+          this.otroMode = "nuevo";
+          this.readyForDevice = true;
+          this.updateFormSteps();
+        });
+
+        document.getElementById("btn-otro-start-scanner").addEventListener("click", () => {
+          this.startOtroScanner();
+        });
+
+        document.getElementById("btn-otro-stop-scanner").addEventListener("click", () => {
+          this.stopOtroScanner();
+        });
+
+        // Confirmación compartida: "esta persona ya tiene N dispositivo(s)"
+        document.getElementById("btn-add-another-device").addEventListener("click", () => {
+          this.readyForDevice = true;
+          document.getElementById("existing-devices-card").style.display = "none";
+          DebugConsole.log(`Agregando nuevo dispositivo a ${this._existingOwnerKey}`, "info");
+          this.updateFormSteps();
+        });
+
+        document.getElementById("btn-cancel-existing").addEventListener("click", () => {
+          const context = this._existingContext;
+          document.getElementById("existing-devices-card").style.display = "none";
+          this.readyForDevice = false;
+
+          if (context === "driver") {
+            document.getElementById("driver-id").value = "";
+            document.getElementById("driver-scan-confirm").style.display = "none";
+          } else if (context === "otro") {
+            document.getElementById("correo").value = "";
+            document.getElementById("correo").removeAttribute("readonly");
+            this.existingCorreo = null;
+            this.otroMode = null;
+          }
+
+          this.updateFormSteps();
         });
       }
 
-      async checkExistingDevices(tipo, identifier) {
-        const ownerKey = tipo === "driver" ? `driver:${identifier}` : `user:${identifier.toLowerCase()}`;
-        const existing = await this.findDevicesByOwner(ownerKey);
+      resetFlowState() {
+        this.otroMode = null;
+        this.readyForDevice = false;
+        this.existingCorreo = null;
+        this._existingContext = null;
+        this._existingOwnerKey = null;
 
-        if (existing.length > 0) {
-          const list = existing.map((d) => `• ${d.descripcion || d.id.slice(0, 20)}`).join("\n");
-          DebugConsole.log(`${tipo === "driver" ? "Driver" : "Usuario"} ${identifier} ya tiene ${existing.length} dispositivo(s)`, "info");
+        this.stopScanner();
+        this.stopOtroScanner();
 
-          const msg = `Esta ${tipo === "driver" ? "persona" : "persona"} ya tiene ${existing.length} dispositivo(s) registrado(s):\n\n${list}\n\n¿Deseas agregar otro dispositivo?`;
-          if (confirm(msg)) {
-            // El usuario quiere agregar otro, dejar los datos de la persona pero limpiar tipo y foto
-            document.getElementById("tipo-dispositivo").value = "";
-            document.getElementById("descripcion").value = "";
-            this.removeFoto();
-            this.updateFormSteps();
-            DebugConsole.log(`Agregando nuevo dispositivo a ${identifier}`, "info");
-          }
+        document.getElementById("driver-id").value = "";
+        document.getElementById("driver-scan-confirm").style.display = "none";
+        document.getElementById("correo").value = "";
+        document.getElementById("correo").removeAttribute("readonly");
+        document.getElementById("otro-scan-result").style.display = "none";
+        document.getElementById("existing-devices-card").style.display = "none";
+      }
+
+      promptExistingDevices(ownerKey, existing, context) {
+        const list = existing
+          .map((d) => `• ${d.descripcion || d.id.slice(0, 20)}`)
+          .join("<br/>");
+        document.getElementById("existing-devices-info").innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><path d="M20 6L9 17l-5-5"/></svg>
+          Esta persona ya tiene ${existing.length} dispositivo(s) registrado(s):<br/>${list}
+        `;
+        document.getElementById("existing-devices-card").style.display = "block";
+        this._existingContext = context;
+        this._existingOwnerKey = ownerKey;
+      }
+
+      startOtroScanner() {
+        if (!this.otroScanner) {
+          this.otroScanner = new ScannerEngine();
         }
+
+        const videoEl = document.getElementById("otro-scanner-video");
+        this.otroScanner.start(videoEl, (text) => this.handleOtroDeviceScanned(text));
+
+        document.getElementById("btn-otro-start-scanner").style.display = "none";
+        document.getElementById("btn-otro-stop-scanner").style.display = "block";
+      }
+
+      stopOtroScanner() {
+        if (this.otroScanner) {
+          this.otroScanner.stop();
+        }
+        document.getElementById("btn-otro-start-scanner").style.display = "block";
+        document.getElementById("btn-otro-stop-scanner").style.display = "none";
+      }
+
+      async handleOtroDeviceScanned(text) {
+        const deviceId = String(text).trim();
+        if (!deviceId.startsWith("dev_")) return;
+
+        this.stopOtroScanner();
+
+        const bucket = (await this.gridClient.getStateBucket("devices_master")) || {};
+        const found = (bucket.records || []).find((d) => d.id === deviceId);
+
+        if (!found) {
+          document.getElementById("otro-scan-result").style.display = "block";
+          document.getElementById("otro-scan-result").innerHTML =
+            '<div class="alert error">No se encontró ningún registro con este código. Intenta de nuevo.</div>';
+          DebugConsole.log(`QR escaneado (${deviceId}) no encontrado en devices_master`, "warn");
+          return;
+        }
+
+        document.getElementById("otro-scan-result").style.display = "none";
+
+        const ownerKey = found.owner_key || `user:${(found.correo || "").toLowerCase()}`;
+        const existing = (bucket.records || []).filter((d) => d.owner_key === ownerKey);
+        this.existingCorreo = found.correo || "";
+
+        document.getElementById("correo").value = this.existingCorreo;
+        document.getElementById("correo").setAttribute("readonly", "readonly");
+
+        DebugConsole.log(`Dispositivo existente encontrado, correo=${this.existingCorreo}`, "info");
+        this.promptExistingDevices(ownerKey, existing, "otro");
+        this.updateFormSteps();
       }
 
       bindModal() {
@@ -1833,27 +1998,34 @@
         const puesto = document.getElementById("puesto").value;
         const tipoDisp = document.getElementById("tipo-dispositivo").value;
 
-        // Mostrar/ocultar secciones
+        // Mostrar/ocultar secciones del flujo guiado:
+        // Driver -> escanear QR -> (si ya existe, confirmar) -> datos del dispositivo.
+        // Otro -> ¿ya tiene registro? -> escanear QR existente o correo nuevo
+        //         -> (si ya existe, confirmar) -> datos del dispositivo.
         document.getElementById("driver-scan-section").style.display =
           puesto === "driver" ? "block" : "none";
-        document.getElementById("email-section").style.display =
-          puesto === "otro" ? "block" : "none";
-        document.getElementById("tipo-dispositivo-section").style.display =
-          puesto ? "block" : "none";
-        document.getElementById("imei-section").style.display =
-          tipoDisp === "smartphone" ? "block" : "none";
-        // Bug: estas dos secciones nunca se revelaban, así que Descripción
-        // y Foto quedaban ocultas (display:none) para siempre y el usuario
-        // no podía llenarlas aunque la validación de guardar() las exigiera.
-        document.getElementById("descripcion-section").style.display =
-          tipoDisp ? "block" : "none";
-        document.getElementById("foto-section").style.display = tipoDisp
-          ? "block"
-          : "none";
 
-        document.getElementById("btn-guardar").style.display = tipoDisp
-          ? "block"
-          : "none";
+        document.getElementById("otro-check-section").style.display =
+          puesto === "otro" && !this.otroMode ? "block" : "none";
+
+        document.getElementById("otro-scan-section").style.display =
+          puesto === "otro" && this.otroMode === "existente" ? "block" : "none";
+
+        document.getElementById("email-section").style.display =
+          puesto === "otro" && this.otroMode === "nuevo" ? "block" : "none";
+
+        const showDeviceSteps = this.readyForDevice;
+        document.getElementById("tipo-dispositivo-section").style.display =
+          showDeviceSteps ? "block" : "none";
+        document.getElementById("imei-section").style.display =
+          showDeviceSteps && tipoDisp === "smartphone" ? "block" : "none";
+        document.getElementById("descripcion-section").style.display =
+          showDeviceSteps && tipoDisp ? "block" : "none";
+        document.getElementById("foto-section").style.display =
+          showDeviceSteps && tipoDisp ? "block" : "none";
+
+        document.getElementById("btn-guardar").style.display =
+          showDeviceSteps && tipoDisp ? "block" : "none";
 
         // Validaciones condicionales
         if (puesto === "driver") {
@@ -1984,13 +2156,8 @@
         this.scanner.start(videoEl, (text) => {
           const parsed = parseScannedQR(text);
           if (parsed.type === "driver") {
-            document.getElementById("driver-id").value = parsed.driverId;
-            document.getElementById("detected-driver-id").textContent =
-              parsed.driverId;
-            document.getElementById("driver-scan-confirm").style.display =
-              "block";
             this.stopScanner();
-            this.updateFormSteps();
+            this.handleDriverDetected(parsed.driverId);
           }
         });
 
@@ -2004,6 +2171,26 @@
         }
         document.getElementById("btn-start-scanner").style.display = "block";
         document.getElementById("btn-stop-scanner").style.display = "none";
+      }
+
+      async handleDriverDetected(driverId) {
+        document.getElementById("driver-id").value = driverId;
+        document.getElementById("detected-driver-id").textContent = driverId;
+        document.getElementById("driver-scan-confirm").style.display = "block";
+
+        const ownerKey = `driver:${driverId}`;
+        const existing = await this.findDevicesByOwner(ownerKey);
+        DebugConsole.log(
+          `Driver ${driverId}: ${existing.length} dispositivo(s) existente(s)`,
+          "info"
+        );
+
+        if (existing.length > 0) {
+          this.promptExistingDevices(ownerKey, existing, "driver");
+        } else {
+          this.readyForDevice = true;
+        }
+        this.updateFormSteps();
       }
 
       async loadUser() {
@@ -2356,6 +2543,7 @@
       reset() {
         document.getElementById("puesto").value = "";
         document.getElementById("correo").value = "";
+        document.getElementById("correo").removeAttribute("readonly");
         document.getElementById("tipo-dispositivo").value = "";
         document.getElementById("imei").value = "";
         document.getElementById("descripcion").value = "";
@@ -2364,6 +2552,9 @@
         document.getElementById("photo-preview").innerHTML = "";
         document.getElementById("input-foto").value = "";
         document.getElementById("driver-scan-confirm").style.display = "none";
+        document.getElementById("otro-scan-result").style.display = "none";
+        document.getElementById("existing-devices-card").style.display = "none";
+        this.resetFlowState();
         this.updateFormSteps();
       }
     }
