@@ -1793,21 +1793,19 @@
       }
 
       loadFoto(file) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const compressed = await this.compressImage(e.target.result);
-          this.setFotoPreview(compressed);
-        };
-        reader.readAsDataURL(file);
+        this.compressImage(file, { maxDim: 1280, quality: 0.6 }).then((dataUrl) =>
+          this.setFotoPreview(dataUrl)
+        );
       }
 
-      // Redimensiona/recomprime a JPEG antes de subir: las fotos de cámara o
-      // archivos originales pueden pesar varios MB y el upload fallaba con
-      // "Failed to fetch" (payload demasiado grande) antes de recibir respuesta.
-      compressImage(dataUrl, maxDim = 1600, quality = 0.75) {
+      // Misma compresión que captura_auditoria.html: máx. 1280px, WebP
+      // calidad 0.6 con fallback a JPEG si el navegador no soporta WebP.
+      compressImage(file, { maxDim = 1280, quality = 0.6 } = {}) {
         return new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(file);
           const img = new Image();
           img.onload = () => {
+            URL.revokeObjectURL(url);
             let { width, height } = img;
             if (width > maxDim || height > maxDim) {
               const scale = maxDim / Math.max(width, height);
@@ -1817,11 +1815,24 @@
             const canvas = document.createElement("canvas");
             canvas.width = width;
             canvas.height = height;
-            canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL("image/jpeg", quality));
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+            try {
+              const webp = canvas.toDataURL("image/webp", quality);
+              resolve(
+                webp.startsWith("data:image/webp")
+                  ? webp
+                  : canvas.toDataURL("image/jpeg", quality)
+              );
+            } catch (e) {
+              reject(e);
+            }
           };
-          img.onerror = reject;
-          img.src = dataUrl;
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("No se pudo cargar la imagen"));
+          };
+          img.src = url;
         });
       }
 
@@ -1869,9 +1880,14 @@
         canvas.width = videoEl.videoWidth;
         canvas.height = videoEl.videoHeight;
         canvas.getContext("2d").drawImage(videoEl, 0, 0);
-        const raw = canvas.toDataURL("image/jpeg", 0.9);
+        const rawBlob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.92)
+        );
         this.closeCamera();
-        const compressed = await this.compressImage(raw);
+        const compressed = await this.compressImage(rawBlob, {
+          maxDim: 1280,
+          quality: 0.6,
+        });
         this.setFotoPreview(compressed);
         DebugConsole.log("Foto capturada desde la cámara", "info");
       }
