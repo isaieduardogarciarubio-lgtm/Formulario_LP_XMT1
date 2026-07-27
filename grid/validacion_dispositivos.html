@@ -970,45 +970,73 @@
         });
       }
 
+      static normalizeId(v) {
+        return String(v ?? "")
+          .trim()
+          .replace(/^0+(?=.)/, "")
+          .toLowerCase();
+      }
+
       async onDetect(value) {
         DebugConsole.log(`Detectado: ${value}`, "info");
         this.scanner.stop();
+
+        const trimmed = String(value).trim();
 
         // Parsear: ¿driver JSON o device id?
         let type = null;
         let driverId = null;
         let deviceId = null;
+        let looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
 
-        try {
-          const json = JSON.parse(value);
-          if (json.driver_id) {
-            type = "driver";
-            driverId = json.driver_id;
-            DebugConsole.log(`Tipo: Driver ${driverId}`, "info");
+        if (looksLikeJson) {
+          try {
+            const json = JSON.parse(trimmed);
+            if (json.driver_id !== undefined && json.driver_id !== null && json.driver_id !== "") {
+              type = "driver";
+              driverId = json.driver_id;
+              DebugConsole.log(`Tipo: Driver ${driverId}`, "info");
+            } else {
+              DebugConsole.log(
+                `JSON reconocido pero sin campo "driver_id": ${JSON.stringify(json)}`,
+                "warn"
+              );
+            }
+          } catch (e) {
+            DebugConsole.log(`Error parseando JSON: ${e.message}`, "warn");
           }
-        } catch (e) {
-          // Texto, no JSON
         }
 
         if (!type) {
-          if (value.startsWith("dev_")) {
+          if (trimmed.startsWith("dev_")) {
             type = "device";
-            deviceId = value;
+            deviceId = trimmed;
             DebugConsole.log(`Tipo: Device ${deviceId}`, "info");
-          } else {
-            // Asumir es driver_id directo
+          } else if (!looksLikeJson) {
+            // Asumir es driver_id directo (texto plano, no JSON)
             type = "driver";
-            driverId = value;
+            driverId = trimmed;
             DebugConsole.log(`Tipo: Driver (búsqueda) ${driverId}`, "info");
           }
         }
 
-        // Validar
+        if (!type) {
+          this.showDenied("No registrado", "El código escaneado no tiene un formato reconocido.");
+          return;
+        }
+
+        // Validar (normalizando driver_id: espacios, mayúsculas y ceros a la izquierda)
+        const normDriverId = type === "driver" ? ValidacionApp.normalizeId(driverId) : null;
         const devices = (this.devicesBucket?.records || []).filter((d) => {
           if (type === "device") return d.id === deviceId;
-          if (type === "driver") return d.owner_key === `driver:${driverId}`;
+          if (type === "driver") return ValidacionApp.normalizeId(d.driver_id) === normDriverId;
           return false;
         });
+
+        DebugConsole.log(
+          `Buscando ${type === "driver" ? `driver_id=${normDriverId}` : `device_id=${deviceId}`} · encontrados=${devices.length}`,
+          "info"
+        );
 
         if (devices.length === 0) {
           this.showDenied("No registrado", "No existe un dispositivo registrado con este código.");
@@ -1169,7 +1197,7 @@
       }
 
       viewPhoto(docId, deviceId) {
-        const url = this.gridClient.getDownloadUrl(docId);
+        const url = "https://grid.adminml.com/d/" + docId + "?dl=1";
         document.getElementById("modal-photo-img").src = url;
         document.getElementById("modal-photo").classList.add("active");
         DebugConsole.log(`Abriendo foto: ${deviceId}`, "info");

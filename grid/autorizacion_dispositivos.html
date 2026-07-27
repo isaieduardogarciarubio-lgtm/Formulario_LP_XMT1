@@ -688,6 +688,25 @@
       color: var(--c-orange);
     }
 
+    .btn-view-photo {
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.16s;
+    }
+
+    .btn-view-photo:hover {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+    }
+
     /* ──── QR PREVIEW ──── */
     .qr-preview {
       display: flex;
@@ -1070,11 +1089,13 @@
               <tr>
                 <th>Timestamp</th>
                 <th>Puesto</th>
-                <th>IMEI / Driver ID</th>
+                <th>Driver ID</th>
+                <th>IMEI</th>
                 <th>Descripción</th>
                 <th>Correo</th>
                 <th>Usuario</th>
                 <th>QR</th>
+                <th>Foto</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -1134,6 +1155,21 @@
 
       <div class="modal-footer">
         <button class="btn btn-primary" id="btn-modal-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VER FOTO (historial) -->
+  <div class="modal-bg" id="modal-photo">
+    <div class="modal">
+      <div class="modal-title">
+        <span>Foto del dispositivo</span>
+      </div>
+      <div class="modal-body">
+        <img id="modal-photo-img" src="" alt="Foto del dispositivo" style="width: 100%; border-radius: var(--r-md);" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-modal-photo-close">Cerrar</button>
       </div>
     </div>
   </div>
@@ -1774,6 +1810,23 @@
               .toDataURL("image/png");
             link.click();
           });
+
+        document.getElementById("btn-modal-photo-close").addEventListener("click", () => {
+          document.getElementById("modal-photo").classList.remove("active");
+        });
+
+        document.querySelector("#table-devices tbody").addEventListener("click", (e) => {
+          const btn = e.target.closest(".btn-view-photo");
+          if (!btn) return;
+          this.viewPhoto(btn.dataset.fotoDocId, btn.dataset.deviceId);
+        });
+      }
+
+      viewPhoto(docId, deviceId) {
+        const url = "https://grid.adminml.com/d/" + docId + "?dl=1";
+        document.getElementById("modal-photo-img").src = url;
+        document.getElementById("modal-photo").classList.add("active");
+        DebugConsole.log(`Abriendo foto: ${deviceId}`, "info");
       }
 
       updateFormSteps() {
@@ -2009,14 +2062,17 @@
 
         records.forEach((rec) => {
           const row = document.createElement("tr");
+          const esSmartphone = rec.tipo_dispositivo === "smartphone";
           row.innerHTML = `
             <td>${rec.timestamp || "-"}</td>
             <td><span class="badge ${rec.puesto === 'driver' ? 'green' : 'blue'}">${rec.puesto || "-"}</span></td>
-            <td>${rec.imei || rec.driver_id || "-"}</td>
+            <td>${rec.driver_id || "-"}</td>
+            <td>${esSmartphone ? (rec.imei || "-") : "-"}</td>
             <td>${rec.descripcion || "-"}</td>
             <td>${rec.correo || "-"}</td>
             <td>${rec.usuario || "-"}</td>
             <td>${rec.qr_doc_id ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--c-green);"><path d="M20 6L9 17l-5-5"/></svg>' : "-"}</td>
+            <td>${rec.foto_doc_id ? `<button type="button" class="btn-view-photo" data-foto-doc-id="${rec.foto_doc_id}" data-device-id="${rec.id || ''}">Ver foto</button>` : "-"}</td>
           `;
           tbody.appendChild(row);
         });
