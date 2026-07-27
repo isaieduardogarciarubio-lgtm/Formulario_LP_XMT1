@@ -1687,6 +1687,12 @@
         });
       }
 
+      async findDevicesByOwner(ownerKey) {
+        // Buscar en el bucket si ya existen dispositivos de esta persona
+        const devices = (await this.gridClient.getStateBucket("devices_master")) || {};
+        return (devices.records || []).filter((d) => d.owner_key === ownerKey);
+      }
+
       bindForm() {
         const puestoEl = document.getElementById("puesto");
         const tipoDispEl = document.getElementById("tipo-dispositivo");
@@ -1732,6 +1738,37 @@
         document
           .getElementById("btn-debug-console")
           .addEventListener("click", () => DebugConsole.toggle());
+
+        // Detectar si ya existen dispositivos de esta persona
+        document.getElementById("driver-id").addEventListener("change", () => {
+          const driverId = document.getElementById("driver-id").value;
+          if (driverId) this.checkExistingDevices("driver", driverId);
+        });
+
+        document.getElementById("correo").addEventListener("change", () => {
+          const correo = document.getElementById("correo").value;
+          if (correo) this.checkExistingDevices("otro", correo);
+        });
+      }
+
+      async checkExistingDevices(tipo, identifier) {
+        const ownerKey = tipo === "driver" ? `driver:${identifier}` : `user:${identifier.toLowerCase()}`;
+        const existing = await this.findDevicesByOwner(ownerKey);
+
+        if (existing.length > 0) {
+          const list = existing.map((d) => `• ${d.descripcion || d.id.slice(0, 20)}`).join("\n");
+          DebugConsole.log(`${tipo === "driver" ? "Driver" : "Usuario"} ${identifier} ya tiene ${existing.length} dispositivo(s)`, "info");
+
+          const msg = `Esta ${tipo === "driver" ? "persona" : "persona"} ya tiene ${existing.length} dispositivo(s) registrado(s):\n\n${list}\n\n¿Deseas agregar otro dispositivo?`;
+          if (confirm(msg)) {
+            // El usuario quiere agregar otro, dejar los datos de la persona pero limpiar tipo y foto
+            document.getElementById("tipo-dispositivo").value = "";
+            document.getElementById("descripcion").value = "";
+            this.removeFoto();
+            this.updateFormSteps();
+            DebugConsole.log(`Agregando nuevo dispositivo a ${identifier}`, "info");
+          }
+        }
       }
 
       bindModal() {
@@ -2081,22 +2118,29 @@
           );
 
           // 3. Construir registro
+          const now = new Date().toISOString();
           record = {
             id: deviceId,
-            timestamp: new Date().toISOString(),
+            timestamp: now,
             puesto,
             tipo_dispositivo: tipoDisp,
             descripcion,
             foto_doc_id: fotoDocId,
             usuario: this.currentUser?.ldap || "unknown",
             email: this.currentUser?.email || "",
+            status: "activo",
+            ultimo_escaneo: now,
           };
 
           if (puesto === "driver") {
             record.driver_id = document.getElementById("driver-id").value;
+            record.owner_key = `driver:${record.driver_id}`;
+            record.owner_tipo = "driver";
             // SIN QR para Driver
           } else {
             record.correo = document.getElementById("correo").value;
+            record.owner_key = `user:${record.correo.toLowerCase()}`;
+            record.owner_tipo = "otro";
             if (tipoDisp === "smartphone") {
               record.imei = document.getElementById("imei").value;
             }
@@ -2197,6 +2241,22 @@
         if (!bucket || !Array.isArray(bucket.records)) {
           bucket = { ...bucket, records: [] };
         }
+
+        // Migración perezosa: agregar campos nuevos a registros viejos si no los tienen
+        bucket.records = bucket.records.map((r) => {
+          if (!r.owner_key) {
+            if (r.driver_id) {
+              r.owner_key = `driver:${r.driver_id}`;
+              r.owner_tipo = "driver";
+            } else if (r.correo) {
+              r.owner_key = `user:${r.correo.toLowerCase()}`;
+              r.owner_tipo = "otro";
+            }
+          }
+          if (r.status === undefined) r.status = "activo";
+          if (r.ultimo_escaneo === undefined) r.ultimo_escaneo = r.timestamp;
+          return r;
+        });
 
         bucket.records.push(record);
 
