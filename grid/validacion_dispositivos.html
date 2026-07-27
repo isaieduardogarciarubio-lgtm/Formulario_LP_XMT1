@@ -179,33 +179,6 @@
       object-fit: cover;
     }
 
-    .search-group {
-      display: flex;
-      gap: 8px;
-    }
-
-    .search-group input {
-      flex: 1;
-      padding: 12px;
-      font-family: inherit;
-      font-size: 14px;
-      border: 1px solid var(--border);
-      border-radius: var(--r-sm);
-      background: var(--surface-2);
-      color: var(--text);
-      transition: all 0.16s;
-    }
-
-    .search-group input:focus {
-      outline: none;
-      border-color: var(--state);
-      box-shadow: 0 0 0 2px var(--state-glow);
-    }
-
-    .search-group input::placeholder {
-      color: var(--text-mut);
-    }
-
     .btn {
       padding: 12px 16px;
       font-family: inherit;
@@ -548,10 +521,6 @@
     </nav>
     <div class="scanner-wrapper">
       <video id="scanner-video" autoplay playsinline muted></video>
-      <div class="search-group">
-        <input type="text" id="search-driver" placeholder="O busca driver_id aquí..." />
-        <button class="btn primary" id="btn-search">Buscar</button>
-      </div>
     </div>
   </section>
 
@@ -889,15 +858,6 @@
           DebugConsole.toggle()
         );
 
-        document.getElementById("btn-search").addEventListener("click", () => {
-          const val = document.getElementById("search-driver").value.trim();
-          if (val) this.onDetect(val);
-        });
-
-        document.getElementById("search-driver").addEventListener("keypress", (e) => {
-          if (e.key === "Enter") document.getElementById("btn-search").click();
-        });
-
         document.getElementById("btn-scan-again").addEventListener("click", () =>
           this.backToScanner()
         );
@@ -1073,7 +1033,6 @@
       }
 
       backToScanner() {
-        document.getElementById("search-driver").value = "";
         document.getElementById("stage-scanner").classList.add("active");
         document.getElementById("stage-valid").classList.remove("active");
         document.getElementById("stage-denied").classList.remove("active");
