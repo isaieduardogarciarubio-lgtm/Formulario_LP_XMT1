@@ -1074,8 +1074,10 @@
       try {
         const logoImg = document.getElementById("navbar-logo-img");
         if (logoImg && app.gridClient) {
-          const url = app.gridClient.getDownloadUrl(NAVBAR_LOGO_DOC_ID);
-          logoImg.src = url;
+          const url = await app.gridClient.getDownloadUrl(NAVBAR_LOGO_DOC_ID);
+          if (url) {
+            logoImg.src = url;
+          }
         }
       } catch (e) {
         DebugConsole.log(`No se pudo cargar logo: ${e.message}`, "warn");
