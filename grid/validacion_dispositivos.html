@@ -815,30 +815,18 @@
       }
 
       async init() {
-        await this.loadLogo();
+        this.loadLogo();
         await this.loadUser();
         await this.loadDevices();
         await this.startScanner();
         this.bindEvents();
       }
 
-      async loadLogo() {
-        DebugConsole.log("Cargando logo...", "info");
-        try {
-          DebugConsole.log(`Buscando logo con doc_id: ${NAVBAR_LOGO_DOC_ID}`, "info");
-          const url = await this.gridClient.getDownloadUrl(NAVBAR_LOGO_DOC_ID);
-          DebugConsole.log(`URL logo obtenida: ${url ? "sí" : "no"}`, "info");
-          if (url) {
-            const navImg = document.getElementById("navbar-logo-img");
-            DebugConsole.log(`Elemento navbar-logo-img: ${navImg ? "encontrado" : "NO ENCONTRADO"}`, "info");
-            if (navImg) {
-              navImg.src = url;
-              navImg.style.display = "block";
-              DebugConsole.log(`Logo cargado: ${url}`, "info");
-            }
-          }
-        } catch (e) {
-          DebugConsole.log(`Error cargando logo: ${e.message}`, "error");
+      loadLogo() {
+        const navImg = document.getElementById("navbar-logo-img");
+        if (navImg) {
+          navImg.src = "https://grid.adminml.com/d/" + NAVBAR_LOGO_DOC_ID + "?dl=1";
+          navImg.style.display = "block";
         }
       }
 

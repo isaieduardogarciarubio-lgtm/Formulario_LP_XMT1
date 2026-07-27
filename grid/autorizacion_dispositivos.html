@@ -1635,37 +1635,24 @@
         this.loadLogo();
       }
 
-      async loadLogo() {
+      loadLogo() {
         // Logo del título (navbar)
-        try {
-          const url = await this.gridClient.getDownloadUrl(NAVBAR_LOGO_DOC_ID);
-          if (url) {
-            const navImg = document.getElementById("navbar-logo-img");
-            if (navImg) {
-              navImg.src = url;
-              navImg.style.display = "block";
-            }
-          }
-        } catch (e) {
-          console.error("No se pudo cargar el logo del navbar:", e);
+        const navImg = document.getElementById("navbar-logo-img");
+        if (navImg) {
+          navImg.src = "https://grid.adminml.com/d/" + NAVBAR_LOGO_DOC_ID + "?dl=1";
+          navImg.style.display = "block";
         }
 
         // Logo central del QR (independiente del logo del navbar)
-        try {
-          const qrUrl = await this.gridClient.getDownloadUrl(QR_LOGO_DOC_ID);
-          if (!qrUrl) return;
-
-          const img = new Image();
-          await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-            img.src = qrUrl;
-          });
-
+        const qrUrl = "https://grid.adminml.com/d/" + QR_LOGO_DOC_ID + "?dl=1";
+        const img = new Image();
+        img.onload = () => {
           this.logoImage = img;
-        } catch (e) {
-          console.error("No se pudo cargar el logo del QR:", e);
-        }
+        };
+        img.onerror = () => {
+          console.error("No se pudo cargar el logo del QR");
+        };
+        img.src = qrUrl;
       }
 
       bindTabs() {
