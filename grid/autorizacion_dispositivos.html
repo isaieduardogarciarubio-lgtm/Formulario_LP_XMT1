@@ -2194,8 +2194,8 @@
 
       async guardarEnBucket(record) {
         let bucket = await this.gridClient.getStateBucket("devices_master");
-        if (!bucket) {
-          bucket = { records: [] };
+        if (!bucket || !Array.isArray(bucket.records)) {
+          bucket = { ...bucket, records: [] };
         }
 
         bucket.records.push(record);
