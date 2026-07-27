@@ -211,6 +211,64 @@
       color: var(--on-state);
     }
 
+    .search-wrapper {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      animation: slideDown 0.2s ease;
+    }
+
+    .search-wrapper.active {
+      display: flex;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .search-input {
+      padding: 12px 16px;
+      font-family: inherit;
+      font-size: 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color 0.2s;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .search-input::placeholder {
+      color: var(--text-mut);
+    }
+
+    .btn-search {
+      padding: 12px 16px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+      border: none;
+      border-radius: var(--r-md);
+      color: var(--on-accent);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-search:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(255, 209, 0, 0.2);
+    }
+
     /* ──── RESULTADO ──── */
     .hero {
       flex: 1;
@@ -527,6 +585,16 @@
     </nav>
     <div class="scanner-wrapper">
       <video id="scanner-video" autoplay playsinline muted></video>
+      <button class="btn" id="btn-toggle-search" style="width: 100%; justify-content: center;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        Buscar manualmente
+      </button>
+      <div class="search-wrapper" id="search-wrapper">
+        <input type="text" class="search-input" id="search-input" placeholder="Driver ID, Device ID o QR..." />
+        <button class="btn-search" id="btn-search">Validar</button>
+      </div>
     </div>
   </section>
 
@@ -890,6 +958,16 @@
         document.getElementById("btn-scan-again-2").addEventListener("click", () =>
           this.backToScanner()
         );
+
+        document.getElementById("btn-toggle-search").addEventListener("click", () =>
+          this.toggleSearchBox()
+        );
+        document.getElementById("btn-search").addEventListener("click", () =>
+          this.handleManualSearch()
+        );
+        document.getElementById("search-input").addEventListener("keydown", (e) => {
+          if (e.key === "Enter") this.handleManualSearch();
+        });
       }
 
       async onDetect(value) {
@@ -1013,6 +1091,25 @@
         } else {
           this.showDenied("Inactivo / vencido", "Este dispositivo ha superado los 90 días sin escaneo.");
         }
+      }
+
+      toggleSearchBox() {
+        const wrapper = document.getElementById("search-wrapper");
+        wrapper.classList.toggle("active");
+        if (wrapper.classList.contains("active")) {
+          document.getElementById("search-input").focus();
+        }
+      }
+
+      async handleManualSearch() {
+        const value = document.getElementById("search-input").value.trim();
+        if (!value) {
+          DebugConsole.log("Ingrese un búsqueda válida", "warn");
+          return;
+        }
+        document.getElementById("search-input").value = "";
+        document.getElementById("search-wrapper").classList.remove("active");
+        await this.onDetect(value);
       }
 
       showValid(devices) {
