@@ -2175,6 +2175,10 @@
             ultimo_escaneo: now,
           };
 
+          if (tipoDisp === "smartphone") {
+            record.imei = document.getElementById("imei").value;
+          }
+
           if (puesto === "driver") {
             record.driver_id = document.getElementById("driver-id").value;
             record.owner_key = `driver:${record.driver_id}`;
@@ -2184,9 +2188,6 @@
             record.correo = document.getElementById("correo").value;
             record.owner_key = `user:${record.correo.toLowerCase()}`;
             record.owner_tipo = "otro";
-            if (tipoDisp === "smartphone") {
-              record.imei = document.getElementById("imei").value;
-            }
             // Generar QR para Otro (con logo central del doc_id configurado)
             qrDataUrl = await this.generarQR(deviceId);
             const qrBlob = await this.dataUrlToBlob(qrDataUrl);

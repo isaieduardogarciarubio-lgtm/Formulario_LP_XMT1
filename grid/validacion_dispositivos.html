@@ -602,7 +602,7 @@
   <section class="stage" id="stage-valid" data-state="valid">
     <nav class="nav">
       <div class="brand">
-        <img id="navbar-logo-img" class="navbar-logo" alt="Validate" />
+        <img id="navbar-logo-img-2" class="navbar-logo" alt="Validate" />
       </div>
       <div class="nav-actions">
         <button class="icon-btn" id="btn-debug-2" title="Depuración">
@@ -634,7 +634,7 @@
   <section class="stage" id="stage-denied" data-state="denied">
     <nav class="nav">
       <div class="brand">
-        <img id="navbar-logo-img" class="navbar-logo" alt="Validate" />
+        <img id="navbar-logo-img-3" class="navbar-logo" alt="Validate" />
       </div>
       <div class="nav-actions">
         <button class="icon-btn" id="btn-debug-3" title="Depuración">
@@ -891,11 +891,14 @@
       }
 
       loadLogo() {
-        const navImg = document.getElementById("navbar-logo-img");
-        if (navImg) {
-          navImg.src = "https://grid.adminml.com/d/" + NAVBAR_LOGO_DOC_ID + "?dl=1";
-          navImg.style.display = "block";
-        }
+        const url = "https://grid.adminml.com/d/" + NAVBAR_LOGO_DOC_ID + "?dl=1";
+        ["navbar-logo-img", "navbar-logo-img-2", "navbar-logo-img-3"].forEach((id) => {
+          const navImg = document.getElementById(id);
+          if (navImg) {
+            navImg.src = url;
+            navImg.style.display = "block";
+          }
+        });
       }
 
       async loadUser() {
