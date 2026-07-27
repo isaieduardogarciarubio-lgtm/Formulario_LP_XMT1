@@ -815,6 +815,29 @@
       }
 
       async init() {
+        this.loadLogo();
+        this.loadUser();
+        this.loadDevices();
+        this.startScanner();
+        this.bindEvents();
+      }
+
+      async loadLogo() {
+        try {
+          const url = await this.gridClient.getDownloadUrl(NAVBAR_LOGO_DOC_ID);
+          if (url) {
+            const navImg = document.getElementById("navbar-logo-img");
+            if (navImg) {
+              navImg.src = url;
+              navImg.style.display = "block";
+            }
+          }
+        } catch (e) {
+          DebugConsole.log(`No se pudo cargar logo: ${e.message}`, "warn");
+        }
+      }
+
+      async loadUser() {
         try {
           this.currentUser = await this.gridClient.getCurrentUser();
           if (this.currentUser) {
@@ -830,8 +853,9 @@
         } catch (e) {
           DebugConsole.log(`No se pudo cargar usuario: ${e.message}`, "warn");
         }
+      }
 
-        // Cargar datos
+      async loadDevices() {
         try {
           this.devicesBucket =
             (await this.gridClient.getStateBucket("devices_master")) || {};
@@ -842,8 +866,9 @@
         } catch (e) {
           DebugConsole.log(`Error cargando dispositivos: ${e.message}`, "error");
         }
+      }
 
-        // Iniciar escáner
+      async startScanner() {
         try {
           await this.scanner.start(
             document.getElementById("scanner-video"),
@@ -853,8 +878,6 @@
         } catch (e) {
           DebugConsole.log(`Error escáner: ${e.message}`, "error");
         }
-
-        this.bindEvents();
       }
 
       bindEvents() {
@@ -1068,21 +1091,6 @@
 
     // Iniciar app
     const app = new ValidacionApp();
-
-    // Cargar logo
-    (async () => {
-      try {
-        const logoImg = document.getElementById("navbar-logo-img");
-        if (logoImg && app.gridClient) {
-          const url = await app.gridClient.getDownloadUrl(NAVBAR_LOGO_DOC_ID);
-          if (url) {
-            logoImg.src = url;
-          }
-        }
-      } catch (e) {
-        DebugConsole.log(`No se pudo cargar logo: ${e.message}`, "warn");
-      }
-    })();
   </script>
 </body>
 </html>
