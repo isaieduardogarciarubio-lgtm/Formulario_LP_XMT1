@@ -895,6 +895,10 @@
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
         <span id="pending-count">0</span>
       </div>
+      <button class="icon-btn" id="btn-bpp-config" title="Catálogo BPP" style="position: relative;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span id="bpp-stale-badge" style="display: none; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--c-orange); border: 2px solid var(--bg);"></span>
+      </button>
       <button class="icon-btn" id="btn-debug-console" title="Consola de depuración" style="position: relative;">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
         <span id="debug-console-inline-badge" style="display: none; position: absolute; top: -2px; right: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--c-red); color: #fff; font-size: 9px; font-weight: 700; align-items: center; justify-content: center;"></span>
@@ -1226,6 +1230,46 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary" id="btn-modal-photo-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CATÁLOGO BPP -->
+  <div class="modal-bg" id="modal-bpp">
+    <div class="modal">
+      <div class="modal-title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); vertical-align: -3px; margin-right: 6px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Catálogo BPP</span>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 14px;">
+          IMEIs de dispositivos implicados en casos de generación BPP. Un
+          smartphone cuyo IMEI esté en este catálogo <strong>no podrá
+          registrarse</strong>.
+        </p>
+
+        <div id="bpp-status" style="font-size: 13px; padding: 12px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 12px;">
+          Cargando…
+        </div>
+
+        <div id="bpp-stale-warn" class="alert warn" style="display: none;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          El catálogo tiene más de 7 días. Se recomienda actualizarlo semanalmente.
+        </div>
+
+        <div class="form-group" style="margin-top: 6px;">
+          <label for="bpp-csv-input">Actualizar desde CSV</label>
+          <input type="file" id="bpp-csv-input" accept=".csv,text/csv" />
+          <p style="font-size: 12px; color: var(--text-mut); margin-top: 6px;">
+            Encabezados esperados: <code>IMEI_VALUE, SHIPMENT_ID</code>.
+          </p>
+        </div>
+
+        <div id="bpp-upload-result" style="display: none; margin-top: 8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-bpp-upload">Reemplazar catálogo</button>
+        <button class="btn btn-secondary" id="btn-modal-bpp-close">Cerrar</button>
       </div>
     </div>
   </div>
@@ -1711,6 +1755,11 @@
         this._existingContext = null;
         this._existingOwnerKey = null;
 
+        // Catálogo BPP: IMEIs implicados en casos de generación BPP.
+        // Índice en memoria para lookup instantáneo al guardar.
+        this.bppIndex = new Map(); // imei(normalizado) -> shipment_id
+        this.bppMeta = null; // { updated_at, uploaded_by, filename, count }
+
         DebugConsole.setup();
         DebugConsole.log(`Documento de datos: ${this.docId}`, "info");
 
@@ -1731,8 +1780,10 @@
         this.bindTabs();
         this.bindForm();
         this.bindModal();
+        this.bindBppConfig();
         this.loadUser();
         this.loadHistorial();
+        this.loadBppCatalog();
         this.loadLogo();
       }
 
@@ -1992,6 +2043,173 @@
         document.getElementById("modal-photo-img").src = url;
         document.getElementById("modal-photo").classList.add("active");
         DebugConsole.log(`Abriendo foto: ${deviceId}`, "info");
+      }
+
+      /* ─── CATÁLOGO BPP ─────────────────────────────────────────────── */
+
+      // Normaliza un IMEI a solo dígitos para comparaciones consistentes.
+      static normalizeImei(v) {
+        return String(v ?? "").replace(/\D/g, "");
+      }
+
+      bindBppConfig() {
+        document.getElementById("btn-bpp-config").addEventListener("click", () => {
+          this.renderBppModal();
+          document.getElementById("modal-bpp").classList.add("active");
+        });
+        document.getElementById("btn-modal-bpp-close").addEventListener("click", () => {
+          document.getElementById("modal-bpp").classList.remove("active");
+        });
+        document.getElementById("btn-bpp-upload").addEventListener("click", () =>
+          this.handleBppUpload()
+        );
+      }
+
+      async loadBppCatalog() {
+        try {
+          const bucket = await this.gridClient.getStateBucket("bpp_catalog");
+          this.bppIndex = new Map();
+          if (bucket && Array.isArray(bucket.records)) {
+            for (const r of bucket.records) {
+              const imei = AutorizacionApp.normalizeImei(r.imei);
+              if (imei) this.bppIndex.set(imei, r.shipment_id || "");
+            }
+            this.bppMeta = {
+              updated_at: bucket.updated_at || null,
+              uploaded_by: bucket.uploaded_by || "",
+              filename: bucket.filename || "",
+              count: this.bppIndex.size,
+            };
+          } else {
+            this.bppMeta = null;
+          }
+          DebugConsole.log(`Catálogo BPP cargado: ${this.bppIndex.size} IMEI(s)`, "info");
+        } catch (e) {
+          DebugConsole.log(`Error cargando catálogo BPP: ${e.message}`, "error");
+        }
+        this.updateBppBadge();
+      }
+
+      // El catálogo se considera "vencido" si no existe o tiene más de 7 días.
+      isBppStale() {
+        if (!this.bppMeta || !this.bppMeta.updated_at) return true;
+        const ageMs = Date.now() - new Date(this.bppMeta.updated_at).getTime();
+        return ageMs > 7 * 24 * 60 * 60 * 1000;
+      }
+
+      updateBppBadge() {
+        const badge = document.getElementById("bpp-stale-badge");
+        if (badge) badge.style.display = this.isBppStale() ? "block" : "none";
+      }
+
+      renderBppModal() {
+        const status = document.getElementById("bpp-status");
+        const staleWarn = document.getElementById("bpp-stale-warn");
+        document.getElementById("bpp-upload-result").style.display = "none";
+        document.getElementById("bpp-csv-input").value = "";
+
+        if (this.bppMeta && this.bppMeta.count > 0) {
+          let fecha = "—";
+          try {
+            fecha = new Date(this.bppMeta.updated_at).toLocaleString("es-MX", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            });
+          } catch (e) {}
+          status.innerHTML = `
+            <strong>${this.bppMeta.count}</strong> IMEI(s) en catálogo<br/>
+            Última actualización: <strong>${fecha}</strong><br/>
+            Subido por: ${this.bppMeta.uploaded_by || "—"}
+          `;
+        } else {
+          status.innerHTML =
+            "No hay catálogo cargado todavía. Sube un CSV para activar el bloqueo BPP.";
+        }
+        staleWarn.style.display = this.isBppStale() ? "flex" : "none";
+      }
+
+      // Parser tolerante: detecta delimitador (, o ;), ignora encabezado y
+      // mapea a { imei, shipment_id }. Columna 0 = IMEI_VALUE, 1 = SHIPMENT_ID.
+      parseBppCsv(text) {
+        const clean = text.replace(/^﻿/, ""); // quita BOM
+        const lines = clean.split(/\r?\n/).filter((l) => l.trim() !== "");
+        if (lines.length === 0) return [];
+
+        const delimiter = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
+        const records = [];
+
+        lines.forEach((line, idx) => {
+          const cols = line.split(delimiter).map((c) => c.trim().replace(/^"|"$/g, ""));
+          // Saltar encabezado (primera fila si contiene "IMEI").
+          if (idx === 0 && /imei/i.test(line)) return;
+          const imei = AutorizacionApp.normalizeImei(cols[0]);
+          if (!imei) return;
+          records.push({ imei, shipment_id: cols[1] || "" });
+        });
+
+        return records;
+      }
+
+      async handleBppUpload() {
+        const input = document.getElementById("bpp-csv-input");
+        const result = document.getElementById("bpp-upload-result");
+        const file = input.files && input.files[0];
+
+        if (!file) {
+          result.style.display = "block";
+          result.innerHTML =
+            '<div class="alert error">Selecciona un archivo CSV primero.</div>';
+          return;
+        }
+
+        try {
+          const text = await file.text();
+          const records = this.parseBppCsv(text);
+
+          if (records.length === 0) {
+            result.style.display = "block";
+            result.innerHTML =
+              '<div class="alert error">No se encontraron IMEIs válidos en el CSV. Revisa el formato (IMEI_VALUE, SHIPMENT_ID).</div>';
+            return;
+          }
+
+          const bucket = {
+            updated_at: new Date().toISOString(),
+            uploaded_by: this.currentUser?.email || this.currentUser?.ldap || "",
+            filename: file.name,
+            records,
+          };
+
+          const saveResult = await this.gridClient.setStateBucket("bpp_catalog", bucket);
+          if (saveResult.conflict) {
+            // Otro usuario actualizó en paralelo: releer y reintentar una vez.
+            await this.gridClient.getStateBucket("bpp_catalog");
+            const retry = await this.gridClient.setStateBucket("bpp_catalog", bucket);
+            if (retry.conflict) {
+              throw new Error("Conflicto de escritura, intenta de nuevo");
+            }
+          }
+
+          DebugConsole.log(`Catálogo BPP actualizado: ${records.length} IMEI(s)`, "info");
+          await this.loadBppCatalog();
+          this.renderBppModal();
+
+          result.style.display = "block";
+          result.innerHTML = `<div class="alert success">Catálogo actualizado: ${records.length} IMEI(s) cargados.</div>`;
+        } catch (e) {
+          DebugConsole.log(`Error subiendo catálogo BPP: ${e.message}`, "error");
+          result.style.display = "block";
+          result.innerHTML = `<div class="alert error">Error: ${e.message}</div>`;
+        }
+      }
+
+      // Devuelve { blocked, shipmentId } consultando el índice en memoria.
+      checkBpp(imei) {
+        const norm = AutorizacionApp.normalizeImei(imei);
+        if (norm && this.bppIndex.has(norm)) {
+          return { blocked: true, shipmentId: this.bppIndex.get(norm) };
+        }
+        return { blocked: false, shipmentId: null };
       }
 
       updateFormSteps() {
@@ -2327,6 +2545,21 @@
           return;
         }
 
+        // Bloqueo BPP: si el IMEI del smartphone está en el catálogo de casos
+        // BPP, no se permite el registro bajo ninguna circunstancia.
+        if (tipoDisp === "smartphone") {
+          const imeiVal = document.getElementById("imei").value;
+          const { blocked, shipmentId } = this.checkBpp(imeiVal);
+          if (blocked) {
+            DebugConsole.log(
+              `Bloqueo BPP: IMEI ${imeiVal} implicado (shipment=${shipmentId || "?"})`,
+              "warn"
+            );
+            this.showBppBlockAlert(shipmentId);
+            return;
+          }
+        }
+
         // Bloquear UI con la animación de carga mientras se procesa
         // (foto, QR, guardado en bucket pueden tardar varios segundos).
         MorphController.start();
@@ -2538,6 +2771,22 @@
         alertEl.innerHTML = `${icons[type] || icons.info}<span>${message}</span>`;
         alertEl.className = `alert ${type}`;
         alertEl.style.display = "flex";
+      }
+
+      // Alerta destacada de bloqueo BPP (más prominente que showAlert).
+      showBppBlockAlert(shipmentId) {
+        const alertEl = document.getElementById("alert-registro");
+        const shipTxt = shipmentId
+          ? ` Shipment: <strong>${shipmentId}</strong>.`
+          : "";
+        alertEl.innerHTML = `
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+          <span><strong>Dispositivo implicado en un caso de generación BPP.</strong><br/>
+          Este IMEI no puede registrarse.${shipTxt}</span>
+        `;
+        alertEl.className = "alert error";
+        alertEl.style.display = "flex";
+        alertEl.scrollIntoView({ behavior: "smooth", block: "center" });
       }
 
       reset() {
