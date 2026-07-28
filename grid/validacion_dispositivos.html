@@ -143,6 +143,38 @@
       user-select: none;
     }
 
+    /* ──── ENTRADA/SALIDA TOGGLE ──── */
+    .mode-toggle {
+      display: flex;
+      gap: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      padding: 4px;
+    }
+
+    .mode-btn {
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--r-pill);
+      background: transparent;
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.16s;
+      white-space: nowrap;
+    }
+
+    .mode-btn.active {
+      background: var(--c-green);
+      color: var(--bg);
+    }
+
+    .mode-btn:hover:not(.active) {
+      color: var(--text);
+    }
+
     /* ──── STAGES ──── */
     .stage {
       min-height: 100dvh;
@@ -576,6 +608,10 @@
       <div class="brand">
         <img id="navbar-logo-img" class="navbar-logo" alt="Validate" />
       </div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-mode-entrada" data-mode="entrada">Entrada</button>
+        <button class="mode-btn" id="btn-mode-salida" data-mode="salida">Salida</button>
+      </div>
       <div class="nav-actions">
         <button class="icon-btn" id="btn-debug" title="Depuración">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
@@ -787,6 +823,39 @@
         return { ok: true };
       }
 
+      async mutateBucket(name, mutateFn, maxRetries = 4) {
+        let retries = 0;
+        while (retries < maxRetries) {
+          try {
+            let bucket = await this.getStateBucket(name);
+            if (!bucket || typeof bucket !== 'object') {
+              bucket = { records: [] };
+            }
+            if (!Array.isArray(bucket.records)) {
+              bucket = { ...bucket, records: [] };
+            }
+
+            bucket = await mutateFn(bucket);
+
+            const result = await this.setStateBucket(name, bucket);
+            if (result.conflict) {
+              retries++;
+              const delay = Math.pow(2, retries - 1) * 100;
+              DebugConsole.log(`mutateBucket ${name}: conflicto, reintentando en ${delay}ms (intento ${retries}/${maxRetries})`, "warn");
+              await new Promise((r) => setTimeout(r, delay));
+              continue;
+            }
+
+            DebugConsole.log(`mutateBucket ${name}: éxito después de ${retries} reintentos`, "info");
+            return bucket;
+          } catch (e) {
+            DebugConsole.log(`mutateBucket ${name} error: ${e.message}`, "error");
+            throw e;
+          }
+        }
+        throw new Error(`mutateBucket ${name}: máximos reintentos (${maxRetries}) alcanzados`);
+      }
+
       async getCurrentUser() {
         const res = await this._fetchWithTimeout(
           `${this.baseUrl}/api/v1/me`,
@@ -866,6 +935,7 @@
         this.currentUser = null;
         this.devicesBucket = null;
         this.scansBucket = null;
+        this.mode = localStorage.getItem("validacion-mode") || "entrada";
 
         DebugConsole.setup();
         DebugConsole.log(`Documento: ${this.docId}`, "info");
@@ -971,6 +1041,27 @@
         document.getElementById("search-input").addEventListener("keydown", (e) => {
           if (e.key === "Enter") this.handleManualSearch();
         });
+
+        document.getElementById("btn-mode-entrada").addEventListener("click", () =>
+          this.setMode("entrada")
+        );
+        document.getElementById("btn-mode-salida").addEventListener("click", () =>
+          this.setMode("salida")
+        );
+
+        this.updateModeDisplay();
+      }
+
+      setMode(newMode) {
+        this.mode = newMode;
+        localStorage.setItem("validacion-mode", newMode);
+        this.updateModeDisplay();
+        DebugConsole.log(`Modo cambió a: ${newMode}`, "info");
+      }
+
+      updateModeDisplay() {
+        document.getElementById("btn-mode-entrada").classList.toggle("active", this.mode === "entrada");
+        document.getElementById("btn-mode-salida").classList.toggle("active", this.mode === "salida");
       }
 
       static normalizeId(v) {
@@ -1046,81 +1137,190 @@
           return;
         }
 
-        // Aplicar regla de 90 días
         const now = new Date();
         let anyValid = false;
         const toUpdate = [];
+        let validationResults = [];
 
         for (const dev of devices) {
-          const lastScan = dev.ultimo_escaneo ? new Date(dev.ultimo_escaneo) : new Date(dev.timestamp);
-          const daysSince = Math.floor((now - lastScan) / (1000 * 60 * 60 * 24));
+          const isDriver = dev.owner_tipo === "driver";
 
-          DebugConsole.log(
-            `Device ${dev.id}: status=${dev.status}, días=${daysSince}`,
-            "info"
-          );
+          if (isDriver) {
+            // Drivers: aplicar regla de 90 días (lógica original)
+            const lastScan = dev.ultimo_escaneo ? new Date(dev.ultimo_escaneo) : new Date(dev.timestamp);
+            const daysSince = Math.floor((now - lastScan) / (1000 * 60 * 60 * 24));
 
-          if (dev.status === "inactivo") {
-            // Sigue inactivo
-          } else if (daysSince > 90) {
-            // Auto-desactivar
-            dev.status = "inactivo";
-            toUpdate.push(dev);
-            DebugConsole.log(`Auto-desactivando ${dev.id} (>${daysSince}d)`, "warn");
+            DebugConsole.log(
+              `Driver ${dev.id}: status=${dev.status}, días=${daysSince}`,
+              "info"
+            );
+
+            if (dev.status === "inactivo") {
+              validationResults.push({
+                device: dev,
+                valid: false,
+                resultado: "denegado_inactivo",
+                motivo: "Inactivo / vencido",
+                desc: "Este dispositivo ha superado los 90 días sin escaneo.",
+                tipo_movimiento: null,
+              });
+            } else if (daysSince > 90) {
+              dev.status = "inactivo";
+              toUpdate.push(dev);
+              validationResults.push({
+                device: dev,
+                valid: false,
+                resultado: "denegado_inactivo",
+                motivo: "Inactivo / vencido",
+                desc: "Este dispositivo ha superado los 90 días sin escaneo.",
+                tipo_movimiento: null,
+              });
+              DebugConsole.log(`Auto-desactivando ${dev.id} (>${daysSince}d)`, "warn");
+            } else {
+              anyValid = true;
+              dev.ultimo_escaneo = now.toISOString();
+              toUpdate.push(dev);
+              validationResults.push({
+                device: dev,
+                valid: true,
+                resultado: "valido",
+                motivo: null,
+                tipo_movimiento: null,
+              });
+            }
           } else {
-            // Válido
-            anyValid = true;
+            // Dispositivos (no drivers): aplicar lógica de Entrada/Salida
+            const ubicacion = dev.ubicacion || "afuera";
+            const lastMove = dev.ultimo_movimiento ? new Date(dev.ultimo_movimiento) : new Date(dev.timestamp);
+            const hoursSince = (now - lastMove) / (1000 * 60 * 60);
+
+            // Auto-reset individual a 12 horas
+            const ubicacionEfectiva = ubicacion === "adentro" && hoursSince > 12 ? "afuera" : ubicacion;
+
+            DebugConsole.log(
+              `Device ${dev.id}: ubicacion=${ubicacion}, horas=${hoursSince.toFixed(1)}, efectiva=${ubicacionEfectiva}, modo=${this.mode}`,
+              "info"
+            );
+
+            let valid = false;
+            let resultado = null;
+            let motivo = null;
+            let desc = null;
+            let tipo_movimiento = null;
+
+            if (this.mode === "entrada") {
+              if (ubicacionEfectiva === "afuera") {
+                valid = true;
+                resultado = "valido";
+                tipo_movimiento = "ingreso";
+                dev.ubicacion = "adentro";
+                dev.ultimo_movimiento = now.toISOString();
+              } else {
+                valid = false;
+                resultado = "denegado_compartido";
+                motivo = "Posible QR compartido";
+                desc = "El dispositivo ya está adentro";
+              }
+            } else if (this.mode === "salida") {
+              if (ubicacionEfectiva === "adentro") {
+                valid = true;
+                resultado = "valido";
+                tipo_movimiento = "salida";
+                dev.ubicacion = "afuera";
+                dev.ultimo_movimiento = now.toISOString();
+              } else {
+                valid = false;
+                resultado = "denegado_sin_ingreso";
+                motivo = "Sin ingreso previo";
+                desc = "El dispositivo está afuera";
+              }
+            }
+
+            // Actualizar ultimo_escaneo para la regla de 90 días
             dev.ultimo_escaneo = now.toISOString();
+
+            if (valid) {
+              anyValid = true;
+            }
+
             toUpdate.push(dev);
+            validationResults.push({
+              device: dev,
+              valid,
+              resultado,
+              motivo,
+              desc,
+              tipo_movimiento,
+            });
           }
         }
 
         // Actualizar devices_master si hay cambios
         if (toUpdate.length > 0) {
           try {
-            for (const dev of toUpdate) {
-              const idx = this.devicesBucket.records.findIndex((d) => d.id === dev.id);
-              if (idx >= 0) {
-                this.devicesBucket.records[idx] = dev;
+            this.devicesBucket = await this.gridClient.mutateBucket(
+              "devices_master",
+              async (bucket) => {
+                for (const dev of toUpdate) {
+                  const idx = bucket.records.findIndex((d) => d.id === dev.id);
+                  if (idx >= 0) {
+                    bucket.records[idx] = dev;
+                  }
+                }
+                return bucket;
               }
-            }
-            await this.gridClient.setStateBucket("devices_master", this.devicesBucket);
+            );
             DebugConsole.log(`devices_master actualizado`, "info");
           } catch (e) {
             DebugConsole.log(`Error actualizando devices: ${e.message}`, "error");
           }
         }
 
-        // Guardar en scan_master si hay válidos
-        if (anyValid) {
-          try {
-            let scansBucket = (await this.gridClient.getStateBucket("scan_master")) || {};
-            if (!Array.isArray(scansBucket.records)) {
-              scansBucket = { ...scansBucket, records: [] };
+        // Guardar en scan_master (válidos y denegados por compartido/sin ingreso)
+        try {
+          await this.gridClient.mutateBucket(
+            "scan_master",
+            async (bucket) => {
+              for (const vr of validationResults) {
+                const recordToAdd = {
+                  scan_id: `scan_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  timestamp: now.toISOString(),
+                  device_ids: type === "device" ? [vr.device.id] : [],
+                  driver_id: type === "driver" ? driverId : null,
+                  owner_key: vr.device.owner_key,
+                  validado_por: this.currentUser?.name || "Desconocido",
+                  email_validador: this.currentUser?.email || "",
+                  resultado: vr.resultado,
+                  tipo_movimiento: vr.tipo_movimiento,
+                  modo: vr.tipo_movimiento ? this.mode : null,
+                };
+
+                // Escribir válidos y denegados por entrada/salida
+                if (vr.valid || vr.resultado === "denegado_compartido" || vr.resultado === "denegado_sin_ingreso") {
+                  bucket.records.push(recordToAdd);
+                }
+              }
+              return bucket;
             }
-            scansBucket.records.push({
-              scan_id: `scan_${Date.now()}`,
-              timestamp: now.toISOString(),
-              device_ids: toUpdate.filter((d) => d.status !== "inactivo").map((d) => d.id),
-              owner_key: toUpdate[0].owner_key,
-              driver_id: driverId,
-              validado_por: this.currentUser?.name || "Desconocido",
-              email_validador: this.currentUser?.email || "",
-              resultado: "valido",
-            });
-            await this.gridClient.setStateBucket("scan_master", scansBucket);
-            DebugConsole.log(`scan_master actualizado`, "info");
-          } catch (e) {
-            DebugConsole.log(`Error scan_master: ${e.message}`, "error");
-          }
+          );
+          DebugConsole.log(`scan_master actualizado`, "info");
+        } catch (e) {
+          DebugConsole.log(`Error scan_master: ${e.message}`, "error");
         }
 
-        // Mostrar resultado
-        if (anyValid) {
-          const validDevices = devices.filter((d) => d.status !== "inactivo");
-          this.showValid(validDevices);
+        // Mostrar resultado (mostrar el primero)
+        if (validationResults.length > 0) {
+          const firstResult = validationResults[0];
+          if (firstResult.valid) {
+            const validDevices = validationResults
+              .filter((vr) => vr.valid)
+              .map((vr) => ({ ...vr.device, tipo_movimiento: vr.tipo_movimiento }));
+            this.showValid(validDevices);
+          } else {
+            this.showDenied(firstResult.motivo, firstResult.desc, firstResult.resultado);
+          }
         } else {
-          this.showDenied("Inactivo / vencido", "Este dispositivo ha superado los 90 días sin escaneo.");
+          this.showDenied("No registrado", "No existe un dispositivo registrado con este código.");
         }
       }
 
@@ -1150,6 +1350,9 @@
             const fotoBtn = d.foto_doc_id
               ? `<button class="btn-view-photo" onclick="app.viewPhoto('${d.foto_doc_id}', '${d.id}')">Ver foto</button>`
               : "";
+            const movementBadge = d.tipo_movimiento
+              ? `<div class="row"><span class="k">Movimiento</span><span class="status-badge" style="background: var(--c-green); color: var(--bg);">${d.tipo_movimiento.toUpperCase()}</span></div>`
+              : "";
             return `
               <div class="device-card">
                 <div class="row">
@@ -1165,6 +1368,7 @@
                   <span class="k">Estado</span>
                   <span class="status-badge">Activo</span>
                 </div>
+                ${movementBadge}
                 ${fotoBtn}
               </div>
             `;
@@ -1176,11 +1380,12 @@
         document.getElementById("stage-denied").classList.remove("active");
       }
 
-      showDenied(motivo, desc) {
-        document.getElementById("deny-reason").innerHTML = `
-          <strong>${motivo}</strong><br/>
-          <span style="font-size: 13px; color: var(--text-sub);">${desc}</span>
-        `;
+      showDenied(motivo, desc, resultado) {
+        const modeDisplay = this.mode === "entrada" ? "ENTRADA" : "SALIDA";
+        const reasonHtml = resultado === "denegado_compartido" || resultado === "denegado_sin_ingreso"
+          ? `<div style="margin-bottom: 16px; padding: 12px; background: rgba(255, 92, 108, 0.1); border-radius: var(--r-sm);"><strong style="color: var(--c-red);">${modeDisplay}</strong></div><strong>${motivo}</strong><br/><span style="font-size: 13px; color: var(--text-sub);">${desc}</span>`
+          : `<strong>${motivo}</strong><br/><span style="font-size: 13px; color: var(--text-sub);">${desc}</span>`;
+        document.getElementById("deny-reason").innerHTML = reasonHtml;
         document.getElementById("stage-scanner").classList.remove("active");
         document.getElementById("stage-valid").classList.remove("active");
         document.getElementById("stage-denied").classList.add("active");

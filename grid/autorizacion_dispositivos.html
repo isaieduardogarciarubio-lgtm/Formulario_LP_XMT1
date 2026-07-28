@@ -817,6 +817,60 @@
       }
     }
 
+    /* ──── MOBILE TABLE CARDS ──── */
+    @media (max-width: 768px) {
+      .table-wrapper {
+        overflow-x: visible;
+      }
+
+      table {
+        font-size: 12px;
+        display: block;
+      }
+
+      thead {
+        display: none;
+      }
+
+      tbody {
+        display: block;
+      }
+
+      tr {
+        display: block;
+        border: 1px solid var(--border);
+        border-radius: var(--r-md);
+        margin-bottom: 12px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+
+      td {
+        display: block;
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+        position: relative;
+        padding-left: 40%;
+      }
+
+      td:last-child {
+        border-bottom: none;
+      }
+
+      td::before {
+        content: attr(data-label);
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        font-weight: 600;
+        color: var(--text-sub);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        width: 35%;
+      }
+    }
+
     /* ──── RESPONSIVE ──── */
     /* Mobile-first: los estilos base ya son los de móvil.        */
     /* Este breakpoint solo añade mejoras progresivas en pantallas */
@@ -1143,6 +1197,15 @@
 
         <div id="alert-historial" class="alert" style="display: none;"></div>
 
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+          <input type="text" id="search-devices" placeholder="Buscar por IMEI, Driver, correo..." style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); font-size: 13px;">
+          <select id="filter-devices-puesto" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); font-size: 13px;">
+            <option value="">Todos los puestos</option>
+            <option value="driver">Driver</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+
         <div class="table-wrapper">
           <table id="table-devices">
             <thead>
@@ -1172,14 +1235,24 @@
         <p style="font-size: 14px; color: var(--text-sub);">
           Datos provenientes de la app de Escaneo (en breves).
         </p>
+
+        <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+          <select id="filter-scans-resultado" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); font-size: 13px;">
+            <option value="">Todos los resultados</option>
+            <option value="valido">Válido</option>
+            <option value="denegado_compartido">Denegado (Compartido)</option>
+            <option value="denegado_sin_ingreso">Denegado (Sin ingreso)</option>
+          </select>
+        </div>
+
         <div class="table-wrapper">
           <table id="table-scans">
             <thead>
               <tr>
-                <th>Timestamp</th>
-                <th>Tipo Escaneo</th>
-                <th>Dato</th>
-                <th>Usuario</th>
+                <th>Fecha</th>
+                <th>Resultado</th>
+                <th>Dispositivo/Driver</th>
+                <th>Validado por</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -1759,6 +1832,10 @@
         // Índice en memoria para lookup instantáneo al guardar.
         this.bppIndex = new Map(); // imei(normalizado) -> shipment_id
         this.bppMeta = null; // { updated_at, uploaded_by, filename, count }
+
+        // Historial en memoria para búsqueda/filtrado
+        this.devicesRecords = [];
+        this.scansRecords = [];
 
         DebugConsole.setup();
         DebugConsole.log(`Documento de datos: ${this.docId}`, "info");
@@ -2444,14 +2521,69 @@
           const scansState = await this.gridClient.getStateBucket("scan_master");
 
           if (devicesState?.records) {
-            this.renderDevicesTable(devicesState.records);
+            this.devicesRecords = devicesState.records;
+            this.renderDevicesTable(this.devicesRecords);
+            this.bindDevicesSearch();
           }
           if (scansState?.records) {
-            this.renderScansTable(scansState.records);
+            this.scansRecords = scansState.records;
+            this.renderScansTable(this.scansRecords);
+            this.bindScansFilter();
           }
         } catch (e) {
           console.error("Error cargando historial:", e);
         }
+      }
+
+      static normalizeForSearch(str) {
+        return String(str || "").toLowerCase().trim().replace(/\s+/g, " ");
+      }
+
+      bindDevicesSearch() {
+        const searchInput = document.getElementById("search-devices");
+        const filterSelect = document.getElementById("filter-devices-puesto");
+
+        if (!searchInput || !filterSelect) return;
+
+        const handleChange = () => {
+          const searchTerm = this.constructor.normalizeForSearch(searchInput.value);
+          const filterPuesto = filterSelect.value;
+
+          const filtered = this.devicesRecords.filter((rec) => {
+            const matchesSearch = !searchTerm ||
+              this.constructor.normalizeForSearch(rec.imei || "").includes(searchTerm) ||
+              this.constructor.normalizeForSearch(rec.driver_id || "").includes(searchTerm) ||
+              this.constructor.normalizeForSearch(rec.correo || "").includes(searchTerm) ||
+              this.constructor.normalizeForSearch(rec.descripcion || "").includes(searchTerm);
+
+            const matchesFilter = !filterPuesto || rec.puesto === filterPuesto;
+
+            return matchesSearch && matchesFilter;
+          });
+
+          this.renderDevicesTable(filtered);
+        };
+
+        searchInput.addEventListener("input", handleChange);
+        filterSelect.addEventListener("change", handleChange);
+      }
+
+      bindScansFilter() {
+        const filterSelect = document.getElementById("filter-scans-resultado");
+
+        if (!filterSelect) return;
+
+        const handleChange = () => {
+          const filterResultado = filterSelect.value;
+
+          const filtered = this.scansRecords.filter((rec) => {
+            return !filterResultado || rec.resultado === filterResultado;
+          });
+
+          this.renderScansTable(filtered);
+        };
+
+        filterSelect.addEventListener("change", handleChange);
       }
 
       renderDevicesTable(records) {
@@ -2468,16 +2600,17 @@
         records.forEach((rec) => {
           const row = document.createElement("tr");
           const esSmartphone = rec.tipo_dispositivo === "smartphone";
+          const timestamp = rec.timestamp ? new Date(rec.timestamp).toLocaleString() : "-";
           row.innerHTML = `
-            <td>${rec.timestamp || "-"}</td>
-            <td><span class="badge ${rec.puesto === 'driver' ? 'green' : 'blue'}">${rec.puesto || "-"}</span></td>
-            <td>${rec.driver_id || "-"}</td>
-            <td>${esSmartphone ? (rec.imei || "-") : "-"}</td>
-            <td>${rec.descripcion || "-"}</td>
-            <td>${rec.correo || "-"}</td>
-            <td>${rec.usuario || "-"}</td>
-            <td>${rec.qr_doc_id ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--c-green);"><path d="M20 6L9 17l-5-5"/></svg>' : "-"}</td>
-            <td>${rec.foto_doc_id ? `<button type="button" class="btn-view-photo" data-foto-doc-id="${rec.foto_doc_id}" data-device-id="${rec.id || ''}">Ver foto</button>` : "-"}</td>
+            <td data-label="Timestamp">${timestamp}</td>
+            <td data-label="Puesto"><span class="badge ${rec.puesto === 'driver' ? 'green' : 'blue'}">${rec.puesto || "-"}</span></td>
+            <td data-label="Driver ID">${rec.driver_id || "-"}</td>
+            <td data-label="IMEI">${esSmartphone ? (rec.imei || "-") : "-"}</td>
+            <td data-label="Descripción">${rec.descripcion || "-"}</td>
+            <td data-label="Correo">${rec.correo || "-"}</td>
+            <td data-label="Usuario">${rec.usuario || "-"}</td>
+            <td data-label="QR">${rec.qr_doc_id ? '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--c-green);"><path d="M20 6L9 17l-5-5"/></svg>' : "-"}</td>
+            <td data-label="Foto">${rec.foto_doc_id ? `<button type="button" class="btn-view-photo" data-foto-doc-id="${rec.foto_doc_id}" data-device-id="${rec.id || ''}">Ver foto</button>` : "-"}</td>
           `;
           tbody.appendChild(row);
         });
@@ -2496,11 +2629,14 @@
 
         records.forEach((rec) => {
           const row = document.createElement("tr");
+          const deviceIds = Array.isArray(rec.device_ids) ? rec.device_ids.join(", ") : (rec.device_ids || "-");
+          const deviceOrDriver = rec.driver_id ? `Driver: ${rec.driver_id}` : `Dev: ${deviceIds}`;
+          const timestamp = rec.timestamp ? new Date(rec.timestamp).toLocaleString() : "-";
           row.innerHTML = `
-            <td>${rec.timestamp || "-"}</td>
-            <td>${rec.scan_type || "-"}</td>
-            <td>${rec.data || "-"}</td>
-            <td>${rec.usuario || "-"}</td>
+            <td data-label="Fecha">${timestamp}</td>
+            <td data-label="Resultado">${rec.resultado || "-"}</td>
+            <td data-label="Dispositivo/Driver">${deviceOrDriver}</td>
+            <td data-label="Validado por">${rec.validado_por || "-"}</td>
           `;
           tbody.appendChild(row);
         });
