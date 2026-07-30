@@ -12,12 +12,13 @@ Sistema completo de auditoría integrado con Grid: captura de formularios + dash
 ### 1. 🎤 Captura de Auditoría
 **Ubicación**: `grid/captura_auditoria.html` (en Grid)
 
-Formulario dinámico para 5 logs:
+Formulario dinámico para 6 logs:
 - **Destino/Doca**: Escanea HU, valida destino y doca
 - **FURY**: Escanea shipment, captura foto y situación
 - **Contenerizado**: Escanea shipment y situación (foto si hay daño)
 - **Linehaul**: Escanea HU, área, origen y canalización
 - **Inbound FM**: Escanea patente, diferencia y hallazgo
+- **Inbound / Drivers**: Escanea el QR del conductor (o ingresa la ruta a mano), y audita en loop continuo los shipments Frágil/HV de esa ruta contra el catálogo publicado desde el Dashboard
 
 **Características**:
 - ✅ Escaneo nativo (BarcodeDetector para HU/shipment/patente)
@@ -30,8 +31,9 @@ Formulario dinámico para 5 logs:
 **Ubicación**: `grid/consolidado_auditoria.html` (en Grid)
 
 Visualización de datos en tiempo real:
-- Carga automática desde los 5 State Buckets
-- Tabs por tipo de log (Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM)
+- Carga automática desde los 6 State Buckets
+- Tabs por tipo de log (Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers)
+- Uploader de CSV para publicar el catálogo de rutas/shipments de Inbound / Drivers
 - KPIs + gráficos interactivos (Plotly)
 - Tabla filtrable con búsqueda
 - Modal para ver fotos en resolución completa
@@ -91,12 +93,14 @@ Guarda ambas URLs como favoritos en tu navegador.
 Cada log se almacena en un bucket independiente:
 
 ```
-destino_doca_master   → Registros del log Destino/Doca
-fury_master           → Registros del log FURY
-contenerizado_master  → Registros del log Contenerizado
-linehaul_master       → Registros del log Linehaul
-inbound_fm_master     → Registros del log Inbound FM
-catalogo_destino_doca → Catálogo de destinos/docas (opcional)
+destino_doca_master     → Registros del log Destino/Doca
+fury_master             → Registros del log FURY
+contenerizado_master    → Registros del log Contenerizado
+linehaul_master         → Registros del log Linehaul
+inbound_fm_master       → Registros del log Inbound FM
+inbound_drivers_master  → Registros del log Inbound / Drivers (1 por shipment auditado)
+catalogo_destino_doca   → Catálogo de destinos/docas (opcional)
+catalogo_inbound_drivers → Catálogo de rutas/shipments Frágil/HV (publicado desde el Dashboard)
 ```
 
 ### Fotos

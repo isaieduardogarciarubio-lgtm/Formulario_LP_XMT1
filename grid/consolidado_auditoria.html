@@ -565,6 +565,14 @@
         <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
     </button>
+    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo Inbound/Drivers (CSV)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+        <polyline points="7 8 12 3 17 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </button>
+    <input type="file" id="catalog-file-input" accept=".csv,text/csv" hidden />
     <button class="btn-icon" id="btn-debug-console" title="Consola de errores" style="position: relative;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="4 17 10 11 4 5"/>
@@ -894,6 +902,98 @@
   };
 
   // ==========================================================================
+  // Parser CSV del catálogo Inbound/Drivers (dia_colecta, TIPO_DE_RUTA,
+  // CICLOS, FACILITY, ID_ROUTE, SHP_LG_CODE, CARRIER, PLACA, SHIPMENT_ID,
+  // SHP_SENDER_ID, NICKNAME, DOMAIN, COST_USD, RESULTADO). Solo se usan las
+  // columnas relevantes para la auditoría; el resto se ignora.
+  // ==========================================================================
+
+  function parseCsvText(text) {
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else inQuotes = false;
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field);
+        field = '';
+      } else if (c === '\r') {
+        // ignorar, \n cierra la fila
+      } else if (c === '\n') {
+        row.push(field);
+        rows.push(row);
+        row = [];
+        field = '';
+      } else {
+        field += c;
+      }
+    }
+    if (field.length > 0 || row.length > 0) {
+      row.push(field);
+      rows.push(row);
+    }
+    return rows.filter(r => r.some(c => c.trim() !== ''));
+  }
+
+  function buildDriversCatalogIndex(rows) {
+    if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
+
+    const header = rows[0].map(h => h.trim().toUpperCase());
+    const idx = (name) => header.indexOf(name);
+    const col = {
+      route: idx('ID_ROUTE'),
+      carrier: idx('CARRIER'),
+      placa: idx('PLACA'),
+      shipment: idx('SHIPMENT_ID'),
+      domain: idx('DOMAIN'),
+      cost: idx('COST_USD'),
+      resultado: idx('RESULTADO'),
+    };
+    const missing = Object.entries(col).filter(([, i]) => i === -1).map(([k]) => k);
+    if (missing.length > 0) {
+      throw new Error(`Faltan columnas en el CSV: ${missing.join(', ')}`);
+    }
+
+    const index = {};
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const routeId = (row[col.route] || '').trim();
+      const shipmentId = (row[col.shipment] || '').trim();
+      if (!routeId || !shipmentId) continue;
+
+      if (!index[routeId]) {
+        index[routeId] = {
+          carrier: (row[col.carrier] || '').trim(),
+          placa: (row[col.placa] || '').trim(),
+          shipments: [],
+        };
+      }
+      index[routeId].shipments.push({
+        shipment_id: shipmentId,
+        domain: (row[col.domain] || '').trim(),
+        cost_usd: Number(row[col.cost]) || 0,
+        resultado: (row[col.resultado] || '').trim(),
+      });
+    }
+
+    if (Object.keys(index).length === 0) {
+      throw new Error('No se encontraron rutas/shipments válidos en el CSV');
+    }
+    return index;
+  }
+
+  // ==========================================================================
   // AuditDashboard
   // ==========================================================================
   class AuditDashboard {
@@ -907,6 +1007,7 @@
         contenerizado: [],
         linehaul: [],
         inbound_fm: [],
+        inbound_drivers: [],
       };
       this.currentLog = 'destino_doca';
       // Filtros y paginación
@@ -950,6 +1051,14 @@
     setupEventListeners() {
       document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
       document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
+      document.getElementById('btn-upload-catalog').addEventListener('click', () => {
+        document.getElementById('catalog-file-input').click();
+      });
+      document.getElementById('catalog-file-input').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (file) await this.uploadDriversCatalog(file);
+      });
       document.getElementById('btn-debug-console').addEventListener('click', () => DebugConsole.toggle());
       document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
       document.getElementById('photo-modal-close').addEventListener('click', () => {
@@ -1163,6 +1272,19 @@
           const count = records.filter(r => r.hallazgo === h).length;
           this.addKpiCard(container, count.toString(), h);
         });
+      } else if (this.currentLog === 'inbound_drivers') {
+        const estados = new Set(records.map(r => r.estado));
+        this.addKpiCard(container, total.toString(), 'Total');
+        estados.forEach(es => {
+          const count = records.filter(r => r.estado === es).length;
+          this.addKpiCard(container, count.toString(), es);
+        });
+        const totalCost = records.reduce((sum, r) => sum + (Number(r.cost_usd) || 0), 0);
+        this.addKpiCard(container, `$${totalCost.toFixed(2)}`, 'Costo USD auditado');
+        const divergentRoutes = new Set(records.filter(r => r.route_divergencia).map(r => r.route_id)).size;
+        if (divergentRoutes > 0) {
+          this.addKpiCard(container, divergentRoutes.toString(), 'Rutas con divergencia QR');
+        }
       }
     }
 
@@ -1229,6 +1351,11 @@
           builders = [() => this.buildAreaChart(records)];
         } else if (this.currentLog === 'inbound_fm') {
           builders = [() => this.buildHallazgoChart(records)];
+        } else if (this.currentLog === 'inbound_drivers') {
+          builders = [
+            () => this.buildEstadoDriversChart(records),
+            () => this.buildCostByRouteChart(records),
+          ];
         }
 
         // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
@@ -1361,6 +1488,63 @@
         title: 'Distribución de Hallazgos',
         xaxis: { title: 'Hallazgo' },
         yaxis: { title: 'Cantidad' },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 40 },
+      };
+
+      return { data, layout };
+    }
+
+    buildEstadoDriversChart(records) {
+      const counts = this.countByField(records, 'estado');
+      const colorMap = {
+        'Auditado OK': '#34C759',
+        'Divergencia': '#FF453A',
+        'Faltante confirmado': '#FFD100',
+      };
+      const labels = Object.keys(counts);
+
+      const data = [{
+        labels,
+        values: labels.map(l => counts[l]),
+        type: 'pie',
+        marker: { colors: labels.map(l => colorMap[l] || '#8A7300') },
+      }];
+
+      const layout = {
+        title: 'Distribución de Estado',
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        showlegend: true,
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
+        margin: { l: 20, r: 20, t: 40, b: 20 },
+      };
+
+      return { data, layout };
+    }
+
+    buildCostByRouteChart(records) {
+      const totals = {};
+      records.forEach(r => {
+        const key = r.route_id || '(sin ruta)';
+        totals[key] = (totals[key] || 0) + (Number(r.cost_usd) || 0);
+      });
+      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 8);
+
+      const data = [{
+        x: sorted.map(([k]) => k),
+        y: sorted.map(([, v]) => Number(v.toFixed(2))),
+        type: 'bar',
+        marker: { color: '#3987E5' },
+      }];
+
+      const layout = {
+        title: 'Costo USD por Ruta (Top 8)',
+        xaxis: { title: 'Ruta' },
+        yaxis: { title: 'USD' },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
@@ -1609,6 +1793,50 @@
       URL.revokeObjectURL(url);
     }
 
+    /**
+     * Publica el catálogo de rutas/shipments Inbound/Drivers (CSV con las
+     * 14 columnas de origen) en el State Bucket catalogo_inbound_drivers,
+     * que la app de captura lee para armar la lista de faltantes por ruta.
+     * Sobreescribe el catálogo completo (no hace merge) — si dos personas
+     * suben a la vez, gana el reintento con el if_updated_at más reciente.
+     */
+    async uploadDriversCatalog(file) {
+      const btn = document.getElementById('btn-upload-catalog');
+      if (btn) btn.classList.add('spinning');
+      try {
+        const text = await file.text();
+        const rows = parseCsvText(text);
+        const index = buildDriversCatalogIndex(rows);
+        const routeCount = Object.keys(index).length;
+        const shipmentCount = Object.values(index).reduce((sum, r) => sum + r.shipments.length, 0);
+
+        await this.gridClient.getStateBucket('catalogo_inbound_drivers');
+
+        let result = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          result = await this.gridClient.setStateBucket('catalogo_inbound_drivers', {
+            index,
+            generatedAt: new Date().toISOString(),
+          });
+          if (!result || !result.conflict) break;
+          await this.gridClient.getStateBucket('catalogo_inbound_drivers');
+          await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
+        }
+
+        if (!result || result.conflict) {
+          throw new Error('No se pudo publicar el catálogo (conflicto persistente, intenta de nuevo)');
+        }
+
+        this.showNotification(`Catálogo publicado · ${routeCount} rutas · ${shipmentCount} shipments`, 'success');
+        DebugConsole.log(`Catálogo Inbound/Drivers publicado: ${routeCount} rutas, ${shipmentCount} shipments`, 'info');
+      } catch (e) {
+        this.showNotification(`Error al publicar catálogo: ${e.message}`, 'error');
+        DebugConsole.log(`Error al publicar catálogo Inbound/Drivers: ${e.message}`, 'error');
+      } finally {
+        if (btn) btn.classList.remove('spinning');
+      }
+    }
+
     showNotification(message, type = 'success') {
       const colors = {
         success: { bg: 'rgba(255,209,0,.12)', border: 'rgba(255,209,0,.35)', text: '#FFE680', dot: '#FFD100' },
@@ -1708,6 +1936,23 @@
         { field: 'evidencia', header: 'Evidencia' },
       ],
       fields: [{ type: 'photo', id: 'evidencia' }],
+    },
+    inbound_drivers: {
+      title: 'Inbound / Drivers',
+      csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
+        { field: 'ts', header: 'Fecha/Hora' },
+        { field: 'route_id', header: 'Ruta' },
+        { field: 'carrier', header: 'Carrier' },
+        { field: 'placa', header: 'Placa' },
+        { field: 'shipment_id', header: 'Shipment ID' },
+        { field: 'domain', header: 'Domain' },
+        { field: 'cost_usd', header: 'Cost USD' },
+        { field: 'resultado_auditoria', header: 'Tipo (Frágil/HV)' },
+        { field: 'estado', header: 'Estado' },
+        { field: 'foto', header: 'Foto' },
+      ],
+      fields: [{ type: 'photo', id: 'foto' }],
     },
   };
 

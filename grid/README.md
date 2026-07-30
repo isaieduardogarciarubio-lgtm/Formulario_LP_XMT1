@@ -11,12 +11,12 @@ Sistema completo de auditoría integrado con Grid: captura de formularios en el 
 
 # 🎤 Captura de Auditoría
 
-Aplicación web de captura de auditorías integrada con Grid, soportando 5 logs con sincronización en tiempo real y almacenamiento offline.
+Aplicación web de captura de auditorías integrada con Grid, soportando 6 logs con sincronización en tiempo real y almacenamiento offline.
 
 ## 🎯 Características (Captura)
 
-- **Motor de captura**: el mismo de Auditorias_SVC (probado en iOS/Android), con los 5 logs de esta app adaptados sobre él
-- **5 Logs**: FURY, Contenerizado, Linehaul, Inbound FM activos — **Pre-Missort (Destino/Doca) deshabilitado temporalmente** hasta republicar el catálogo en el formato correcto (ver sección abajo)
+- **Motor de captura**: el mismo de Auditorias_SVC (probado en iOS/Android), con los 6 logs de esta app adaptados sobre él
+- **6 Logs**: FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers activos — **Pre-Missort (Destino/Doca) deshabilitado temporalmente** hasta republicar el catálogo en el formato correcto (ver sección abajo)
 - **Offline-first**: Almacenamiento en IndexedDB, sincronización automática al conectar
 - **Escaneo robusto**: cámara (BarcodeDetector nativo o ZXing vendorizado inline como respaldo en iOS/Safari/Firefox), entrada manual con reenfoque automático (lector físico HID), y escaneo desde imagen cargada si la cámara no está disponible
 - **Confirmación visual de escaneo**: muestra el código detectado y pide confirmar antes de avanzar (evita falsos positivos)
@@ -38,6 +38,27 @@ El log "Pre - Missort" (Destino/Doca) aparece atenuado en el menú y no se puede
 ```
 
 Para reactivarlo: en `captura_auditoria.html`, busca `FORMS_CONFIG.destino_doca` y elimina la línea `disabled: true`.
+
+## 🚚 Inbound / Drivers — catálogo de rutas/shipments
+
+Este log necesita el catálogo publicado en el State Bucket `catalogo_inbound_drivers` — si no está publicado, el log se abre pero avisa que falta el catálogo. Se publica desde el **Dashboard** (botón de carga en el navbar, ver sección de Dashboard abajo), subiendo un CSV con estas columnas (el resto se ignora):
+
+```
+dia_colecta, TIPO_DE_RUTA, CICLOS, FACILITY, ID_ROUTE, SHP_LG_CODE, CARRIER, PLACA,
+SHIPMENT_ID, SHP_SENDER_ID, NICKNAME, DOMAIN, COST_USD, RESULTADO
+```
+
+**Flujo de auditoría:**
+1. El operador escanea el QR de la app del conductor (JSON con `route_id`, `carrier_id`, `license_plate`, etc.) o ingresa la ruta a mano si el QR no trae ruta asignada.
+2. La app busca `ID_ROUTE` en el catálogo y fija Carrier/Placa (siempre del catálogo, de solo lectura) para el resto de la sesión.
+3. Escanea shipments en loop continuo:
+   - **Coincide con un pendiente de la ruta** → pide foto obligatoria → botón rápido **Auditado OK** o **Divergencia** (guarda y sigue).
+   - **Ya auditado en esta sesión** → aviso, sigue escaneando.
+   - **No pertenece a la ruta** → "No es HV/Frágil", no guarda nada, el escaneo **nunca se detiene**.
+4. El panel de faltantes (contador + lista con Domain/Cost/Tipo) permite marcar **Faltante confirmado** a mano, sin foto.
+5. **Finalizar ruta** guarda lo escaneado aunque falten paquetes — los nunca escaneados/marcados no generan registro.
+
+Si el QR trae un carrier/placa distinto al del catálogo, no se muestra la comparación en pantalla, pero la divergencia se calcula y se guarda en cada registro de esa ruta (`route_divergencia` / `route_divergencia_detalle`) para trazabilidad en el Dashboard.
 
 ## 🚀 Despliegue (Captura)
 
@@ -136,12 +157,13 @@ Las fotos se comprimen a WebP (o JPEG como fallback) y se suben como documentos 
 # 📊 Dashboard — Consolidado de Auditoría
 
 Un **dashboard de solo lectura en Grid** que:
-- **Lee en tiempo real** los 5 State Buckets que alimenta la app de captura ({log}_master) — sin cargar nada a mano, sin CSV, sin ZIP
+- **Lee en tiempo real** los 6 State Buckets que alimenta la app de captura ({log}_master) — sin cargar nada a mano, sin CSV, sin ZIP
 - Sin cifrado: la captura ya no encripta nada, así que el dashboard tampoco necesita contraseña ni descifrado
 - Muestra **KPIs + gráficos Plotly + tabla filtrable** por log en tiempo real
 - Permite **refresh manual** con reintento automático en conflictos
 - Permite **borrar un registro** individual (tabla → ícono de basura), escribiendo el bucket actualizado
 - **Descarga consolidada** en CSV
+- **Publica el catálogo de Inbound / Drivers** (botón de carga en el navbar): sube un CSV, lo valida/parsea y lo escribe en `catalogo_inbound_drivers`
 
 ## 📋 Logs Soportados (Dashboard)
 
@@ -152,6 +174,14 @@ Un **dashboard de solo lectura en Grid** que:
 | **Contenerizado** | Shipment, Situación, Foto (cond: si "Dañado") | Total, por Situación | Situación (barras), Top Shipments (barras) |
 | **Linehaul** | HU, Área, Armado Sitio, Origen (cond), Canalización, Foto (opt), Comentarios (opt) | Total, por Área | Área (dona), Canalización (barras) |
 | **Inbound FM** | Patente, Diferencia de Shipments, Hallazgo, Evidencia (opt) | Total, por Hallazgo | Hallazgo (barras) |
+| **Inbound / Drivers** | Ruta, Carrier, Placa, Shipment ID, Domain, Cost USD, Tipo (Frágil/HV), Estado, Foto | Total, por Estado, Costo USD auditado, Rutas con divergencia QR | Estado (dona), Costo USD por Ruta (barras) |
+
+## 📤 Publicar el catálogo de Inbound / Drivers
+
+1. Prepara un CSV con las columnas: `dia_colecta, TIPO_DE_RUTA, CICLOS, FACILITY, ID_ROUTE, SHP_LG_CODE, CARRIER, PLACA, SHIPMENT_ID, SHP_SENDER_ID, NICKNAME, DOMAIN, COST_USD, RESULTADO` (el orden no importa, solo los nombres de encabezado).
+2. En el Dashboard, haz clic en el ícono de carga (⬆) en el navbar y selecciona el archivo.
+3. El dashboard agrupa las filas por `ID_ROUTE`, arma la lista de shipments por ruta (con Domain/Cost/Resultado) y publica el índice completo en `catalogo_inbound_drivers` — **sobreescribe** la versión anterior.
+4. La app de Captura lee este catálogo al iniciar; si se publica una versión nueva, los operadores deben reabrir la app (o el log) para tomar los cambios.
 
 ## 🚀 Despliegue (Dashboard)
 
@@ -170,7 +200,7 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
 
 1. **Operador llena formularios** en captura_auditoria.html (escanea, captura foto, sincroniza automáticamente)
 2. **Cualquiera abre el dashboard** — no necesita ningún parámetro ni archivo
-3. **Se carga solo** desde los 5 State Buckets, sin intervención manual
+3. **Se carga solo** desde los 6 State Buckets, sin intervención manual
 4. **Tabs de cada log** → KPIs, gráficos, tabla de registros
 5. **Busca/filtra** en cada tabla
 6. **Haz click en miniatura** de foto para ver en modal
@@ -191,7 +221,7 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
 
 ## 🔒 Seguridad & Restricciones (Biblia)
 
-✅ **Sin localStorage**: 5 State Buckets independientes, uno por log
+✅ **Sin localStorage**: 6 State Buckets independientes, uno por log
 ✅ **Identidad**: `GET /api/v1/me` para obtener email/avatar
 ✅ **Optimistic concurrency**: `if_updated_at` en PUT → 409 = reintento automático
 ✅ **Librerías locales**: Plotly desde `/d/_libs/`
@@ -199,7 +229,7 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
 
 ## 💾 Almacenamiento
 
-**5 State Buckets** en el documento de datos, uno por log, escritos por la app de captura:
+**6 State Buckets** en el documento de datos, uno por log, escritos por la app de captura, más 2 buckets de catálogo (solo lectura para la captura, escritos por el uploader del dashboard):
 
 ```json
 {
@@ -211,7 +241,16 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
   "fury_master": { "records": [...] },
   "contenerizado_master": { "records": [...] },
   "linehaul_master": { "records": [...] },
-  "inbound_fm_master": { "records": [...] }
+  "inbound_fm_master": { "records": [...] },
+  "inbound_drivers_master": {
+    "records": [
+      { "ts": "2026-07-30T10:30:45Z", "route_id": "100897405", "carrier": "135021164", "placa": "RL7492B",
+        "shipment_id": "47326091753", "domain": "...", "cost_usd": 12.5, "resultado_auditoria": "Frágil",
+        "estado": "Auditado OK", "foto": "01K..." }
+    ]
+  },
+  "catalogo_destino_doca": { "index": { "...": ["..."] } },
+  "catalogo_inbound_drivers": { "index": { "100897405": { "carrier": "135021164", "placa": "RL7492B", "shipments": [...] } } }
 }
 ```
 
@@ -226,6 +265,7 @@ Cada bucket tiene límite ~1 MB; las fotos viven como documentos aparte en Grid 
 | **Contenerizado** | Situación (barras) | Top 10 Shipments (barras) | — |
 | **Linehaul** | Área (dona) | Canalización (barras) | — |
 | **Inbound FM** | Hallazgo (barras) | — | — |
+| **Inbound / Drivers** | Estado (dona: verde/rojo/amarillo) | Costo USD por Ruta — Top 8 (barras) | — |
 
 Todos con tema Nocturne: fondo #1a1a19, texto blanco.
 
@@ -238,6 +278,8 @@ Todos con tema Nocturne: fondo #1a1a19, texto blanco.
 | Fotos no se ven | La foto no terminó de sincronizar (sigue como data:URL local en el dispositivo del operador) | Espera a que ese dispositivo tenga conexión y sincronice |
 | 409 Conflict | Dos usuarios escriben simultáneamente | App reintenta automático en 500-1000ms |
 | Gráficos en blanco | Plotly no cargó | Verifica `/d/_libs/plotly.min.js` |
+| "Catálogo de rutas no publicado" en Inbound/Drivers | Nadie subió el CSV todavía | Sube el catálogo desde el Dashboard (ícono ⬆ en el navbar) |
+| "Ruta no encontrada en el catálogo" | El `route_id` del QR/manual no existe en el CSV publicado | Verifica el `ID_ROUTE` en el catálogo, o vuelve a publicarlo |
 
 ## 🔄 Auto-Polling
 

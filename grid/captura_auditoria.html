@@ -624,6 +624,172 @@ select.step-input {
   background: rgba(255, 59, 48, 0.55);
 }
 
+/* Inbound / Drivers: panel de faltantes y tarjeta de detalle de paquete */
+
+.driver-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--color-error);
+  border-radius: var(--radius-popover);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+}
+
+.driver-pending-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: var(--color-surface);
+  border: none;
+  border-radius: var(--radius-popover);
+  padding: var(--spacing-sm) var(--spacing-md);
+  color: var(--color-text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: var(--spacing-sm);
+}
+
+.driver-pending-panel {
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-popover);
+  max-height: 40vh;
+  overflow-y: auto;
+  margin-bottom: var(--spacing-md);
+}
+
+.driver-pending-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-highlight);
+}
+
+.driver-pending-item:last-child {
+  border-bottom: none;
+}
+
+.driver-pending-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.driver-pending-id {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.driver-pending-meta {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.driver-pending-empty {
+  padding: var(--spacing-md);
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.driver-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--spacing-sm);
+  border-radius: var(--radius-pill);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.driver-badge-fragil { background: rgba(255, 209, 0, 0.18); color: #ffd100; }
+.driver-badge-hv { background: rgba(57, 135, 229, 0.18); color: #3987e5; }
+
+.driver-faltante-btn {
+  flex-shrink: 0;
+  background: var(--color-highlight);
+  color: var(--color-text-primary);
+  border: none;
+  border-radius: var(--radius-pill);
+  padding: 6px var(--spacing-sm);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.driver-shipment-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.driver-shipment-id {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-bottom: var(--spacing-xs);
+}
+
+.driver-shipment-domain {
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-sm);
+}
+
+.driver-shipment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.driver-shipment-cost {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+.driver-status-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.driver-status-btn {
+  flex: 1;
+  border: none;
+  border-radius: var(--radius-popover);
+  padding: var(--spacing-md);
+  font-size: var(--font-button);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.driver-status-btn-ok {
+  background: rgba(52, 199, 89, 0.18);
+  color: #34c759;
+}
+
+.driver-status-btn-divergencia {
+  background: rgba(255, 69, 58, 0.18);
+  color: var(--color-error);
+}
+
 /* Picker (list selection) */
 
 .picker-search {
@@ -1472,6 +1638,22 @@ const FORMS_CONFIG = {
       },
     ],
   },
+
+  // Este log no usa el wizard genérico de un campo por pantalla: fija la
+  // ruta una vez por sesión (QR del conductor o entrada manual) y escanea
+  // shipments en loop continuo contra el catálogo de la ruta (ver
+  // InboundDriversSession), igual que Pre-Missort con destino/doca.
+  inbound_drivers: {
+    id: 'inbound_drivers',
+    title: 'Inbound / Drivers',
+    description: 'Escanea la ruta del conductor y audita los paquetes Frágil/HV',
+    icon: 'truck',
+    fields: [
+      { id: 'route_id', type: 'text' },
+      { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
+      { id: 'foto', type: 'photo', required: false },
+    ],
+  },
 };
 
 /**
@@ -1485,6 +1667,7 @@ const HISTORY_FIELD_MAP = {
   contenerizado: { id: 'shipment', result: 'situacion' },
   linehaul: { id: 'hu', result: 'area' },
   inbound_fm: { id: 'patente', result: 'hallazgo' },
+  inbound_drivers: { id: 'shipment_id', result: 'estado' },
 };
 
 /**
@@ -3125,6 +3308,659 @@ class DestinoDocaSession {
 }
 
 /**
+ * Inbound / Drivers — escanea el QR del conductor para fijar la ruta (o
+ * captura manual si el QR no trae route_id/ruta no impresa), y audita en
+ * loop continuo los shipments Frágil/HV de esa ruta contra el catálogo
+ * publicado desde el dashboard. Carrier/Placa mostrados en pantalla salen
+ * siempre del catálogo (nunca del QR) y son solo de lectura — si el QR trae
+ * un carrier/placa distinto al del catálogo, no se muestra la comparación,
+ * pero la divergencia se calcula y se guarda en cada registro de la ruta
+ * para que quede trazable en el dashboard. Cada shipment que sí pertenece a
+ * la ruta pide evidencia fotográfica y termina en "Auditado OK" o
+ * "Divergencia" (botón rápido); "Faltante confirmado" se marca a mano desde
+ * el panel de faltantes y no pide foto. Los shipments nunca escaneados ni
+ * marcados no generan registro — la ruta se puede guardar incompleta.
+ */
+class InboundDriversSession {
+  constructor(opts = {}) {
+    this.catalogIndex = opts.catalogIndex || {};
+    this.catalogAccessDenied = !!opts.catalogAccessDenied;
+    this.onScan = opts.onScan;
+    this.onExit = opts.onExit;
+
+    this.container = null;
+    this.scanner = null;
+    this.locked = false;
+    this.inManualMode = false;
+
+    this.routeId = null;
+    this.routeCarrier = '';
+    this.routePlaca = '';
+    this.qrData = null;
+    this.divergent = false;
+    this.divergentDetail = '';
+
+    this.pending = new Map();
+    this.handled = new Map();
+    this.total = 0;
+    this.pendingPanelOpen = false;
+  }
+
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.renderRouteEntry();
+  }
+
+  destroy() {
+    this.stopScanner();
+  }
+
+  stopScanner() {
+    if (this.scanner) {
+      this.scanner.stop();
+      this.scanner = null;
+    }
+  }
+
+  vibrate(pattern) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  back() {
+    this.stopScanner();
+    if (this.onExit) this.onExit();
+  }
+
+  formatCost(cost) {
+    const n = Number(cost);
+    return Number.isFinite(n) ? n.toFixed(2) : (cost || '0.00');
+  }
+
+  badgeClass(resultado) {
+    const r = String(resultado || '').toLowerCase();
+    if (r.includes('frag') || r.includes('frág')) return 'driver-badge-fragil';
+    if (r.includes('hv')) return 'driver-badge-hv';
+    return '';
+  }
+
+  /* ====================================================================== */
+  /* Paso 1: fijar la ruta (QR del conductor o entrada manual)             */
+  /* ====================================================================== */
+
+  renderRouteEntry() {
+    this.stopScanner();
+
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Inbound / Drivers</div>
+        </div>
+        <h1 class="step-question">Escanea el QR del conductor</h1>
+        <div class="scanner-body">
+          <div class="scanner-viewport">
+            <video class="scanner-video" playsinline muted></video>
+            <div class="scanner-frame"><span class="scanner-line"></span></div>
+          </div>
+        </div>
+        <div class="step-support">Apunta la cámara al QR de la app del conductor.</div>
+        <button type="button" class="session-manual-link">Ingresar ruta manualmente</button>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+    this.container.querySelector('.session-manual-link').addEventListener('click', () => {
+      this.enterManualRouteEntry();
+    });
+
+    this.startRouteCamera();
+  }
+
+  async startRouteCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — ingresa la ruta manualmente.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+    try {
+      await this.scanner.start(video, (text) => this.handleRouteScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — ingresa la ruta manualmente.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  handleRouteScan(rawText) {
+    if (this.locked) return;
+    this.locked = true;
+    if (this.scanner) this.scanner.pause();
+
+    const parsed = this.parseDriverQr(rawText);
+    if (!parsed) {
+      this.vibrate(40);
+      this.supportEl.textContent = 'QR no reconocido — intenta de nuevo o ingresa la ruta manualmente.';
+      this.supportEl.classList.add('error');
+      setTimeout(() => {
+        this.locked = false;
+        if (this.supportEl) {
+          this.supportEl.classList.remove('error');
+          this.supportEl.textContent = 'Apunta la cámara al QR de la app del conductor.';
+        }
+        if (this.scanner) this.scanner.resume();
+      }, 1200);
+      return;
+    }
+
+    if (!parsed.route_id) {
+      this.qrData = parsed;
+      this.enterManualRouteEntry('El QR no trae ruta asignada — ingrésala manualmente.');
+      return;
+    }
+
+    this.resolveRoute(parsed.route_id, parsed);
+  }
+
+  /**
+   * QR de la app del conductor: JSON plano con route_id (puede venir como
+   * el string literal "null" cuando la ruta todavía no se asignó), y
+   * datos de conductor/vehículo usados solo para detectar divergencia
+   * contra el catálogo — nunca se muestran directamente en pantalla.
+   */
+  parseDriverQr(rawText) {
+    const text = String(rawText || '').trim();
+    if (!text.startsWith('{')) return null;
+    try {
+      const obj = JSON.parse(text);
+      if (!obj || typeof obj !== 'object') return null;
+      const routeId = obj.route_id != null && String(obj.route_id).toLowerCase() !== 'null'
+        ? String(obj.route_id).trim()
+        : null;
+      return {
+        route_id: routeId,
+        driver_id: obj.driver_id != null ? String(obj.driver_id) : '',
+        carrier_id: obj.carrier_id != null ? String(obj.carrier_id) : '',
+        vehicle_id: obj.vehicle_id != null ? String(obj.vehicle_id) : '',
+        license_plate: obj.license_plate != null ? String(obj.license_plate) : '',
+        site_id: obj.site_id != null ? String(obj.site_id) : '',
+        rostering_id: obj.rostering_id != null ? String(obj.rostering_id) : '',
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  enterManualRouteEntry(message) {
+    this.stopScanner();
+
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Inbound / Drivers</div>
+        </div>
+        <h1 class="step-question">¿Cuál es el ID de ruta?</h1>
+        <div class="step-input-wrap">
+          <input type="text" class="step-input route-manual-input" placeholder="Ej. 100897405" />
+        </div>
+        <div class="step-support ${message ? 'error' : ''}">${message || 'Escribe el ID de ruta y presiona Enter.'}</div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      if (this.onExit) this.onExit();
+    });
+
+    const input = this.container.querySelector('.route-manual-input');
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const routeId = input.value.trim();
+      if (!routeId) return;
+      this.resolveRoute(routeId, this.qrData);
+    });
+    setTimeout(() => input.focus(), 60);
+  }
+
+  resolveRoute(routeId, qrData) {
+    const route = this.catalogIndex[routeId];
+    if (!route) {
+      this.vibrate([40, 60, 40]);
+      if (this.scanner) {
+        this.supportEl.textContent = `Ruta "${routeId}" no encontrada en el catálogo.`;
+        this.supportEl.classList.add('error');
+        this.locked = false;
+        this.scanner.resume();
+      } else {
+        this.enterManualRouteEntry(`Ruta "${routeId}" no encontrada en el catálogo. Intenta de nuevo.`);
+      }
+      return;
+    }
+
+    this.routeId = routeId;
+    this.routeCarrier = route.carrier || '';
+    this.routePlaca = route.placa || '';
+    this.qrData = qrData || null;
+
+    const divergence = this.computeDivergence(qrData, route);
+    this.divergent = divergence.divergent;
+    this.divergentDetail = divergence.detail;
+
+    this.pending = new Map();
+    (route.shipments || []).forEach((s) => {
+      if (s && s.shipment_id) this.pending.set(String(s.shipment_id), s);
+    });
+    this.handled = new Map();
+    this.total = this.pending.size;
+
+    this.vibrate(60);
+    this.renderLoop();
+  }
+
+  /**
+   * Compara carrier/placa del QR contra el catálogo de la ruta. No bloquea
+   * nada — solo marca la ruta como divergente para que quede registrado en
+   * cada shipment auditado (el operador nunca ve el detalle del QR, solo
+   * el carrier/placa oficial del catálogo).
+   */
+  computeDivergence(qrData, route) {
+    if (!qrData) return { divergent: false, detail: '' };
+    const norm = (v) => String(v || '').trim().toUpperCase();
+    const mismatches = [];
+
+    if (qrData.carrier_id && route.carrier && norm(qrData.carrier_id) !== norm(route.carrier)) {
+      mismatches.push('carrier');
+    }
+    if (qrData.license_plate && route.placa && norm(qrData.license_plate) !== norm(route.placa)) {
+      mismatches.push('placa');
+    }
+    return {
+      divergent: mismatches.length > 0,
+      detail: mismatches.length > 0 ? `Divergencia QR vs. catálogo: ${mismatches.join(', ')}` : '',
+    };
+  }
+
+  /* ====================================================================== */
+  /* Paso 2: loop de escaneo de shipments de la ruta                       */
+  /* ====================================================================== */
+
+  renderLoop() {
+    this.stopScanner();
+    this.locked = false;
+    this.inManualMode = false;
+
+    const auditedCount = this.handled.size;
+    const pendingCount = this.pending.size;
+
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Inbound / Drivers</div>
+        </div>
+        <div class="session-pill">
+          <div class="session-pill-info">Ruta ${this.routeId} · Carrier ${this.routeCarrier || '—'} · Placa ${this.routePlaca || '—'}</div>
+          <button type="button" class="btn btn-secondary session-change-btn">Cambiar</button>
+        </div>
+        ${this.divergent ? `<div class="driver-warning-banner">${Icons.svg('alertCircle', { size: 16 })}<span>${this.divergentDetail}</span></div>` : ''}
+        <button type="button" class="driver-pending-toggle">
+          <span>${auditedCount} / ${this.total} auditados · ${pendingCount} faltantes</span>
+          ${Icons.svg(this.pendingPanelOpen ? 'arrowDown' : 'arrowRight', { size: 16 })}
+        </button>
+        <div class="driver-pending-panel" style="display: ${this.pendingPanelOpen ? 'block' : 'none'};"></div>
+        <h1 class="step-question">Escanea el shipment</h1>
+        <div class="scanner-body">
+          <div class="scanner-viewport">
+            <video class="scanner-video" playsinline muted></video>
+            <div class="scanner-frame"><span class="scanner-line"></span></div>
+          </div>
+        </div>
+        <div class="step-support">Escaneando... apunta la cámara al shipment.</div>
+        <button type="button" class="session-manual-link">Entrada manual</button>
+        <button type="button" class="btn btn-primary btn-block finish-route-btn" style="margin-top: 16px;">Finalizar ruta</button>
+      </div>
+      <div class="session-flash"></div>
+    `;
+
+    this.flashEl = this.container.querySelector('.session-flash');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.pendingPanelEl = this.container.querySelector('.driver-pending-panel');
+    this.renderPendingPanel();
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+    this.container.querySelector('.session-change-btn').addEventListener('click', () => {
+      this.renderRouteEntry();
+    });
+    this.container.querySelector('.driver-pending-toggle').addEventListener('click', () => {
+      this.pendingPanelOpen = !this.pendingPanelOpen;
+      this.renderLoop();
+    });
+    this.container.querySelector('.session-manual-link').addEventListener('click', () => {
+      this.enterManualShipmentEntry();
+    });
+    this.container.querySelector('.finish-route-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+
+    this.startShipmentCamera();
+  }
+
+  renderPendingPanel() {
+    if (!this.pendingPanelEl) return;
+    if (this.pending.size === 0) {
+      this.pendingPanelEl.innerHTML = '<div class="driver-pending-empty">Sin faltantes — todos los shipments fueron auditados.</div>';
+      return;
+    }
+    this.pendingPanelEl.innerHTML = Array.from(this.pending.values()).map((s) => `
+      <div class="driver-pending-item">
+        <div class="driver-pending-info">
+          <div class="driver-pending-id">${s.shipment_id}</div>
+          <div class="driver-pending-meta">${s.domain || ''} · $${this.formatCost(s.cost_usd)} USD</div>
+        </div>
+        <span class="driver-badge ${this.badgeClass(s.resultado)}">${s.resultado || ''}</span>
+        <button type="button" class="driver-faltante-btn" data-shipment="${s.shipment_id}">Faltante confirmado</button>
+      </div>
+    `).join('');
+
+    this.pendingPanelEl.querySelectorAll('.driver-faltante-btn').forEach((btn) => {
+      btn.addEventListener('click', () => this.markFaltante(btn.dataset.shipment));
+    });
+  }
+
+  async startShipmentCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — usa entrada manual.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+    try {
+      await this.scanner.start(video, (text) => this.handleShipmentScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — usa entrada manual.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  handleShipmentScan(rawText) {
+    if (this.locked) return;
+    const parsed = ScanParser.parse(rawText, 'shipment');
+    if (!parsed) {
+      this.vibrate(40);
+      this.flash('error', 'Código no reconocido.');
+      return;
+    }
+    this.processShipment(parsed);
+  }
+
+  enterManualShipmentEntry() {
+    if (this.scanner) this.scanner.pause();
+    this.inManualMode = true;
+
+    this.container.querySelector('.scanner-body').innerHTML = `
+      <div class="step-input-wrap">
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
+      </div>
+    `;
+    const input = this.container.querySelector('.session-manual-input');
+    this.supportEl.textContent = 'Escribe el Shipment ID y presiona Enter.';
+    this.supportEl.classList.remove('error');
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const parsed = ScanParser.parse(input.value, 'shipment');
+      if (!parsed) {
+        this.supportEl.textContent = 'Shipment inválido. Verifica el número e intenta de nuevo.';
+        this.supportEl.classList.add('error');
+        return;
+      }
+      this.processShipment(parsed);
+      input.value = '';
+    });
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  /**
+   * Coincide con un pendiente de la ruta -> pantalla de detalle (foto +
+   * estado). Ya auditado en esta sesión -> aviso, sigue escaneando. No
+   * pertenece a la ruta -> "No es HV/Frágil", NO se guarda nada y el
+   * escaneo continúa (nunca se detiene por un código que no coincide).
+   */
+  processShipment(shipmentId) {
+    if (this.pending.has(shipmentId)) {
+      this.locked = true;
+      if (this.scanner) this.scanner.pause();
+      this.vibrate(60);
+      this.renderShipmentDetail(this.pending.get(shipmentId));
+      return;
+    }
+
+    if (this.handled.has(shipmentId)) {
+      this.vibrate(40);
+      this.flash('warn', `${shipmentId} · Ya auditado en esta ruta.`);
+      return;
+    }
+
+    this.vibrate([40, 60, 40]);
+    this.flash('error', `${shipmentId} · No es HV/Frágil.`);
+  }
+
+  flash(kind, message) {
+    if (this.supportEl) {
+      this.supportEl.textContent = message;
+      this.supportEl.classList.toggle('error', kind === 'error');
+    }
+    if (this.flashEl) {
+      const cls = kind === 'ok' ? 'active-ok' : (kind === 'error' ? 'active-error' : '');
+      if (cls) {
+        this.flashEl.classList.add(cls);
+        setTimeout(() => {
+          if (this.flashEl) this.flashEl.classList.remove(cls);
+        }, 550);
+      }
+    }
+    setTimeout(() => {
+      if (!this.supportEl) return;
+      this.supportEl.classList.remove('error');
+      this.supportEl.textContent = this.inManualMode
+        ? 'Escribe el Shipment ID y presiona Enter.'
+        : 'Escaneando... apunta la cámara al shipment.';
+    }, 900);
+  }
+
+  /* ====================================================================== */
+  /* Paso 3: detalle del shipment coincidente — foto + Auditado OK/Divergencia */
+  /* ====================================================================== */
+
+  renderShipmentDetail(shipment) {
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Auditoría de paquete</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${shipment.shipment_id}</div>
+          <div class="driver-shipment-domain">${shipment.domain || 'Sin descripción'}</div>
+          <div class="driver-shipment-row">
+            <span class="driver-shipment-cost">$${this.formatCost(shipment.cost_usd)} USD</span>
+            <span class="driver-badge ${this.badgeClass(shipment.resultado)}">${shipment.resultado || ''}</span>
+          </div>
+        </div>
+        <h1 class="step-question">Toma una foto del paquete</h1>
+        <div class="scanner-body detail-photo-body"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    this.detailPhotoBody = this.container.querySelector('.detail-photo-body');
+    this.detailPhotoValue = null;
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    this.renderDetailPhotoCapture(shipment);
+  }
+
+  renderDetailPhotoCapture(shipment) {
+    this.detailPhotoBody.innerHTML = `
+      <button type="button" class="photo-dropzone">
+        <span>${Icons.svg('camera', { size: 30 })}</span>
+        <span class="photo-dropzone-label">Tomar foto</span>
+      </button>
+      <input type="file" accept="image/*" capture="environment" class="photo-input" hidden />
+      <input type="file" accept="image/*" class="photo-input-gallery" hidden />
+    `;
+
+    const dropzone = this.detailPhotoBody.querySelector('.photo-dropzone');
+    const cameraInput = this.detailPhotoBody.querySelector('.photo-input');
+    const galleryInput = this.detailPhotoBody.querySelector('.photo-input-gallery');
+
+    dropzone.addEventListener('click', () => cameraInput.click());
+
+    const onFile = async (input) => {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      this.supportEl.textContent = 'Procesando imagen...';
+      try {
+        this.detailPhotoValue = await this.compressImage(file, { maxDim: 1280, quality: 0.6 });
+        this.vibrate(30);
+        this.renderDetailPhotoPreview(shipment);
+      } catch (e) {
+        this.supportEl.textContent = 'No se pudo procesar la imagen. Intenta de nuevo.';
+      }
+    };
+    cameraInput.addEventListener('change', () => onFile(cameraInput));
+    galleryInput.addEventListener('change', () => onFile(galleryInput));
+
+    const galleryBtn = document.createElement('button');
+    galleryBtn.type = 'button';
+    galleryBtn.className = 'btn btn-secondary btn-block';
+    galleryBtn.style.marginTop = '12px';
+    galleryBtn.innerHTML = `${Icons.svg('image', { size: 16 })} <span>Elegir de galería</span>`;
+    galleryBtn.addEventListener('click', () => galleryInput.click());
+    this.detailPhotoBody.appendChild(galleryBtn);
+  }
+
+  renderDetailPhotoPreview(shipment) {
+    this.detailPhotoBody.innerHTML = `
+      <div class="photo-preview">
+        <img alt="Foto capturada" />
+        <div class="photo-preview-badge">${Icons.svg('checkCircle', { size: 20 })}</div>
+      </div>
+      <div class="driver-status-actions">
+        <button type="button" class="driver-status-btn driver-status-btn-ok">Auditado OK</button>
+        <button type="button" class="driver-status-btn driver-status-btn-divergencia">Divergencia</button>
+      </div>
+    `;
+    this.detailPhotoBody.querySelector('img').src = this.detailPhotoValue;
+
+    this.detailPhotoBody.querySelector('.driver-status-btn-ok').addEventListener('click', () => {
+      this.saveShipmentResult(shipment, 'Auditado OK', this.detailPhotoValue);
+    });
+    this.detailPhotoBody.querySelector('.driver-status-btn-divergencia').addEventListener('click', () => {
+      this.saveShipmentResult(shipment, 'Divergencia', this.detailPhotoValue);
+    });
+  }
+
+  compressImage(file, { maxDim = 1280, quality = 0.6 } = {}) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        try {
+          const webp = canvas.toDataURL('image/webp', quality);
+          resolve(webp.startsWith('data:image/webp') ? webp : canvas.toDataURL('image/jpeg', quality));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('No se pudo cargar la imagen'));
+      };
+      img.src = url;
+    });
+  }
+
+  /* ====================================================================== */
+  /* Guardar registro (1 por shipment) y volver al loop                    */
+  /* ====================================================================== */
+
+  async saveShipmentResult(shipment, estado, foto) {
+    await this.persistShipment(shipment, estado, foto);
+    this.pending.delete(shipment.shipment_id);
+    this.handled.set(shipment.shipment_id, estado);
+    this.renderLoop();
+  }
+
+  markFaltante(shipmentId) {
+    const shipment = this.pending.get(shipmentId);
+    if (!shipment) return;
+    if (!confirm(`¿Confirmas que el shipment ${shipmentId} falta en esta ruta?`)) return;
+    this.persistShipment(shipment, 'Faltante confirmado', null).then(() => {
+      this.pending.delete(shipmentId);
+      this.handled.set(shipmentId, 'Faltante confirmado');
+      this.renderLoop();
+    });
+  }
+
+  async persistShipment(shipment, estado, foto) {
+    if (!this.onScan) return;
+    await this.onScan({
+      route_id: this.routeId,
+      carrier: this.routeCarrier,
+      placa: this.routePlaca,
+      shipment_id: shipment.shipment_id,
+      domain: shipment.domain || '',
+      cost_usd: shipment.cost_usd,
+      resultado_auditoria: shipment.resultado || '',
+      estado,
+      foto: foto || undefined,
+      driver_id: (this.qrData && this.qrData.driver_id) || '',
+      vehicle_id: (this.qrData && this.qrData.vehicle_id) || '',
+      site_id: (this.qrData && this.qrData.site_id) || '',
+      rostering_id: (this.qrData && this.qrData.rostering_id) || '',
+      route_divergencia: this.divergent,
+      route_divergencia_detalle: this.divergentDetail,
+    });
+  }
+}
+
+/**
  * Debug console — log events to an on-screen panel
  */
 class DebugConsole {
@@ -3359,6 +4195,9 @@ class CapturaApp {
     this.catalogIndex = {};
     this.catalogLoadedAt = null;
     this.catalogAccessDenied = false;
+    this.driversCatalogIndex = {};
+    this.driversCatalogLoadedAt = null;
+    this.driversCatalogAccessDenied = false;
     this.outboxRecords = [];
     this.currentEngine = null;
     this.userEmail = null;
@@ -3479,6 +4318,7 @@ class CapturaApp {
       this.loadHeaderLogo();
 
       await this.loadCatalog();
+      await this.loadDriversCatalog();
       await this.loadOutboxFromStorage();
       await this.ensureFolderId();
 
@@ -3533,6 +4373,35 @@ class CapturaApp {
       DebugConsole.log(`Error al cargar catálogo destino/doca: ${e.message}`, 'warn');
       this.catalogIndex = {};
       this.catalogLoadedAt = null;
+    }
+  }
+
+  /**
+   * Catálogo de rutas → shipments para Inbound/Drivers, publicado desde el
+   * uploader del dashboard (consolidado_auditoria.html). No bloquea el
+   * resto de los logs si falla o todavía no se publicó.
+   */
+  async loadDriversCatalog() {
+    this.driversCatalogAccessDenied = false;
+    try {
+      DebugConsole.log('Cargando catálogo Inbound/Drivers...', 'info');
+      const data = await this.gridClient.getStateBucket('catalogo_inbound_drivers');
+
+      if (!data || typeof data !== 'object') {
+        DebugConsole.log('Catálogo Inbound/Drivers vacío o no publicado', 'warn');
+        this.driversCatalogIndex = {};
+        this.driversCatalogLoadedAt = null;
+        return;
+      }
+
+      this.driversCatalogIndex = data.index && typeof data.index === 'object' ? data.index : data;
+      this.driversCatalogLoadedAt = data.generatedAt ? new Date(data.generatedAt) : Date.now();
+      DebugConsole.log(`Catálogo Inbound/Drivers cargado: ${Object.keys(this.driversCatalogIndex).length} rutas`, 'info');
+    } catch (e) {
+      this.driversCatalogAccessDenied = /^403$/.test(e.message);
+      DebugConsole.log(`Error al cargar catálogo Inbound/Drivers: ${e.message}`, 'warn');
+      this.driversCatalogIndex = {};
+      this.driversCatalogLoadedAt = null;
     }
   }
 
@@ -3670,6 +4539,16 @@ class CapturaApp {
       return;
     }
 
+    if (formId === 'inbound_drivers' && Object.keys(this.driversCatalogIndex).length === 0) {
+      this.showToast(
+        this.driversCatalogAccessDenied
+          ? 'Sin permiso para leer el catálogo de rutas'
+          : 'Catálogo de rutas no publicado — súbelo desde el dashboard',
+        'warn'
+      );
+      return;
+    }
+
     this._screen = 'form';
     this.ensureBackGuard();
 
@@ -3686,6 +4565,21 @@ class CapturaApp {
         catalogIndex: this.catalogIndex,
         initialDestino: this.lastDestino,
         initialDoca: this.lastDoca,
+        onScan: (values) => this.onFormComplete(formId, values, { stayInSession: true }),
+        onExit: () => this.renderMenu(),
+      });
+      this.currentEngine.render('form-container');
+      return;
+    }
+
+    // Inbound/Drivers tampoco usa el wizard genérico: la ruta se fija una
+    // vez por sesión (QR del conductor o manual) y los shipments se
+    // escanean en loop continuo contra el catálogo de esa ruta (ver
+    // InboundDriversSession).
+    if (formId === 'inbound_drivers') {
+      this.currentEngine = new InboundDriversSession({
+        catalogIndex: this.driversCatalogIndex,
+        catalogAccessDenied: this.driversCatalogAccessDenied,
         onScan: (values) => this.onFormComplete(formId, values, { stayInSession: true }),
         onExit: () => this.renderMenu(),
       });
