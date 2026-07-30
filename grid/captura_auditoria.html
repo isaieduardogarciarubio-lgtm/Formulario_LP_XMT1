@@ -790,6 +790,9 @@ select.step-input {
   color: var(--color-error);
 }
 
+.driver-badge-in { background: rgba(52, 199, 89, 0.18); color: #34c759; }
+.driver-badge-out { background: rgba(255, 69, 58, 0.18); color: var(--color-error); }
+
 /* Picker (list selection) */
 
 .picker-search {
@@ -1654,6 +1657,21 @@ const FORMS_CONFIG = {
       { id: 'foto', type: 'photo', required: false },
     ],
   },
+
+  // Tampoco usa el wizard genérico: escanea shipments en loop continuo
+  // contra un inventario del día (catálogo catalogo_barredura). Va directo
+  // a escanear, marca faltantes/sobrantes y no permite repetir un ID en un
+  // rango de 12h (dedup global entre dispositivos). Ver BarreduraSession.
+  barredura: {
+    id: 'barredura',
+    title: 'Barredura',
+    description: 'Escanea shipments contra el inventario del día (faltantes/sobrantes)',
+    icon: 'clipboard',
+    fields: [
+      { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
+      { id: 'situacion', type: 'text' },
+    ],
+  },
 };
 
 /**
@@ -1668,6 +1686,7 @@ const HISTORY_FIELD_MAP = {
   linehaul: { id: 'hu', result: 'area' },
   inbound_fm: { id: 'patente', result: 'hallazgo' },
   inbound_drivers: { id: 'shipment_id', result: 'estado' },
+  barredura: { id: 'shipment_id', result: 'estado' },
 };
 
 /**
@@ -3961,6 +3980,428 @@ class InboundDriversSession {
 }
 
 /**
+ * Barredura — inventario del día por escaneo continuo. Va directo a
+ * escanear contra el catálogo catalogo_barredura (lista plana de
+ * Shipment_ID con Fecha_Inbound/HUB_Status). Cada ID escaneado se agrega
+ * al log inmediatamente: si está en catálogo lo cuenta como encontrado, si
+ * no, lo agrega como "Fuera de catálogo" (sobrante) pidiendo un estatus.
+ * No se puede repetir un ID en un rango de 12h — la deduplicación es
+ * global: al abrir el log se leen los registros de barredura_master (+ la
+ * cola local) de las últimas 12h, y esos IDs ya cuentan como encontrados
+ * desde el arranque. El resultado clave es qué IDs del catálogo faltaron.
+ */
+class BarreduraSession {
+  static DEDUP_WINDOW_MS = 12 * 60 * 60 * 1000;
+
+  static SITUACION_OPTIONS = ['En Mesa de Ayuda/Dañado', 'En Sorteo', 'En Inbound', 'Otro'];
+
+  constructor(opts = {}) {
+    this.catalogIndex = opts.catalogIndex || {};
+    this.onScan = opts.onScan;
+    this.onExit = opts.onExit;
+
+    this.container = null;
+    this.scanner = null;
+    this.locked = false;
+    this.inManualMode = false;
+
+    // Set de todos los IDs del catálogo (los "esperados" del inventario).
+    this.catalogIds = new Set(Object.keys(this.catalogIndex).map((k) => String(k)));
+    this.total = this.catalogIds.size;
+
+    // Dedup 12h global: shipment_id -> ts ISO del escaneo más reciente.
+    this.recentMap = new Map();
+    (opts.recentRecords || []).forEach((r) => {
+      if (!r || !r.shipment_id || !r.ts) return;
+      const id = String(r.shipment_id);
+      const prev = this.recentMap.get(id);
+      if (!prev || Date.parse(r.ts) > Date.parse(prev)) this.recentMap.set(id, r.ts);
+    });
+
+    // Estado inicial: los IDs ya escaneados en las últimas 12h cuentan como
+    // encontrados (si son del catálogo) o como sobrantes (si no lo son).
+    this.foundSet = new Set();
+    this.sobrantesSet = new Set();
+    this.recentMap.forEach((ts, id) => {
+      if (this.catalogIds.has(id)) this.foundSet.add(id);
+      else this.sobrantesSet.add(id);
+    });
+
+    this.pendingPanelOpen = false;
+  }
+
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.renderLoop();
+  }
+
+  destroy() {
+    this.stopScanner();
+  }
+
+  stopScanner() {
+    if (this.scanner) {
+      this.scanner.stop();
+      this.scanner = null;
+    }
+  }
+
+  vibrate(pattern) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  back() {
+    this.stopScanner();
+    if (this.onExit) this.onExit();
+  }
+
+  get pendingIds() {
+    return Array.from(this.catalogIds).filter((id) => !this.foundSet.has(id));
+  }
+
+  /**
+   * Duplicado si el ID se escaneó en las últimas 12h (por cualquiera). Se
+   * evalúa contra la marca de tiempo real para no bloquear de más si la
+   * sesión dura mucho.
+   */
+  isDuplicate(id) {
+    const ts = this.recentMap.get(id);
+    if (!ts) return false;
+    return (Date.now() - Date.parse(ts)) < BarreduraSession.DEDUP_WINDOW_MS;
+  }
+
+  /* ====================================================================== */
+  /* Loop de escaneo                                                       */
+  /* ====================================================================== */
+
+  renderLoop() {
+    this.stopScanner();
+    this.locked = false;
+    this.inManualMode = false;
+
+    const foundCount = this.foundSet.size;
+    const pendingCount = this.total - foundCount;
+
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Barredura</div>
+        </div>
+        <button type="button" class="driver-pending-toggle">
+          <span>${foundCount} / ${this.total} encontrados · ${pendingCount} faltantes · ${this.sobrantesSet.size} sobrantes</span>
+          ${Icons.svg(this.pendingPanelOpen ? 'arrowDown' : 'arrowRight', { size: 16 })}
+        </button>
+        <div class="driver-pending-panel" style="display: ${this.pendingPanelOpen ? 'block' : 'none'};"></div>
+        <h1 class="step-question">Escanea el shipment</h1>
+        <div class="scanner-body">
+          <div class="scanner-viewport">
+            <video class="scanner-video" playsinline muted></video>
+            <div class="scanner-frame"><span class="scanner-line"></span></div>
+          </div>
+        </div>
+        <div class="step-support">Escaneando... apunta la cámara al shipment.</div>
+        <button type="button" class="session-manual-link">Entrada manual</button>
+        <button type="button" class="btn btn-primary btn-block finish-route-btn" style="margin-top: 16px;">Finalizar barredura</button>
+      </div>
+      <div class="session-flash"></div>
+    `;
+
+    this.flashEl = this.container.querySelector('.session-flash');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.pendingPanelEl = this.container.querySelector('.driver-pending-panel');
+    this.renderPendingPanel();
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+    this.container.querySelector('.driver-pending-toggle').addEventListener('click', () => {
+      this.pendingPanelOpen = !this.pendingPanelOpen;
+      this.renderLoop();
+    });
+    this.container.querySelector('.session-manual-link').addEventListener('click', () => {
+      this.enterManualEntry();
+    });
+    this.container.querySelector('.finish-route-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+
+    this.startCamera();
+  }
+
+  renderPendingPanel() {
+    if (!this.pendingPanelEl) return;
+    const pending = this.pendingIds;
+    if (pending.length === 0) {
+      this.pendingPanelEl.innerHTML = '<div class="driver-pending-empty">Sin faltantes — todo el inventario fue escaneado.</div>';
+      return;
+    }
+    // Con catálogos grandes la lista puede ser muy larga; se muestra un
+    // tope y el resto se resume, sin dejar de contar el total en el header.
+    const MAX = 300;
+    const shown = pending.slice(0, MAX);
+    const extra = pending.length - shown.length;
+    this.pendingPanelEl.innerHTML = shown.map((id) => {
+      const meta = this.catalogIndex[id] || {};
+      return `
+        <div class="driver-pending-item">
+          <div class="driver-pending-info">
+            <div class="driver-pending-id">${id}</div>
+            <div class="driver-pending-meta">${meta.hub_status || ''}${meta.fecha_inbound ? ' · ' + meta.fecha_inbound : ''}</div>
+          </div>
+        </div>`;
+    }).join('') + (extra > 0 ? `<div class="driver-pending-empty">+${extra} faltantes más…</div>` : '');
+  }
+
+  async startCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — usa entrada manual.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+    try {
+      await this.scanner.start(video, (text) => this.handleScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — usa entrada manual.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  handleScan(rawText) {
+    if (this.locked) return;
+    const parsed = ScanParser.parse(rawText, 'shipment');
+    if (!parsed) {
+      this.vibrate(40);
+      this.flash('error', 'Código no reconocido.');
+      return;
+    }
+    this.processShipment(parsed);
+  }
+
+  enterManualEntry() {
+    if (this.scanner) this.scanner.pause();
+    this.inManualMode = true;
+
+    this.container.querySelector('.scanner-body').innerHTML = `
+      <div class="step-input-wrap">
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
+      </div>
+    `;
+    const input = this.container.querySelector('.session-manual-input');
+    this.supportEl.textContent = 'Escribe el Shipment ID y presiona Enter.';
+    this.supportEl.classList.remove('error');
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const parsed = ScanParser.parse(input.value, 'shipment');
+      if (!parsed) {
+        this.supportEl.textContent = 'Shipment inválido. Verifica el número e intenta de nuevo.';
+        this.supportEl.classList.add('error');
+        return;
+      }
+      this.processShipment(parsed);
+      input.value = '';
+    });
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  /**
+   * Duplicado en 12h -> aviso, no agrega. En catálogo -> agrega como
+   * encontrado (sin foto, sin preguntar). Fuera de catálogo -> pide el
+   * estatus del paquete y lo agrega como sobrante.
+   */
+  processShipment(shipmentId) {
+    const id = String(shipmentId);
+
+    if (this.isDuplicate(id)) {
+      this.vibrate(40);
+      this.flash('warn', `${id} · Ya escaneado en las últimas 12h.`);
+      return;
+    }
+
+    if (this.catalogIds.has(id)) {
+      this.vibrate(60);
+      this.saveFound(id);
+      return;
+    }
+
+    // Sobrante: escaneo fuera de catálogo -> pedir estatus antes de guardar.
+    this.locked = true;
+    if (this.scanner) this.scanner.pause();
+    this.vibrate([40, 60, 40]);
+    this.renderSobranteStatus(id);
+  }
+
+  flash(kind, message) {
+    if (this.supportEl) {
+      this.supportEl.textContent = message;
+      this.supportEl.classList.toggle('error', kind === 'error');
+    }
+    if (this.flashEl) {
+      const cls = kind === 'ok' ? 'active-ok' : (kind === 'error' ? 'active-error' : '');
+      if (cls) {
+        this.flashEl.classList.add(cls);
+        setTimeout(() => {
+          if (this.flashEl) this.flashEl.classList.remove(cls);
+        }, 550);
+      }
+    }
+    setTimeout(() => {
+      if (!this.supportEl) return;
+      this.supportEl.classList.remove('error');
+      this.supportEl.textContent = this.inManualMode
+        ? 'Escribe el Shipment ID y presiona Enter.'
+        : 'Escaneando... apunta la cámara al shipment.';
+    }, 900);
+  }
+
+  /* ====================================================================== */
+  /* Sobrante: estatus del paquete (enum + "Otro" texto libre mayúsculas)  */
+  /* ====================================================================== */
+
+  renderSobranteStatus(id) {
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Sobrante — fuera de catálogo</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${id}</div>
+          <div class="driver-shipment-row">
+            <span class="driver-badge driver-badge-out">Fuera de catálogo</span>
+          </div>
+        </div>
+        <h1 class="step-question">¿Cuál es el estatus del paquete?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    BarreduraSession.SITUACION_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => {
+        if (opt === 'Otro') this.renderSobranteOtro(id);
+        else this.saveSobrante(id, opt);
+      });
+      options.appendChild(btn);
+    });
+  }
+
+  renderSobranteOtro(id) {
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Sobrante — otro estatus</div>
+        </div>
+        <h1 class="step-question">Escribe el estatus (${id})</h1>
+        <div class="step-input-wrap">
+          <input type="text" class="step-input sobrante-otro-input" placeholder="ESTATUS" />
+        </div>
+        <div class="step-support">Solo mayúsculas. Presiona Enter para guardar.</div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.renderSobranteStatus(id);
+    });
+
+    const input = this.container.querySelector('.sobrante-otro-input');
+    input.addEventListener('input', () => {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      input.value = input.value.toUpperCase();
+      input.setSelectionRange(start, end);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const val = input.value.trim().toUpperCase();
+      if (!val) {
+        this.supportEl.textContent = 'Escribe un estatus para continuar.';
+        this.supportEl.classList.add('error');
+        return;
+      }
+      this.saveSobrante(id, val);
+    });
+    setTimeout(() => input.focus(), 60);
+  }
+
+  /* ====================================================================== */
+  /* Guardar registros (1 por shipment) y volver al loop                   */
+  /* ====================================================================== */
+
+  async saveFound(id) {
+    const meta = this.catalogIndex[id] || {};
+    this.foundSet.add(id);
+    this.recentMap.set(id, new Date().toISOString());
+    this.flash('ok', `${id} · En catálogo`);
+    await this.persist({
+      shipment_id: id,
+      estado: 'En catálogo',
+      fecha_inbound: meta.fecha_inbound || '',
+      hub_status: meta.hub_status || '',
+      situacion: '',
+    });
+    this.refreshCounters();
+  }
+
+  async saveSobrante(id, situacion) {
+    this.sobrantesSet.add(id);
+    this.recentMap.set(id, new Date().toISOString());
+    await this.persist({
+      shipment_id: id,
+      estado: 'Fuera de catálogo',
+      fecha_inbound: '',
+      hub_status: '',
+      situacion,
+    });
+    this.locked = false;
+    this.renderLoop();
+  }
+
+  // Actualiza solo el contador y el panel sin reiniciar la cámara (el
+  // escaneo de encontrados no interrumpe el loop, para no perder ritmo).
+  refreshCounters() {
+    const toggle = this.container.querySelector('.driver-pending-toggle span');
+    if (toggle) {
+      const foundCount = this.foundSet.size;
+      const pendingCount = this.total - foundCount;
+      toggle.textContent = `${foundCount} / ${this.total} encontrados · ${pendingCount} faltantes · ${this.sobrantesSet.size} sobrantes`;
+    }
+    if (this.pendingPanelOpen) this.renderPendingPanel();
+  }
+
+  async persist(record) {
+    if (!this.onScan) return;
+    await this.onScan(record);
+  }
+}
+
+/**
  * Debug console — log events to an on-screen panel
  */
 class DebugConsole {
@@ -4198,6 +4639,9 @@ class CapturaApp {
     this.driversCatalogIndex = {};
     this.driversCatalogLoadedAt = null;
     this.driversCatalogAccessDenied = false;
+    this.barreduraCatalogIndex = {};
+    this.barreduraCatalogLoadedAt = null;
+    this.barreduraCatalogAccessDenied = false;
     this.outboxRecords = [];
     this.currentEngine = null;
     this.userEmail = null;
@@ -4319,6 +4763,7 @@ class CapturaApp {
 
       await this.loadCatalog();
       await this.loadDriversCatalog();
+      await this.loadBarreduraCatalog();
       await this.loadOutboxFromStorage();
       await this.ensureFolderId();
 
@@ -4403,6 +4848,63 @@ class CapturaApp {
       this.driversCatalogIndex = {};
       this.driversCatalogLoadedAt = null;
     }
+  }
+
+  /**
+   * Catálogo del inventario del día para Barredura (lista plana de
+   * Shipment_ID → { fecha_inbound, hub_status }), publicado desde el
+   * uploader del dashboard. No bloquea el resto de los logs si falla.
+   */
+  async loadBarreduraCatalog() {
+    this.barreduraCatalogAccessDenied = false;
+    try {
+      DebugConsole.log('Cargando catálogo Barredura...', 'info');
+      const data = await this.gridClient.getStateBucket('catalogo_barredura');
+
+      if (!data || typeof data !== 'object') {
+        DebugConsole.log('Catálogo Barredura vacío o no publicado', 'warn');
+        this.barreduraCatalogIndex = {};
+        this.barreduraCatalogLoadedAt = null;
+        return;
+      }
+
+      this.barreduraCatalogIndex = data.index && typeof data.index === 'object' ? data.index : data;
+      this.barreduraCatalogLoadedAt = data.generatedAt ? new Date(data.generatedAt) : Date.now();
+      DebugConsole.log(`Catálogo Barredura cargado: ${Object.keys(this.barreduraCatalogIndex).length} shipments`, 'info');
+    } catch (e) {
+      this.barreduraCatalogAccessDenied = /^403$/.test(e.message);
+      DebugConsole.log(`Error al cargar catálogo Barredura: ${e.message}`, 'warn');
+      this.barreduraCatalogIndex = {};
+      this.barreduraCatalogLoadedAt = null;
+    }
+  }
+
+  /**
+   * Registros de barredura de las últimas 12h para la deduplicación global:
+   * combina lo ya sincronizado en barredura_master con la cola local aún
+   * sin sincronizar. Devuelve [{ shipment_id, ts }].
+   */
+  async loadRecentBarredura() {
+    const cutoff = Date.now() - 12 * 60 * 60 * 1000;
+    const recent = [];
+    try {
+      const bucket = await this.gridClient.getStateBucket('barredura_master');
+      if (bucket && Array.isArray(bucket.records)) {
+        bucket.records.forEach((r) => {
+          if (r && r.shipment_id && r.ts && Date.parse(r.ts) >= cutoff) {
+            recent.push({ shipment_id: String(r.shipment_id), ts: r.ts });
+          }
+        });
+      }
+    } catch (e) {
+      DebugConsole.log(`No se pudo leer barredura_master para dedup: ${e.message}`, 'warn');
+    }
+    this.outboxRecords.forEach((r) => {
+      if (r && r.formId === 'barredura' && r.shipment_id && r.ts && Date.parse(r.ts) >= cutoff) {
+        recent.push({ shipment_id: String(r.shipment_id), ts: r.ts });
+      }
+    });
+    return recent;
   }
 
   async loadOutboxFromStorage() {
@@ -4549,6 +5051,23 @@ class CapturaApp {
       return;
     }
 
+    if (formId === 'barredura' && Object.keys(this.barreduraCatalogIndex).length === 0) {
+      this.showToast(
+        this.barreduraCatalogAccessDenied
+          ? 'Sin permiso para leer el catálogo de barredura'
+          : 'Catálogo de barredura no publicado — súbelo desde el dashboard',
+        'warn'
+      );
+      return;
+    }
+
+    // Barredura necesita leer los registros recientes (dedup 12h) antes de
+    // arrancar la sesión, así que se maneja por una ruta async aparte.
+    if (formId === 'barredura') {
+      this.startBarredura();
+      return;
+    }
+
     this._screen = 'form';
     this.ensureBackGuard();
 
@@ -4593,6 +5112,41 @@ class CapturaApp {
       onCancel: () => this.renderMenu(),
     });
 
+    this.currentEngine.render('form-container');
+  }
+
+  /**
+   * Arranque de Barredura: primero lee los registros recientes (dedup 12h)
+   * mostrando un placeholder, y luego instancia la sesión con esos datos.
+   */
+  async startBarredura() {
+    this._screen = 'form';
+    this.ensureBackGuard();
+
+    const root = document.getElementById('app-root');
+    root.innerHTML = `
+      <div id="form-container">
+        <div class="step-screen">
+          <div class="step-progress-row">
+            <div class="step-progress">Barredura</div>
+          </div>
+          <h1 class="step-question">Cargando inventario…</h1>
+          <div class="step-support">Leyendo escaneos recientes para el conteo de faltantes.</div>
+        </div>
+      </div>
+    `;
+
+    const recentRecords = await this.loadRecentBarredura();
+
+    // Si el usuario ya salió mientras cargaba, no montar la sesión.
+    if (this._screen !== 'form') return;
+
+    this.currentEngine = new BarreduraSession({
+      catalogIndex: this.barreduraCatalogIndex,
+      recentRecords,
+      onScan: (values) => this.onFormComplete('barredura', values, { stayInSession: true }),
+      onExit: () => this.renderMenu(),
+    });
     this.currentEngine.render('form-container');
   }
 

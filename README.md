@@ -12,13 +12,14 @@ Sistema completo de auditoría integrado con Grid: captura de formularios + dash
 ### 1. 🎤 Captura de Auditoría
 **Ubicación**: `grid/captura_auditoria.html` (en Grid)
 
-Formulario dinámico para 6 logs:
+Formulario dinámico para 7 logs:
 - **Destino/Doca**: Escanea HU, valida destino y doca
 - **FURY**: Escanea shipment, captura foto y situación
 - **Contenerizado**: Escanea shipment y situación (foto si hay daño)
 - **Linehaul**: Escanea HU, área, origen y canalización
 - **Inbound FM**: Escanea patente, diferencia y hallazgo
 - **Inbound / Drivers**: Escanea el QR del conductor (o ingresa la ruta a mano), y audita en loop continuo los shipments Frágil/HV de esa ruta contra el catálogo publicado desde el Dashboard
+- **Barredura**: Escaneo continuo de shipments contra el inventario del día (catálogo publicado desde el Dashboard). Marca faltantes/sobrantes, no repite un ID en 12h (dedup global) y para sobrantes pide estatus del paquete
 
 **Características**:
 - ✅ Escaneo nativo (BarcodeDetector para HU/shipment/patente)
@@ -31,9 +32,10 @@ Formulario dinámico para 6 logs:
 **Ubicación**: `grid/consolidado_auditoria.html` (en Grid)
 
 Visualización de datos en tiempo real:
-- Carga automática desde los 6 State Buckets
-- Tabs por tipo de log (Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers)
-- Uploader de CSV para publicar el catálogo de rutas/shipments de Inbound / Drivers
+- Carga automática desde los 7 State Buckets
+- Tabs por tipo de log (Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura)
+- Uploaders de CSV para publicar los catálogos de Inbound / Drivers y de Barredura
+- Exportación de faltantes y sobrantes de Barredura como CSV
 - KPIs + gráficos interactivos (Plotly)
 - Tabla filtrable con búsqueda
 - Modal para ver fotos en resolución completa
@@ -99,8 +101,10 @@ contenerizado_master    → Registros del log Contenerizado
 linehaul_master         → Registros del log Linehaul
 inbound_fm_master       → Registros del log Inbound FM
 inbound_drivers_master  → Registros del log Inbound / Drivers (1 por shipment auditado)
+barredura_master        → Registros del log Barredura (1 por shipment escaneado)
 catalogo_destino_doca   → Catálogo de destinos/docas (opcional)
 catalogo_inbound_drivers → Catálogo de rutas/shipments Frágil/HV (publicado desde el Dashboard)
+catalogo_barredura      → Catálogo/inventario del día [Shipment_ID, Fecha_Inbound, HUB_Status]
 ```
 
 ### Fotos

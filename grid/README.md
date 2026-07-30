@@ -11,12 +11,12 @@ Sistema completo de auditoría integrado con Grid: captura de formularios en el 
 
 # 🎤 Captura de Auditoría
 
-Aplicación web de captura de auditorías integrada con Grid, soportando 6 logs con sincronización en tiempo real y almacenamiento offline.
+Aplicación web de captura de auditorías integrada con Grid, soportando 7 logs con sincronización en tiempo real y almacenamiento offline.
 
 ## 🎯 Características (Captura)
 
-- **Motor de captura**: el mismo de Auditorias_SVC (probado en iOS/Android), con los 6 logs de esta app adaptados sobre él
-- **6 Logs**: FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers activos — **Pre-Missort (Destino/Doca) deshabilitado temporalmente** hasta republicar el catálogo en el formato correcto (ver sección abajo)
+- **Motor de captura**: el mismo de Auditorias_SVC (probado en iOS/Android), con los 7 logs de esta app adaptados sobre él
+- **7 Logs**: FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura activos — **Pre-Missort (Destino/Doca) deshabilitado temporalmente** hasta republicar el catálogo en el formato correcto (ver sección abajo)
 - **Offline-first**: Almacenamiento en IndexedDB, sincronización automática al conectar
 - **Escaneo robusto**: cámara (BarcodeDetector nativo o ZXing vendorizado inline como respaldo en iOS/Safari/Firefox), entrada manual con reenfoque automático (lector físico HID), y escaneo desde imagen cargada si la cámara no está disponible
 - **Confirmación visual de escaneo**: muestra el código detectado y pide confirmar antes de avanzar (evita falsos positivos)
@@ -59,6 +59,23 @@ SHIPMENT_ID, SHP_SENDER_ID, NICKNAME, DOMAIN, COST_USD, RESULTADO
 5. **Finalizar ruta** guarda lo escaneado aunque falten paquetes — los nunca escaneados/marcados no generan registro.
 
 Si el QR trae un carrier/placa distinto al del catálogo, no se muestra la comparación en pantalla, pero la divergencia se calcula y se guarda en cada registro de esa ruta (`route_divergencia` / `route_divergencia_detalle`) para trazabilidad en el Dashboard.
+
+## 🧹 Barredura — inventario del día
+
+Este log necesita el catálogo del inventario publicado en `catalogo_barredura` — si no está publicado, el log no abre y avisa. Se publica desde el **Dashboard** (segundo botón de carga en el navbar), subiendo un CSV con estas columnas (solo `SHIPMENT_ID` es obligatoria):
+
+```
+Shipment_ID, Fecha_Inbound, HUB_Status
+```
+
+**Flujo de captura:**
+1. Va directo a escanear. Desde el arranque muestra el conteo `encontrados / total · faltantes · sobrantes`. Al abrir, lee `barredura_master` (+ la cola local) de las últimas 12h y esos IDs ya cuentan como encontrados (dedup **global** entre dispositivos).
+2. Cada shipment escaneado se agrega al log inmediatamente (es un inventario):
+   - **En catálogo** → se cuenta como encontrado, sin foto ni preguntas.
+   - **Fuera de catálogo** (sobrante) → pide estatus del paquete de un enum `[En Mesa de Ayuda/Dañado, En Sorteo, En Inbound, Otro]`; para **Otro** hay un texto libre en mayúsculas.
+   - **Repetido en 12h** → aviso, no se vuelve a agregar (no se repiten IDs en un rango de 12h).
+3. El panel de faltantes lista los IDs del catálogo que aún no se escanean (con su HUB_Status/Fecha_Inbound).
+4. **Finalizar barredura** cierra la sesión; los IDs no escaneados quedan como faltantes (no generan registro). El resultado clave — qué IDs faltaron — se ve y se exporta desde el Dashboard.
 
 ## 🚀 Despliegue (Captura)
 
@@ -157,13 +174,14 @@ Las fotos se comprimen a WebP (o JPEG como fallback) y se suben como documentos 
 # 📊 Dashboard — Consolidado de Auditoría
 
 Un **dashboard de solo lectura en Grid** que:
-- **Lee en tiempo real** los 6 State Buckets que alimenta la app de captura ({log}_master) — sin cargar nada a mano, sin CSV, sin ZIP
+- **Lee en tiempo real** los 7 State Buckets que alimenta la app de captura ({log}_master) — sin cargar nada a mano, sin CSV, sin ZIP
 - Sin cifrado: la captura ya no encripta nada, así que el dashboard tampoco necesita contraseña ni descifrado
 - Muestra **KPIs + gráficos Plotly + tabla filtrable** por log en tiempo real
 - Permite **refresh manual** con reintento automático en conflictos
 - Permite **borrar un registro** individual (tabla → ícono de basura), escribiendo el bucket actualizado
 - **Descarga consolidada** en CSV
-- **Publica el catálogo de Inbound / Drivers** (botón de carga en el navbar): sube un CSV, lo valida/parsea y lo escribe en `catalogo_inbound_drivers`
+- **Publica los catálogos de Inbound / Drivers y de Barredura** (dos botones de carga en el navbar): sube un CSV, lo valida/parsea y lo escribe en `catalogo_inbound_drivers` / `catalogo_barredura`
+- **Exporta faltantes y sobrantes de Barredura** como CSV (botones en la pestaña Barredura)
 
 ## 📋 Logs Soportados (Dashboard)
 
@@ -175,6 +193,14 @@ Un **dashboard de solo lectura en Grid** que:
 | **Linehaul** | HU, Área, Armado Sitio, Origen (cond), Canalización, Foto (opt), Comentarios (opt) | Total, por Área | Área (dona), Canalización (barras) |
 | **Inbound FM** | Patente, Diferencia de Shipments, Hallazgo, Evidencia (opt) | Total, por Hallazgo | Hallazgo (barras) |
 | **Inbound / Drivers** | Ruta, Carrier, Placa, Shipment ID, Domain, Cost USD, Tipo (Frágil/HV), Estado, Foto | Total, por Estado, Costo USD auditado, Rutas con divergencia QR | Estado (dona), Costo USD por Ruta (barras) |
+| **Barredura** | Shipment ID, Estado (En/Fuera de catálogo), Situación (sobrantes), Fecha Inbound, HUB Status | Escaneados, En catálogo, Sobrantes, Faltantes, Total catálogo | Cobertura del inventario (dona), Estatus de sobrantes (barras) |
+
+## 📤 Publicar el catálogo de Barredura
+
+1. Prepara un CSV con las columnas `Shipment_ID, Fecha_Inbound, HUB_Status` (solo `Shipment_ID` es obligatoria).
+2. En el Dashboard, haz clic en el **segundo** ícono de carga (⬆ con líneas, catálogo Barredura) en el navbar y selecciona el archivo.
+3. El dashboard indexa por `Shipment_ID` y publica el inventario en `catalogo_barredura` — **sobreescribe** la versión anterior — y recalcula los faltantes al instante.
+4. En la pestaña **Barredura** aparecen los botones **Exportar faltantes** (IDs del catálogo no escaneados en el rango de fecha) y **Exportar sobrantes** (IDs escaneados fuera de catálogo con su estatus).
 
 ## 📤 Publicar el catálogo de Inbound / Drivers
 
@@ -200,7 +226,7 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
 
 1. **Operador llena formularios** en captura_auditoria.html (escanea, captura foto, sincroniza automáticamente)
 2. **Cualquiera abre el dashboard** — no necesita ningún parámetro ni archivo
-3. **Se carga solo** desde los 6 State Buckets, sin intervención manual
+3. **Se carga solo** desde los 7 State Buckets, sin intervención manual
 4. **Tabs de cada log** → KPIs, gráficos, tabla de registros
 5. **Busca/filtra** en cada tabla
 6. **Haz click en miniatura** de foto para ver en modal
@@ -221,7 +247,7 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
 
 ## 🔒 Seguridad & Restricciones (Biblia)
 
-✅ **Sin localStorage**: 6 State Buckets independientes, uno por log
+✅ **Sin localStorage**: 7 State Buckets independientes, uno por log
 ✅ **Identidad**: `GET /api/v1/me` para obtener email/avatar
 ✅ **Optimistic concurrency**: `if_updated_at` en PUT → 409 = reintento automático
 ✅ **Librerías locales**: Plotly desde `/d/_libs/`
@@ -229,7 +255,7 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
 
 ## 💾 Almacenamiento
 
-**6 State Buckets** en el documento de datos, uno por log, escritos por la app de captura, más 2 buckets de catálogo (solo lectura para la captura, escritos por el uploader del dashboard):
+**7 State Buckets** en el documento de datos, uno por log, escritos por la app de captura, más 3 buckets de catálogo (solo lectura para la captura, escritos por los uploaders del dashboard):
 
 ```json
 {
@@ -249,8 +275,17 @@ Si alguna vez necesitas apuntar a otro documento de datos, agrega `?data_doc_id=
         "estado": "Auditado OK", "foto": "01K..." }
     ]
   },
+  "barredura_master": {
+    "records": [
+      { "ts": "2026-07-30T10:31:00Z", "shipment_id": "47326091753", "estado": "En catálogo",
+        "fecha_inbound": "2026-07-29", "hub_status": "OK", "situacion": "" },
+      { "ts": "2026-07-30T10:32:00Z", "shipment_id": "99999999", "estado": "Fuera de catálogo",
+        "situacion": "En Sorteo" }
+    ]
+  },
   "catalogo_destino_doca": { "index": { "...": ["..."] } },
-  "catalogo_inbound_drivers": { "index": { "100897405": { "carrier": "135021164", "placa": "RL7492B", "shipments": [...] } } }
+  "catalogo_inbound_drivers": { "index": { "100897405": { "carrier": "135021164", "placa": "RL7492B", "shipments": [...] } } },
+  "catalogo_barredura": { "index": { "47326091753": { "fecha_inbound": "2026-07-29", "hub_status": "OK" } } }
 }
 ```
 
@@ -266,6 +301,7 @@ Cada bucket tiene límite ~1 MB; las fotos viven como documentos aparte en Grid 
 | **Linehaul** | Área (dona) | Canalización (barras) | — |
 | **Inbound FM** | Hallazgo (barras) | — | — |
 | **Inbound / Drivers** | Estado (dona: verde/rojo/amarillo) | Costo USD por Ruta — Top 8 (barras) | — |
+| **Barredura** | Cobertura del inventario (dona: encontrados/faltantes/sobrantes) | Estatus de sobrantes (barras) | — |
 
 Todos con tema Nocturne: fondo #1a1a19, texto blanco.
 
@@ -280,6 +316,8 @@ Todos con tema Nocturne: fondo #1a1a19, texto blanco.
 | Gráficos en blanco | Plotly no cargó | Verifica `/d/_libs/plotly.min.js` |
 | "Catálogo de rutas no publicado" en Inbound/Drivers | Nadie subió el CSV todavía | Sube el catálogo desde el Dashboard (ícono ⬆ en el navbar) |
 | "Ruta no encontrada en el catálogo" | El `route_id` del QR/manual no existe en el CSV publicado | Verifica el `ID_ROUTE` en el catálogo, o vuelve a publicarlo |
+| "Catálogo de barredura no publicado" | Nadie subió el CSV del inventario | Sube el catálogo Barredura desde el Dashboard (segundo ícono ⬆ en el navbar) |
+| "Ya escaneado en las últimas 12h" en Barredura | El ID ya se registró en el inventario (dedup 12h global) | Es esperado — no se repiten IDs en 12h; usa el conteo de faltantes para ver qué falta |
 
 ## 🔄 Auto-Polling
 
