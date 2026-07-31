@@ -3355,16 +3355,14 @@ class DestinoDocaSession {
   }
 
   /**
-   * Si ya hay una doca previa (persistida entre sesiones) y sigue vigente
-   * en el catálogo actual, el primer paso es directo a escanear — no se
-   * vuelve a preguntar la doca cada vez que se abre el log. "Cambiar"
-   * arriba sigue disponible para ajustarla. Si no hay una previa, o el
-   * catálogo ya no la tiene, se pide una vez.
+   * Si ya hay una doca previa (persistida entre sesiones), el primer paso
+   * es directo a escanear — no se vuelve a preguntar la doca cada vez que
+   * se abre el log, se mantiene fija hasta que se cambie a mano con
+   * "Cambiar" arriba. Si no hay una previa, se pide una vez.
    */
   render(containerId) {
     this.container = document.getElementById(containerId);
-    const docas = Object.keys(this.catalogIndex || {});
-    if (this.initialDoca && docas.includes(this.initialDoca)) {
+    if (this.initialDoca) {
       this.doca = this.initialDoca;
       this.renderLoop();
     } else {
@@ -3397,9 +3395,12 @@ class DestinoDocaSession {
 
   /**
    * Picker de búsqueda genérico (lista fija + filtro), usado tanto para
-   * elegir la doca al inicio como el destino después de cada HU.
+   * elegir la doca al inicio como el destino después de cada HU. Si
+   * allowManual es true, Enter acepta lo escrito aunque no esté en la
+   * lista (para la doca: el catálogo puede traer valores no numéricos que
+   * ya se filtran de la lista, pero conviene poder escribirla a mano).
    */
-  renderPicker({ title, options, placeholder, emptyMessage, onPick, onBack }) {
+  renderPicker({ title, options, placeholder, emptyMessage, onPick, onBack, allowManual }) {
     this.stopScanner();
     this.container.innerHTML = `
       <div class="step-screen">
@@ -3440,6 +3441,17 @@ class DestinoDocaSession {
     renderList();
     setTimeout(() => search.focus(), 60);
 
+    if (allowManual) {
+      search.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        const typed = search.value.trim();
+        if (!typed) return;
+        e.preventDefault();
+        const exact = options.find((o) => o.toLowerCase() === typed.toLowerCase());
+        onPick(exact || typed.toUpperCase());
+      });
+    }
+
     this.container.querySelector('.dd-picker-back').addEventListener('click', () => {
       if (onBack) onBack();
       else if (this.onExit) this.onExit();
@@ -3447,20 +3459,19 @@ class DestinoDocaSession {
   }
 
   pickDoca() {
-    const docas = Object.keys(this.catalogIndex || {}).sort((a, b) => {
-      const an = this.isNum(a);
-      const bn = this.isNum(b);
-      if (an && bn) return Number(a) - Number(b);
-      if (an && !bn) return -1;
-      if (!an && bn) return 1;
-      return a.localeCompare(b, 'es');
-    });
+    // Solo docas numéricas en la lista — el catálogo puede traer otros
+    // valores en esa columna que no son docas reales. Se puede escribir
+    // cualquier valor a mano (Enter) si la doca real no aparece listada.
+    const docas = Object.keys(this.catalogIndex || {})
+      .filter((d) => this.isNum(d))
+      .sort((a, b) => Number(a) - Number(b));
 
     this.renderPicker({
       title: '¿Cuál es la doca?',
       options: docas,
-      placeholder: 'Buscar doca...',
-      emptyMessage: 'No hay docas disponibles en el catálogo.',
+      placeholder: 'Buscar o escribir la doca...',
+      emptyMessage: 'No hay docas numéricas en el catálogo — escribe la doca y presiona Enter.',
+      allowManual: true,
       onPick: (doca) => {
         this.doca = doca;
         this.initialDoca = doca;
