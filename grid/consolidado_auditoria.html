@@ -1070,22 +1070,16 @@
     const index = {};
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
-      const docaCell = cleanCell(row[col.doca]);
+      // La DOCA es un solo valor por fila (nunca lleva ";"); solo la
+      // columna DESTINO puede traer varios destinos separados por ";".
+      const doca = normalizeDoca(cleanCell(row[col.doca]));
       const destinoCell = cleanCell(row[col.destino]);
-      if (!docaCell || !destinoCell) continue;
+      if (!doca || !destinoCell) continue;
 
-      // El ";" puede venir en cualquiera de las dos columnas (varias docas
-      // para un destino, varios destinos para una doca, o ambos) — se
-      // separan las dos y se cruzan, así funciona sin importar de qué
-      // lado viene la lista en cada fila.
-      const docas = docaCell.split(';').map((d) => normalizeDoca(cleanCell(d))).filter(Boolean);
       const destinos = destinoCell.split(';').map((d) => cleanCell(d)).filter(Boolean);
-
-      docas.forEach((doca) => {
-        if (!index[doca]) index[doca] = [];
-        destinos.forEach((destino) => {
-          if (!index[doca].includes(destino)) index[doca].push(destino);
-        });
+      if (!index[doca]) index[doca] = [];
+      destinos.forEach((destino) => {
+        if (!index[doca].includes(destino)) index[doca].push(destino);
       });
     }
 
