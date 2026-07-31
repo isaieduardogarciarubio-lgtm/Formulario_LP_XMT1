@@ -5166,7 +5166,18 @@ class CapturaApp {
     if (!el) return;
     el.textContent = CapturaApp.getInitials(this.userEmail);
     el.title = this.userEmail || '';
-    el.addEventListener('click', () => this.showToast(this.userEmail, 'info'));
+    el.addEventListener('click', () => this.logout());
+  }
+
+  /**
+   * Cierra sesión del usuario actual: limpia solo el estado ligado al
+   * usuario (no catálogos ni registros pendientes) y recarga la misma URL
+   * para que la app vuelva a resolver /api/v1/me desde cero.
+   */
+  logout() {
+    if (!confirm(`¿Cerrar sesión de ${this.userEmail}?`)) return;
+    this.userEmail = null;
+    location.reload();
   }
 
   /**
