@@ -79,10 +79,10 @@
 <div class="card">
   <h2>Navegación real (no fetch)</h2>
   <div class="sub" style="margin-bottom: 10px;">
-    /logout devolvió el shell HTML de la SPA de Grid, no un logout de API — solo funciona si el navegador navega ahí de verdad (dejando correr el JS de Grid), no vía fetch. Se abre en una pestaña nueva para que esta página (y el log) se queden abiertos.
+    /logout solo funciona navegando de verdad en esta misma pestaña (en pestaña nueva no dispara el logout real). El log queda guardado — cuando esto te saque, dale "Atrás" en el navegador o vuelve a abrir este documento para ver el log completo y el chequeo automático de /api/v1/me.
   </div>
   <div class="actions">
-    <button class="danger" id="btn-navigate-logout">Abrir /logout en pestaña nueva</button>
+    <button class="danger" id="btn-navigate-logout">Ir a /logout (te va a sacar de aquí)</button>
   </div>
 </div>
 
@@ -224,9 +224,8 @@ function renderCandidates() {
 document.getElementById('btn-refresh-me').addEventListener('click', fetchMe);
 
 document.getElementById('btn-navigate-logout').addEventListener('click', () => {
-  log('Abriendo /logout en pestaña nueva. Recargando esta página en 5s para chequear /api/v1/me sin caché...');
-  window.open(`${location.origin}/logout`, '_blank');
-  setTimeout(() => location.reload(), 5000);
+  log('Navegando a /logout en esta misma pestaña... (vuelve con "Atrás" o reabriendo el documento para ver el resultado)');
+  location.href = `${location.origin}/logout`;
 });
 
 document.getElementById('btn-custom-try').addEventListener('click', async () => {
