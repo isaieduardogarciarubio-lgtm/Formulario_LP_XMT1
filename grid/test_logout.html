@@ -122,21 +122,47 @@ const CANDIDATES = [
 ];
 
 const logEl = document.getElementById('log');
+const LOG_KEY = 'test_logout_log';
+
+/* Persistido en sessionStorage (no localStorage, regla de la Biblia Grid)
+   para sobrevivir a un location.reload() después de probar el logout real. */
+function loadPersistedLog() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(LOG_KEY) || '[]');
+    saved.forEach(({ text, cls }) => {
+      const div = document.createElement('div');
+      div.className = 'log-line' + (cls ? ` ${cls}` : '');
+      div.textContent = text;
+      logEl.appendChild(div);
+    });
+    logEl.scrollTop = logEl.scrollHeight;
+  } catch (e) {}
+}
+
+function persistLogLine(text, cls) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(LOG_KEY) || '[]');
+    saved.push({ text, cls });
+    sessionStorage.setItem(LOG_KEY, JSON.stringify(saved));
+  } catch (e) {}
+}
 
 function log(line, cls) {
+  const ts = new Date().toISOString().split('T')[1].slice(0, 8);
+  const text = `[${ts}] ${line}`;
   const div = document.createElement('div');
   div.className = 'log-line' + (cls ? ` ${cls}` : '');
-  const ts = new Date().toISOString().split('T')[1].slice(0, 8);
-  div.textContent = `[${ts}] ${line}`;
+  div.textContent = text;
   logEl.appendChild(div);
   logEl.scrollTop = logEl.scrollHeight;
+  persistLogLine(text, cls);
 }
 
 async function fetchMe() {
   const userLine = document.getElementById('user-line');
   userLine.textContent = 'Consultando GET /api/v1/me...';
   try {
-    const res = await fetch(`${location.origin}/api/v1/me`, { credentials: 'include' });
+    const res = await fetch(`${location.origin}/api/v1/me`, { credentials: 'include', cache: 'no-store' });
     if (!res.ok) {
       userLine.innerHTML = `<b style="color:var(--red)">HTTP ${res.status}</b> — no autenticado o sesión terminada`;
       log(`GET /api/v1/me: HTTP ${res.status}`, 'fail');
@@ -155,7 +181,7 @@ async function tryEndpoint(method, path, resultEl) {
   if (resultEl) { resultEl.textContent = '...'; resultEl.className = 'result pending'; }
   let bodyText = '';
   try {
-    const res = await fetch(`${location.origin}${path}`, { method, credentials: 'include' });
+    const res = await fetch(`${location.origin}${path}`, { method, credentials: 'include', cache: 'no-store' });
     try { bodyText = (await res.text()).slice(0, 200); } catch (e) {}
     const ok = res.status >= 200 && res.status < 300;
     if (resultEl) {
@@ -198,9 +224,9 @@ function renderCandidates() {
 document.getElementById('btn-refresh-me').addEventListener('click', fetchMe);
 
 document.getElementById('btn-navigate-logout').addEventListener('click', () => {
-  log('Abriendo /logout en pestaña nueva...');
+  log('Abriendo /logout en pestaña nueva. Recargando esta página en 5s para chequear /api/v1/me sin caché...');
   window.open(`${location.origin}/logout`, '_blank');
-  setTimeout(fetchMe, 2000);
+  setTimeout(() => location.reload(), 5000);
 });
 
 document.getElementById('btn-custom-try').addEventListener('click', async () => {
@@ -218,8 +244,10 @@ document.getElementById('btn-copy-log').addEventListener('click', () => {
 
 document.getElementById('btn-clear-log').addEventListener('click', () => {
   logEl.innerHTML = '';
+  sessionStorage.removeItem(LOG_KEY);
 });
 
+loadPersistedLog();
 renderCandidates();
 fetchMe();
 </script>
