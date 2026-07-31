@@ -3459,18 +3459,23 @@ class DestinoDocaSession {
   }
 
   pickDoca() {
-    // Solo docas numéricas en la lista — el catálogo puede traer otros
-    // valores en esa columna que no son docas reales. Se puede escribir
+    // Todas las docas del catálogo, sin filtrar — se ordenan numéricas
+    // primero (de menor a mayor) y el resto alfabético. Se puede escribir
     // cualquier valor a mano (Enter) si la doca real no aparece listada.
-    const docas = Object.keys(this.catalogIndex || {})
-      .filter((d) => this.isNum(d))
-      .sort((a, b) => Number(a) - Number(b));
+    const docas = Object.keys(this.catalogIndex || {}).sort((a, b) => {
+      const an = this.isNum(a);
+      const bn = this.isNum(b);
+      if (an && bn) return Number(a) - Number(b);
+      if (an && !bn) return -1;
+      if (!an && bn) return 1;
+      return a.localeCompare(b, 'es');
+    });
 
     this.renderPicker({
       title: '¿Cuál es la doca?',
       options: docas,
       placeholder: 'Buscar o escribir la doca...',
-      emptyMessage: 'No hay docas numéricas en el catálogo — escribe la doca y presiona Enter.',
+      emptyMessage: 'No hay docas en el catálogo — escribe la doca y presiona Enter.',
       allowManual: true,
       onPick: (doca) => {
         this.doca = doca;
