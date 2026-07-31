@@ -1032,10 +1032,10 @@
     return index;
   }
 
-  // Catálogo de Pre-Missort: el CSV trae un destino por fila y, en la
-  // columna DOCA, la lista de docas donde ese destino se puede armar,
-  // separadas por ";" (ej. fila "DESTINO_A, DOCA1;DOCA2;DOCA3"). El índice
-  // se invierte a { doca: [destino, destino, ...] } porque en la app la
+  // Catálogo de Pre-Missort: el CSV trae una doca por fila y, en la
+  // columna DESTINO, la lista de destinos válidos para esa doca,
+  // separados por ";" (ej. fila "DOCA1, DESTINO_A;DESTINO_B;DESTINO_C").
+  // El índice queda { doca: [destino, destino, ...] } porque en la app la
   // doca es fija por sesión de escaneo y el destino cambia por cada HU.
   function buildDestinoDocaCatalogIndex(rows) {
     if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
@@ -1054,11 +1054,11 @@
     const index = {};
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
-      const destino = (row[col.destino] || '').trim();
-      const docaCell = (row[col.doca] || '').trim();
-      if (!destino || !docaCell) continue;
-      docaCell.split(';').map((d) => d.trim()).filter(Boolean).forEach((doca) => {
-        if (!index[doca]) index[doca] = [];
+      const doca = (row[col.doca] || '').trim();
+      const destinoCell = (row[col.destino] || '').trim();
+      if (!doca || !destinoCell) continue;
+      if (!index[doca]) index[doca] = [];
+      destinoCell.split(';').map((d) => d.trim()).filter(Boolean).forEach((destino) => {
         if (!index[doca].includes(destino)) index[doca].push(destino);
       });
     }
