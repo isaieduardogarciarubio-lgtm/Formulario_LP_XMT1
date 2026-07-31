@@ -3562,9 +3562,9 @@ class DestinoDocaSession {
         placeholder: 'HU',
         isActive: () => !!body && body.contains(input) && ScanUI.mode() === 'handheld' && !this.locked,
         onSubmit: (val) => {
-          const hu = ScanParser.parse(val, 'hu');
+          const hu = this.parseHu(val);
           if (!hu) {
-            this.supportEl.textContent = 'HU inválido. Verifica el número e intenta de nuevo.';
+            this.supportEl.textContent = `HU inválido: ${this.rawSnippet(val)}`;
             this.supportEl.classList.add('error');
             input.value = '';
             return;
@@ -3598,14 +3598,32 @@ class DestinoDocaSession {
   handleScan(rawText) {
     if (this.locked) return;
 
-    const hu = ScanParser.parse(rawText, 'hu');
+    const hu = this.parseHu(rawText);
     if (!hu) {
       this.vibrate(40);
-      this.flash('error', 'Código no reconocido — no es un HU válido.');
+      this.flash('error', `HU no reconocido: ${this.rawSnippet(rawText)}`);
       return;
     }
 
     this.handleHuScanned(hu);
+  }
+
+  /**
+   * Parsea el HU y, si falla, registra el valor crudo en la consola de
+   * debug para poder ver exactamente qué trae el código escaneado (útil
+   * cuando el QR es un JSON con una estructura no esperada).
+   */
+  parseHu(raw) {
+    const hu = ScanParser.parse(raw, 'hu');
+    if (!hu) {
+      DebugConsole.log(`HU no reconocido — valor crudo: ${String(raw)}`, 'warn');
+    }
+    return hu;
+  }
+
+  rawSnippet(raw) {
+    const s = String(raw || '').trim();
+    return s.length > 40 ? `${s.slice(0, 40)}…` : s;
   }
 
   enterManualEntry() {
@@ -3629,9 +3647,9 @@ class DestinoDocaSession {
     input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
-      const hu = ScanParser.parse(input.value, 'hu');
+      const hu = this.parseHu(input.value);
       if (!hu) {
-        this.supportEl.textContent = 'HU inválido. Verifica el número e intenta de nuevo.';
+        this.supportEl.textContent = `HU inválido: ${this.rawSnippet(input.value)}`;
         this.supportEl.classList.add('error');
         return;
       }
