@@ -1033,8 +1033,9 @@
   }
 
   // Catálogo de Pre-Missort: [DESTINO, DOCA] → índice por destino, con la
-  // lista de docas válidas para ese destino (puede repetirse destino en
-  // varias filas, una por doca).
+  // lista de docas válidas para ese destino. Puede repetirse destino en
+  // varias filas, y/o traer varias docas en una sola celda separadas por
+  // ";" (ej. "DOCA1;DOCA2;DOCA3") — ambas formas se soportan.
   function buildDestinoDocaCatalogIndex(rows) {
     if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
 
@@ -1053,10 +1054,12 @@
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
       const destino = (row[col.destino] || '').trim();
-      const doca = (row[col.doca] || '').trim();
-      if (!destino || !doca) continue;
+      const docaCell = (row[col.doca] || '').trim();
+      if (!destino || !docaCell) continue;
       if (!index[destino]) index[destino] = [];
-      if (!index[destino].includes(doca)) index[destino].push(doca);
+      docaCell.split(';').map((d) => d.trim()).filter(Boolean).forEach((doca) => {
+        if (!index[destino].includes(doca)) index[destino].push(doca);
+      });
     }
 
     if (Object.keys(index).length === 0) {

@@ -3464,9 +3464,24 @@ class DestinoDocaSession {
     this.count = 0;
   }
 
+  /**
+   * Si ya hay un destino/doca previo (persistido entre sesiones) y sigue
+   * siendo válido en el catálogo actual, el primer paso es directo a
+   * escanear — no se vuelve a preguntar destino/doca cada vez que se abre
+   * el log. El botón "Cambiar" en la pantalla de escaneo sigue disponible
+   * para ajustarlo. Si no hay uno previo, o el catálogo ya no lo tiene, se
+   * pide una vez.
+   */
   render(containerId) {
     this.container = document.getElementById(containerId);
-    this.pickDestinoDoca();
+    const validDocas = this.catalogIndex[this.initialDestino] || [];
+    if (this.initialDestino && this.initialDoca && validDocas.includes(this.initialDoca)) {
+      this.destino = this.initialDestino;
+      this.doca = this.initialDoca;
+      this.renderLoop();
+    } else {
+      this.pickDestinoDoca();
+    }
   }
 
   destroy() {
@@ -5365,6 +5380,7 @@ class CapturaApp {
       this.loadHeaderLogo();
 
       await this.loadScanMode();
+      await this.loadLastDestinoDoca();
       await this.loadCatalog();
       await this.loadDriversCatalog();
       await this.loadBarreduraCatalog();
@@ -5539,6 +5555,32 @@ class CapturaApp {
       await RecordStore.setSetting('scanMode', mode);
     } catch (e) {
       DebugConsole.log(`No se pudo guardar el modo de escaneo: ${e.message}`, 'warn');
+    }
+  }
+
+  /**
+   * Último destino/doca de Pre-Missort, persistido por dispositivo para
+   * que reabrir el log (o recargar la app) vaya directo a escanear en vez
+   * de forzar a re-elegir cada vez — "Cambiar" arriba sigue permitiendo
+   * ajustarlo cuando haga falta.
+   */
+  async loadLastDestinoDoca() {
+    try {
+      const saved = await RecordStore.getSetting('lastDestinoDoca');
+      if (saved && saved.destino && saved.doca) {
+        this.lastDestino = saved.destino;
+        this.lastDoca = saved.doca;
+      }
+    } catch (e) {
+      DebugConsole.log(`No se pudo leer el destino/doca guardado: ${e.message}`, 'warn');
+    }
+  }
+
+  async saveLastDestinoDoca(destino, doca) {
+    try {
+      await RecordStore.setSetting('lastDestinoDoca', { destino, doca });
+    } catch (e) {
+      DebugConsole.log(`No se pudo guardar el destino/doca: ${e.message}`, 'warn');
     }
   }
 
@@ -5792,6 +5834,7 @@ class CapturaApp {
       if (formId === 'destino_doca') {
         this.lastDestino = values.destino;
         this.lastDoca = values.doca;
+        this.saveLastDestinoDoca(values.destino, values.doca);
       }
 
       const ts = new Date().toISOString();
