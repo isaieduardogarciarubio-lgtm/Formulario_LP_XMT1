@@ -2063,7 +2063,7 @@ class PhotoCamera {
   async start(videoEl) {
     this.videoEl = videoEl;
     this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: { facingMode: { ideal: 'environment' } },
       audio: false,
     });
     this.track = this.stream.getVideoTracks()[0];
@@ -3580,7 +3580,7 @@ class DestinoDocaSession {
 
     this.container.querySelector('.scanner-body').innerHTML = `
       <div class="step-input-wrap">
-        <input type="text" class="step-input session-manual-input" placeholder="Escribe el HU" />
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el HU" inputMode="none" />
       </div>
     `;
     const input = this.container.querySelector('.session-manual-input');
@@ -3895,7 +3895,7 @@ class InboundDriversSession {
         </div>
         <h1 class="step-question">¿Cuál es el ID de ruta?</h1>
         <div class="step-input-wrap">
-          <input type="text" class="step-input route-manual-input" placeholder="Ej. 100897405" />
+          <input type="text" class="step-input route-manual-input" placeholder="Ej. 100897405" inputMode="none" />
         </div>
         <div class="step-support ${message ? 'error' : ''}">${message || 'Escribe el ID de ruta y presiona Enter.'}</div>
       </div>
@@ -4140,7 +4140,7 @@ class InboundDriversSession {
 
     this.container.querySelector('.scanner-body').innerHTML = `
       <div class="step-input-wrap">
-        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" inputMode="none" />
       </div>
     `;
     const input = this.container.querySelector('.session-manual-input');
@@ -4634,7 +4634,7 @@ class BarreduraSession {
 
     this.container.querySelector('.scanner-body').innerHTML = `
       <div class="step-input-wrap">
-        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" inputMode="none" />
       </div>
     `;
     const input = this.container.querySelector('.session-manual-input');
@@ -4760,7 +4760,7 @@ class BarreduraSession {
         </div>
         <h1 class="step-question">Escribe el estatus (${id})</h1>
         <div class="step-input-wrap">
-          <input type="text" class="step-input sobrante-otro-input" placeholder="ESTATUS" />
+          <input type="text" class="step-input sobrante-otro-input" placeholder="ESTATUS" inputMode="none" />
         </div>
         <div class="step-support">Solo mayúsculas. Presiona Enter para guardar.</div>
       </div>
