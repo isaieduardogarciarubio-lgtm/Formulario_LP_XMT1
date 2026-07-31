@@ -19,7 +19,7 @@ Formulario dinámico para 7 logs:
 - **Linehaul**: Escanea HU, área, origen y canalización
 - **Inbound FM**: Escanea patente, diferencia y hallazgo
 - **Inbound / Drivers**: Escanea el QR del conductor (o ingresa la ruta a mano), y audita en loop continuo los shipments Frágil/HV de esa ruta contra el catálogo publicado desde el Dashboard
-- **Barredura**: Escaneo continuo de shipments contra el inventario del día (catálogo publicado desde el Dashboard). Marca faltantes/sobrantes, no repite un ID en 12h (dedup global) y para sobrantes pide estatus del paquete
+- **Barredura**: Lugar fijo por sesión (persistido, botón "Cambiar" rápido); escaneo libre y continuo de shipments, sin catálogo, no repite un ID en 12h (dedup global)
 
 **Características**:
 - ✅ Modo **Handheld** (lector integrado HID, principal) o **Cámara** (BarcodeDetector) con toggle, preferencia guardada por dispositivo
@@ -35,8 +35,8 @@ Formulario dinámico para 7 logs:
 Visualización de datos en tiempo real:
 - Carga automática desde los 7 State Buckets
 - Tabs por tipo de log (Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura)
-- Un solo uploader de CSV que detecta automáticamente el tipo de catálogo (Pre-Missort, Inbound / Drivers o Barredura) por sus columnas y lo publica
-- Exportación de faltantes y sobrantes de Barredura como CSV
+- Un solo uploader de CSV que detecta automáticamente el tipo de catálogo (Pre-Missort o Inbound / Drivers) por sus columnas y lo publica
+- Exportación de lo capturado en Barredura como CSV
 - KPIs + gráficos interactivos (Plotly)
 - Tabla filtrable con búsqueda
 - Modal para ver fotos en resolución completa
@@ -105,7 +105,6 @@ inbound_drivers_master  → Registros del log Inbound / Drivers (1 por shipment 
 barredura_master        → Registros del log Barredura (1 por shipment escaneado)
 catalogo_destino_doca   → Catálogo destino/doca [DESTINO, DOCA] (publicado desde el Dashboard)
 catalogo_inbound_drivers → Catálogo de rutas/shipments Frágil/HV (publicado desde el Dashboard)
-catalogo_barredura      → Catálogo/inventario del día [Shipment_ID, Fecha_Inbound, HUB_Status]
 photo_folders           → { formId: folder_id } — una carpeta de fotos por tipo de log, compartida entre dispositivos
 ```
 

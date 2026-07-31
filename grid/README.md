@@ -58,20 +58,13 @@ Si el QR trae un carrier/placa distinto al del catálogo, no se muestra la compa
 
 ## 🧹 Barredura — inventario del día
 
-Este log necesita el catálogo del inventario publicado en `catalogo_barredura` — si no está publicado, el log no abre y avisa. Se publica desde el **Dashboard** (único botón de carga en el navbar), subiendo un CSV con estas columnas (solo `SHIPMENT_ID` es obligatoria):
-
-```
-Shipment_ID, Fecha_Inbound, HUB_Status
-```
+Este log no usa catálogo — es escaneo libre de shipments en un lugar fijo por sesión.
 
 **Flujo de captura:**
-1. Va directo a escanear. Desde el arranque muestra el conteo `encontrados / total · faltantes · sobrantes`. Al abrir, lee `barredura_master` (+ la cola local) de las últimas 12h y esos IDs ya cuentan como encontrados (dedup **global** entre dispositivos).
-2. Cada shipment escaneado se agrega al log inmediatamente (es un inventario):
-   - **En catálogo** → se cuenta como encontrado, sin foto ni preguntas.
-   - **Fuera de catálogo** (sobrante) → pide estatus del paquete de un enum `[En Mesa de Ayuda/Dañado, En Sorteo, En Inbound, Otro]`; para **Otro** hay un texto libre en mayúsculas.
-   - **Repetido en 12h** → aviso, no se vuelve a agregar (no se repiten IDs en un rango de 12h).
-3. El panel de faltantes lista los IDs del catálogo que aún no se escanean (con su HUB_Status/Fecha_Inbound).
-4. **Finalizar barredura** cierra la sesión; los IDs no escaneados quedan como faltantes (no generan registro). El resultado clave — qué IDs faltaron — se ve y se exporta desde el Dashboard.
+1. Primer paso: **¿Dónde estás escaneando?** (texto libre, ej. "ANDÉN 5"). Se pregunta una sola vez — queda fijo entre escaneos y persiste entre aperturas de la app (no se repregunta cada vez), con un botón **Cambiar** siempre visible para ajustarlo.
+2. Después va directo al loop de escaneo: cada shipment escaneado se guarda de inmediato (Shipment ID + lugar), sin preguntar nada más, sin comparar contra ningún inventario.
+3. **Repetido en 12h** → aviso, no se vuelve a agregar. Al abrir el log se leen `barredura_master` (+ la cola local) de las últimas 12h — esos IDs quedan bloqueados desde el arranque (dedup **global** entre dispositivos), aunque sean de otra sesión o dispositivo.
+4. Para exportar solo se necesita el listado completo de lo escaneado — se hace desde el Dashboard (botón **Exportar capturados**, pestaña Barredura).
 
 ## 🚀 Despliegue (Captura)
 
@@ -176,8 +169,8 @@ Un **dashboard de solo lectura en Grid** que:
 - Permite **refresh manual** con reintento automático en conflictos
 - Permite **borrar un registro** individual (tabla → ícono de basura), escribiendo el bucket actualizado
 - **Descarga consolidada** en CSV (todo) o **solo lo capturado hoy** (ícono de calendario junto al de descarga, todos los logs combinados)
-- **Publica los catálogos de Pre-Missort, Inbound / Drivers y Barredura** (un solo botón de carga en el navbar): sube un CSV, detecta automáticamente el tipo por sus columnas, lo valida/parsea y lo escribe en `catalogo_destino_doca` / `catalogo_inbound_drivers` / `catalogo_barredura`
-- **Exporta faltantes y sobrantes de Barredura** como CSV (botones en la pestaña Barredura)
+- **Publica los catálogos de Pre-Missort e Inbound / Drivers** (un solo botón de carga en el navbar): sube un CSV, detecta automáticamente el tipo por sus columnas, lo valida/parsea y lo escribe en `catalogo_destino_doca` / `catalogo_inbound_drivers`
+- **Exporta lo capturado en Barredura** como CSV (botón en la pestaña Barredura)
 
 ## 📋 Logs Soportados (Dashboard)
 
@@ -189,17 +182,16 @@ Un **dashboard de solo lectura en Grid** que:
 | **Linehaul** | HU, Área, Armado Sitio, Origen (cond), Canalización, Foto (opt), Comentarios (opt) | Total, por Área | Área (dona), Canalización (barras) |
 | **Inbound FM** | Patente, Diferencia de Shipments, Hallazgo, Evidencia (opt) | Total, por Hallazgo | Hallazgo (barras) |
 | **Inbound / Drivers** | Ruta, Carrier, Placa, Shipment ID, Domain, Cost USD, Tipo (Frágil/HV), Estado, Foto | Total, por Estado, Costo USD auditado, Rutas con divergencia QR | Estado (dona), Costo USD por Ruta (barras) |
-| **Barredura** | Shipment ID, Estado (En/Fuera de catálogo), Situación (sobrantes), Fecha Inbound, HUB Status | Escaneados, En catálogo, Sobrantes, Faltantes, Total catálogo | Cobertura del inventario (dona), Estatus de sobrantes (barras) |
+| **Barredura** | Shipment ID, Lugar | Total, por Lugar | Escaneos por lugar (barras) |
 
-## 📤 Publicar catálogos (Pre-Missort, Inbound/Drivers, Barredura)
+## 📤 Publicar catálogos (Pre-Missort, Inbound/Drivers)
 
-Hay un solo ícono de carga (⬆) en el navbar del Dashboard para los 3 catálogos — detecta cuál es por las columnas del CSV, no hay que elegir nada:
+Hay un solo ícono de carga (⬆) en el navbar del Dashboard para los 2 catálogos — detecta cuál es por las columnas del CSV, no hay que elegir nada. Barredura no usa catálogo (escaneo libre por lugar).
 
-- **Pre-Missort**: columnas `DESTINO, DOCA` → publica en `catalogo_destino_doca`.
+- **Pre-Missort**: columnas `DOCA, DESTINO` (una fila por doca, destinos separados por `;`) → publica en `catalogo_destino_doca`.
 - **Inbound/Drivers**: columnas `ID_ROUTE, CARRIER, PLACA, SHIPMENT_ID, DOMAIN, COST_USD, RESULTADO` (entre otras) → publica en `catalogo_inbound_drivers`.
-- **Barredura**: columna `Shipment_ID` (con `Fecha_Inbound`/`HUB_Status` opcionales) → publica en `catalogo_barredura`.
 
-Cada catálogo **sobreescribe** la versión anterior (no hace merge). Para Barredura, además recalcula los faltantes al instante y habilita en la pestaña **Barredura** los botones **Exportar faltantes** (IDs del catálogo no escaneados en el rango de fecha) y **Exportar sobrantes** (IDs escaneados fuera de catálogo con su estatus).
+Cada catálogo **sobreescribe** la versión anterior (no hace merge). En la pestaña **Barredura** hay un botón **Exportar capturados** con el listado completo de lo escaneado en el rango de fecha filtrado.
 
 ## 📤 Publicar el catálogo de Inbound / Drivers
 
@@ -316,8 +308,7 @@ Todos con tema Nocturne: fondo #1a1a19, texto blanco.
 | "Catálogo de destino/doca no publicado" en Pre-Missort | Nadie subió el CSV todavía | Sube el catálogo desde el Dashboard (ícono ⬆ en el navbar, detecta el tipo solo) |
 | "Catálogo de rutas no publicado" en Inbound/Drivers | Nadie subió el CSV todavía | Sube el catálogo desde el Dashboard (ícono ⬆ en el navbar) |
 | "Ruta no encontrada en el catálogo" | El `route_id` del QR/manual no existe en el CSV publicado | Verifica el `ID_ROUTE` en el catálogo, o vuelve a publicarlo |
-| "Catálogo de barredura no publicado" | Nadie subió el CSV del inventario | Sube el catálogo Barredura desde el Dashboard (mismo ícono ⬆ en el navbar) |
-| "Ya escaneado en las últimas 12h" en Barredura | El ID ya se registró en el inventario (dedup 12h global) | Es esperado — no se repiten IDs en 12h; usa el conteo de faltantes para ver qué falta |
+| "Ya escaneado en las últimas 12h" en Barredura | El ID ya se escaneó (por cualquier dispositivo) en las últimas 12h | Es esperado — no se repiten IDs en 12h |
 
 ## 🔄 Auto-Polling
 
