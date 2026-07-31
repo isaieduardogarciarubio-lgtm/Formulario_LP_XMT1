@@ -175,7 +175,7 @@ Un **dashboard de solo lectura en Grid** que:
 - Muestra **KPIs + gráficos Plotly + tabla filtrable** por log en tiempo real
 - Permite **refresh manual** con reintento automático en conflictos
 - Permite **borrar un registro** individual (tabla → ícono de basura), escribiendo el bucket actualizado
-- **Descarga consolidada** en CSV
+- **Descarga consolidada** en CSV (todo) o **solo lo capturado hoy** (ícono de calendario junto al de descarga, todos los logs combinados)
 - **Publica los catálogos de Pre-Missort, Inbound / Drivers y Barredura** (un solo botón de carga en el navbar): sube un CSV, detecta automáticamente el tipo por sus columnas, lo valida/parsea y lo escribe en `catalogo_destino_doca` / `catalogo_inbound_drivers` / `catalogo_barredura`
 - **Exporta faltantes y sobrantes de Barredura** como CSV (botones en la pestaña Barredura)
 
