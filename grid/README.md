@@ -31,9 +31,9 @@ Aplicación web de captura de auditorías integrada con Grid, soportando 7 logs 
 
 ## 🎯 Pre-Missort — catálogo destino/doca
 
-Este log necesita el catálogo publicado en el State Bucket `catalogo_destino_doca` — si no está publicado, el log avisa y no abre. Se publica desde el **Dashboard** (único botón de carga en el navbar, detecta el tipo de catálogo automáticamente — ver sección de Dashboard abajo), subiendo un CSV con las columnas `DESTINO, DOCA` (puede repetirse el destino en varias filas, una por doca).
+Este log necesita el catálogo publicado en el State Bucket `catalogo_destino_doca` — si no está publicado, el log avisa y no abre. Se publica desde el **Dashboard** (único botón de carga en el navbar, detecta el tipo de catálogo automáticamente — ver sección de Dashboard abajo), subiendo un CSV con las columnas `DESTINO, DOCA`. Una doca puede traer varios destinos válidos, ya sea en filas repetidas o en una sola celda separados por `;` (ej. `DESTINO_A;DESTINO_B;DESTINO_C`).
 
-**Flujo de captura:** pensado para ser rápido en handheld — se elige destino/doca **una sola vez por sesión** (picker de búsqueda) y después se escanean HUs en loop continuo sin volver a preguntar destino/doca en cada uno. El "Resultado" se calcula automáticamente: doca puramente numérica → "Sin incidencia"; si no → "Erroneo".
+**Flujo de captura:** pensado para ser rápido en handheld. La **doca es fija por sesión** — se elige una vez (picker de búsqueda) y persiste entre aperturas de la app (no se vuelve a preguntar), con un botón **Cambiar** siempre visible para ajustarla cuando haga falta. El **destino cambia por cada HU**: se escanea el HU y de inmediato se pide el destino (filtrado a los válidos para la doca actual); al elegirlo se guarda el registro y se vuelve directo a escanear. El "Resultado" se calcula automáticamente: doca puramente numérica → "Sin incidencia"; si no → "Erroneo".
 
 ## 🚚 Inbound / Drivers — catálogo de rutas/shipments
 
@@ -89,8 +89,8 @@ El log "Pre-Missort" (destino/doca) necesita el catálogo en el State Bucket `ca
 ```json
 {
   "index": {
-    "DESTINO_A": ["DOCA1", "DOCA2", "DOCA3"],
-    "DESTINO_B": ["DOCA4", "DOCA5"]
+    "DOCA1": ["DESTINO_A", "DESTINO_B", "DESTINO_C"],
+    "DOCA2": ["DESTINO_D", "DESTINO_E"]
   }
 }
 ```

@@ -1596,18 +1596,19 @@ class RecordStore {
  * Form configuration
  */
 const FORMS_CONFIG = {
-  // No usa el wizard genérico de un campo por pantalla: fija destino/doca
-  // una vez por sesión y escanea HUs en loop continuo (ver
+  // No usa el wizard genérico de un campo por pantalla: fija la doca una
+  // vez por sesión y escanea HUs en loop continuo, pidiendo el destino
+  // (que sí cambia por cada HU) después de cada escaneo (ver
   // DestinoDocaSession), igual que Inbound/Drivers y Barredura.
   destino_doca: {
     id: 'destino_doca',
     title: 'Pre - Missort',
-    description: 'Escanea HU, valida destino y doca',
+    description: 'Escanea HU y elige destino para la doca fija de la sesión',
     icon: 'scan',
     fields: [
+      { id: 'doca', type: 'text' },
       { id: 'hu', type: 'scanner', idType: 'hu' },
-      { id: 'destino', type: 'destino_picker' },
-      { id: 'doca', type: 'doca_picker' },
+      { id: 'destino', type: 'text' },
     ],
   },
 
@@ -2394,14 +2395,6 @@ class FormEngine {
     }
     if (field.type === 'choice') {
       this.renderChoiceStep(field);
-      return;
-    }
-    if (field.type === 'destino_picker') {
-      this.renderDestinoStep(field);
-      return;
-    }
-    if (field.type === 'doca_picker') {
-      this.renderDocaStep(field);
       return;
     }
 
@@ -3239,108 +3232,6 @@ class FormEngine {
   }
 
   /* ====================================================================== */
-  /* Destino / Doca pickers: buscador + lista fija (Pre-Missort)            */
-  /* ====================================================================== */
-
-  isNum(s) {
-    return /^[0-9]+$/.test(String(s).trim());
-  }
-
-  renderPickerList(field, { options, placeholder, onPick, emptyMessage }) {
-    this.container.innerHTML = '';
-
-    const screen = document.createElement('div');
-    screen.className = 'step-screen';
-    screen.appendChild(this.buildProgress());
-
-    const h1 = document.createElement('h1');
-    h1.className = 'step-question';
-    h1.textContent = field.label;
-    screen.appendChild(h1);
-
-    const searchWrap = document.createElement('div');
-    searchWrap.className = 'picker-search';
-    const search = document.createElement('input');
-    search.type = 'text';
-    search.className = 'step-input';
-    search.placeholder = placeholder;
-    searchWrap.appendChild(search);
-    screen.appendChild(searchWrap);
-
-    const list = document.createElement('div');
-    list.className = 'picker-list';
-    screen.appendChild(list);
-
-    this.container.appendChild(screen);
-    this.errorTargetEl = list;
-
-    const renderList = (filter = '') => {
-      list.innerHTML = '';
-      const matches = options.filter((o) => o.toLowerCase().includes(filter.toLowerCase()));
-      if (!matches.length) {
-        const empty = document.createElement('div');
-        empty.className = 'picker-empty';
-        empty.textContent = emptyMessage || 'Sin coincidencias.';
-        list.appendChild(empty);
-        return;
-      }
-      matches.forEach((opt) => {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'picker-opt';
-        row.textContent = opt;
-        row.addEventListener('click', () => onPick(opt));
-        list.appendChild(row);
-      });
-    };
-
-    search.addEventListener('input', () => renderList(search.value));
-    renderList();
-
-    setTimeout(() => search.focus(), 60);
-  }
-
-  renderDestinoStep(field) {
-    const destinos = Object.keys(this.catalogIndex || {}).sort((a, b) => a.localeCompare(b, 'es'));
-
-    this.renderPickerList(field, {
-      options: destinos,
-      placeholder: 'Buscar destino...',
-      emptyMessage: 'No hay destinos disponibles en el catálogo.',
-      onPick: (destino) => {
-        if (this.values.destino && this.values.destino !== destino) {
-          delete this.values.doca;
-          delete this.values.resultado;
-        }
-        this.values.destino = destino;
-        this.advance();
-      },
-    });
-  }
-
-  renderDocaStep(field) {
-    const docas = ((this.catalogIndex || {})[this.values.destino] || []).slice().sort((a, b) => {
-      const an = this.isNum(a);
-      const bn = this.isNum(b);
-      if (an && bn) return Number(a) - Number(b);
-      if (an && !bn) return -1;
-      if (!an && bn) return 1;
-      return a.localeCompare(b, 'es');
-    });
-
-    this.renderPickerList(field, {
-      options: docas,
-      placeholder: 'Buscar doca...',
-      emptyMessage: 'No hay docas disponibles para este destino.',
-      onPick: (doca) => {
-        this.values.doca = doca;
-        this.values.resultado = this.isNum(doca) ? 'Sin incidencia' : 'Erroneo';
-        this.advance();
-      },
-    });
-  }
-
-  /* ====================================================================== */
 
   readCurrentValue() {
     return this.currentInput ? this.currentInput.value.trim() : '';
@@ -3439,54 +3330,50 @@ class FormEngine {
 /**
  * DestinoDocaSession — flujo de escaneo rápido y continuo para Pre-Missort.
  *
- * Deliberadamente NO se construye sobre FormEngine para el loop de HU: ese
- * motor sigue intacto para el resto de los logs (un campo por pantalla,
- * confirmación explícita). Acá el destino y la doca se declaran UNA vez por
- * sesión (reutilizando FormEngine solo para ese par de pantallas, ya que
- * 'destino_picker'/'doca_picker' ya viven ahí) y después el HU se escanea en
- * loop continuo: la cámara se pide una sola vez con getUserMedia, cada
- * detección válida guarda el registro y retoma el escaneo sola, sin pedir
- * confirmación — la velocidad contrarreloj es el punto de este log.
+ * La DOCA es lo estable (se fija una vez por sesión, cambia poco — botón
+ * "Cambiar" arriba para ajustarla) y el DESTINO cambia por cada HU: el
+ * flujo real es doca (una vez) → [escanea HU → elige destino] en loop. No
+ * se construye sobre FormEngine (ese motor es para el resto de los logs,
+ * un campo por pantalla con confirmación explícita) — acá cada HU válido
+ * dispara de inmediato el picker de destino, y al elegirlo se guarda el
+ * registro y se vuelve solo al escaneo, sin pedir confirmación aparte.
  */
 class DestinoDocaSession {
   constructor(opts = {}) {
+    // catalogIndex: { doca: [destino, destino, ...] } — la doca es la
+    // clave (fija por sesión), el valor son los destinos válidos ahí.
     this.catalogIndex = opts.catalogIndex || {};
     this.onScan = opts.onScan;
     this.onExit = opts.onExit;
-    this.initialDestino = opts.initialDestino || null;
     this.initialDoca = opts.initialDoca || null;
-    this.destino = null;
     this.doca = null;
+    this.pendingHu = null;
     this.container = null;
     this.scanner = null;
-    this.pickerEngine = null;
     this.locked = false;
     this.count = 0;
   }
 
   /**
-   * Si ya hay un destino/doca previo (persistido entre sesiones) y sigue
-   * siendo válido en el catálogo actual, el primer paso es directo a
-   * escanear — no se vuelve a preguntar destino/doca cada vez que se abre
-   * el log. El botón "Cambiar" en la pantalla de escaneo sigue disponible
-   * para ajustarlo. Si no hay uno previo, o el catálogo ya no lo tiene, se
-   * pide una vez.
+   * Si ya hay una doca previa (persistida entre sesiones) y sigue vigente
+   * en el catálogo actual, el primer paso es directo a escanear — no se
+   * vuelve a preguntar la doca cada vez que se abre el log. "Cambiar"
+   * arriba sigue disponible para ajustarla. Si no hay una previa, o el
+   * catálogo ya no la tiene, se pide una vez.
    */
   render(containerId) {
     this.container = document.getElementById(containerId);
-    const validDocas = this.catalogIndex[this.initialDestino] || [];
-    if (this.initialDestino && this.initialDoca && validDocas.includes(this.initialDoca)) {
-      this.destino = this.initialDestino;
+    const docas = Object.keys(this.catalogIndex || {});
+    if (this.initialDoca && docas.includes(this.initialDoca)) {
       this.doca = this.initialDoca;
       this.renderLoop();
     } else {
-      this.pickDestinoDoca();
+      this.pickDoca();
     }
   }
 
   destroy() {
     this.stopScanner();
-    if (this.pickerEngine) this.pickerEngine.destroy();
   }
 
   stopScanner() {
@@ -3508,41 +3395,95 @@ class DestinoDocaSession {
     }
   }
 
-  pickDestinoDoca() {
+  /**
+   * Picker de búsqueda genérico (lista fija + filtro), usado tanto para
+   * elegir la doca al inicio como el destino después de cada HU.
+   */
+  renderPicker({ title, options, placeholder, emptyMessage, onPick, onBack }) {
     this.stopScanner();
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain dd-picker-back" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Pre-Missort</div>
+        </div>
+        <h1 class="step-question">${title}</h1>
+        <div class="picker-search"><input type="text" class="step-input dd-picker-search" placeholder="${placeholder}" /></div>
+        <div class="picker-list"></div>
+      </div>
+    `;
 
-    const initialValues = {};
-    const autoAdvanceFields = [];
-    if (this.initialDestino) {
-      initialValues.destino = this.initialDestino;
-      autoAdvanceFields.push('destino');
-    }
+    const search = this.container.querySelector('.dd-picker-search');
+    const list = this.container.querySelector('.picker-list');
 
-    this.container.innerHTML = '<div id="dd-session-picker"></div>';
-    this.pickerEngine = new FormEngine(
-      {
-        fields: [
-          { id: 'destino', type: 'destino_picker', label: '¿Cuál es el destino?', required: true },
-          { id: 'doca', type: 'doca_picker', label: '¿Cuál es la doca?', required: true },
-        ],
-      },
-      {
-        catalogIndex: this.catalogIndex,
-        initialValues,
-        autoAdvanceFields,
-        onComplete: (values) => {
-          this.destino = values.destino;
-          this.doca = values.doca;
-          this.initialDestino = values.destino;
-          this.initialDoca = values.doca;
-          this.renderLoop();
-        },
-        onCancel: () => {
-          if (this.onExit) this.onExit();
-        },
+    const renderList = (filter = '') => {
+      list.innerHTML = '';
+      const matches = options.filter((o) => o.toLowerCase().includes(filter.toLowerCase()));
+      if (!matches.length) {
+        const empty = document.createElement('div');
+        empty.className = 'picker-empty';
+        empty.textContent = emptyMessage || 'Sin coincidencias.';
+        list.appendChild(empty);
+        return;
       }
-    );
-    this.pickerEngine.render('dd-session-picker');
+      matches.forEach((opt) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'picker-opt';
+        row.textContent = opt;
+        row.addEventListener('click', () => onPick(opt));
+        list.appendChild(row);
+      });
+    };
+
+    search.addEventListener('input', () => renderList(search.value));
+    renderList();
+    setTimeout(() => search.focus(), 60);
+
+    this.container.querySelector('.dd-picker-back').addEventListener('click', () => {
+      if (onBack) onBack();
+      else if (this.onExit) this.onExit();
+    });
+  }
+
+  pickDoca() {
+    const docas = Object.keys(this.catalogIndex || {}).sort((a, b) => {
+      const an = this.isNum(a);
+      const bn = this.isNum(b);
+      if (an && bn) return Number(a) - Number(b);
+      if (an && !bn) return -1;
+      if (!an && bn) return 1;
+      return a.localeCompare(b, 'es');
+    });
+
+    this.renderPicker({
+      title: '¿Cuál es la doca?',
+      options: docas,
+      placeholder: 'Buscar doca...',
+      emptyMessage: 'No hay docas disponibles en el catálogo.',
+      onPick: (doca) => {
+        this.doca = doca;
+        this.initialDoca = doca;
+        this.renderLoop();
+      },
+    });
+  }
+
+  pickDestinoForHu(hu) {
+    const destinos = ((this.catalogIndex || {})[this.doca] || []).slice().sort((a, b) => a.localeCompare(b, 'es'));
+
+    this.renderPicker({
+      title: `Destino para ${hu}`,
+      options: destinos,
+      placeholder: 'Buscar destino...',
+      emptyMessage: 'No hay destinos disponibles para esta doca.',
+      onPick: (destino) => this.finishHu(hu, destino),
+      onBack: () => {
+        this.pendingHu = null;
+        this.locked = false;
+        this.renderLoop();
+      },
+    });
   }
 
   renderLoop() {
@@ -3559,7 +3500,7 @@ class DestinoDocaSession {
           <div class="step-progress">Pre-Missort</div>
         </div>
         <div class="session-pill">
-          <div class="session-pill-info">Destino: ${this.destino} · Doca: ${this.doca}</div>
+          <div class="session-pill-info">Doca: ${this.doca}</div>
           <button type="button" class="btn btn-secondary session-change-btn">Cambiar</button>
         </div>
         <div class="scan-mode-slot"></div>
@@ -3582,7 +3523,7 @@ class DestinoDocaSession {
       if (this.onExit) this.onExit();
     });
     this.container.querySelector('.session-change-btn').addEventListener('click', () => {
-      this.pickDestinoDoca();
+      this.pickDoca();
     });
 
     const body = this.container.querySelector('.scanner-body');
@@ -3612,12 +3553,8 @@ class DestinoDocaSession {
             input.value = '';
             return;
           }
-          this.processHu(hu).then(() => {
-            if (document.body.contains(input)) {
-              input.value = '';
-              input.focus();
-            }
-          });
+          input.value = '';
+          this.handleHuScanned(hu);
         },
       });
       body.appendChild(wrap);
@@ -3652,7 +3589,7 @@ class DestinoDocaSession {
       return;
     }
 
-    this.processHu(hu);
+    this.handleHuScanned(hu);
   }
 
   enterManualEntry() {
@@ -3682,34 +3619,36 @@ class DestinoDocaSession {
         this.supportEl.classList.add('error');
         return;
       }
-      this.processHu(hu).then(() => this.renderLoop());
+      this.handleHuScanned(hu);
     });
 
     setTimeout(() => input.focus(), 60);
   }
 
-  async processHu(hu) {
+  /**
+   * HU válido escaneado (por cámara, handheld o manual): pasa directo al
+   * picker de destino para ese HU — el registro se guarda al elegirlo
+   * (ver finishHu), no en este punto.
+   */
+  handleHuScanned(hu) {
     this.locked = true;
     if (this.scanner) this.scanner.pause();
+    this.pendingHu = hu;
+    this.pickDestinoForHu(hu);
+  }
 
+  async finishHu(hu, destino) {
     const resultado = this.isNum(this.doca) ? 'Sin incidencia' : 'Erroneo';
     this.vibrate(resultado === 'Sin incidencia' ? 60 : [40, 60, 40]);
-    this.flash(resultado === 'Sin incidencia' ? 'ok' : 'error', `${hu} · ${resultado}`);
 
     if (this.onScan) {
-      await this.onScan({ hu, destino: this.destino, doca: this.doca, resultado });
+      await this.onScan({ hu, destino, doca: this.doca, resultado });
     }
     this.count += 1;
-    if (this.counterEl) this.counterEl.textContent = `${this.count} HU escaneados en esta sesión`;
-
-    setTimeout(() => {
-      this.locked = false;
-      if (this.supportEl) {
-        this.supportEl.classList.remove('error');
-        this.supportEl.textContent = this.loopHint || 'Escaneando... apunta la cámara al HU.';
-      }
-      if (this.scanner) this.scanner.resume();
-    }, 900);
+    this.pendingHu = null;
+    this.locked = false;
+    this.renderLoop();
+    this.flash(resultado === 'Sin incidencia' ? 'ok' : 'error', `${hu} · ${destino} · ${resultado}`);
   }
 
   flash(kind, message) {
@@ -5203,7 +5142,6 @@ class CapturaApp {
     this.currentEngine = null;
     this.userEmail = null;
     this.pendingCount = 0;
-    this.lastDestino = null;
     this.lastDoca = null;
     this.folderIds = {}; // folder_id de Grid por tipo de log (cache en memoria)
     // Modo de captura de códigos: 'handheld' (lector integrado, principal) o
@@ -5380,7 +5318,7 @@ class CapturaApp {
       this.loadHeaderLogo();
 
       await this.loadScanMode();
-      await this.loadLastDestinoDoca();
+      await this.loadLastDoca();
       await this.loadCatalog();
       await this.loadDriversCatalog();
       await this.loadBarreduraCatalog();
@@ -5559,28 +5497,26 @@ class CapturaApp {
   }
 
   /**
-   * Último destino/doca de Pre-Missort, persistido por dispositivo para
-   * que reabrir el log (o recargar la app) vaya directo a escanear en vez
-   * de forzar a re-elegir cada vez — "Cambiar" arriba sigue permitiendo
-   * ajustarlo cuando haga falta.
+   * Última doca de Pre-Missort, persistida por dispositivo para que
+   * reabrir el log (o recargar la app) vaya directo a escanear en vez de
+   * forzar a re-elegirla cada vez — "Cambiar" arriba sigue permitiendo
+   * ajustarla cuando haga falta. El destino no se persiste: cambia por
+   * cada HU, se pregunta siempre.
    */
-  async loadLastDestinoDoca() {
+  async loadLastDoca() {
     try {
-      const saved = await RecordStore.getSetting('lastDestinoDoca');
-      if (saved && saved.destino && saved.doca) {
-        this.lastDestino = saved.destino;
-        this.lastDoca = saved.doca;
-      }
+      const saved = await RecordStore.getSetting('lastDoca');
+      if (saved) this.lastDoca = saved;
     } catch (e) {
-      DebugConsole.log(`No se pudo leer el destino/doca guardado: ${e.message}`, 'warn');
+      DebugConsole.log(`No se pudo leer la doca guardada: ${e.message}`, 'warn');
     }
   }
 
-  async saveLastDestinoDoca(destino, doca) {
+  async saveLastDoca(doca) {
     try {
-      await RecordStore.setSetting('lastDestinoDoca', { destino, doca });
+      await RecordStore.setSetting('lastDoca', doca);
     } catch (e) {
-      DebugConsole.log(`No se pudo guardar el destino/doca: ${e.message}`, 'warn');
+      DebugConsole.log(`No se pudo guardar la doca: ${e.message}`, 'warn');
     }
   }
 
@@ -5758,7 +5694,6 @@ class CapturaApp {
     if (formId === 'destino_doca') {
       this.currentEngine = new DestinoDocaSession({
         catalogIndex: this.catalogIndex,
-        initialDestino: this.lastDestino,
         initialDoca: this.lastDoca,
         onScan: (values) => this.onFormComplete(formId, values, { stayInSession: true }),
         onExit: () => this.renderMenu(),
@@ -5832,9 +5767,8 @@ class CapturaApp {
       if (!stayInSession) this.showToast('Guardando...', 'info');
 
       if (formId === 'destino_doca') {
-        this.lastDestino = values.destino;
         this.lastDoca = values.doca;
-        this.saveLastDestinoDoca(values.destino, values.doca);
+        this.saveLastDoca(values.doca);
       }
 
       const ts = new Date().toISOString();

@@ -1032,10 +1032,11 @@
     return index;
   }
 
-  // Catálogo de Pre-Missort: [DESTINO, DOCA] → índice por destino, con la
-  // lista de docas válidas para ese destino. Puede repetirse destino en
-  // varias filas, y/o traer varias docas en una sola celda separadas por
-  // ";" (ej. "DOCA1;DOCA2;DOCA3") — ambas formas se soportan.
+  // Catálogo de Pre-Missort: [DESTINO, DOCA] → índice por DOCA (la doca es
+  // fija por sesión de escaneo), con la lista de destinos válidos para esa
+  // doca (el destino cambia por cada HU escaneado). Puede repetirse doca en
+  // varias filas, y/o traer varios destinos en una sola celda separados
+  // por ";" (ej. "DESTINO_A;DESTINO_B;DESTINO_C") — ambas formas se soportan.
   function buildDestinoDocaCatalogIndex(rows) {
     if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
 
@@ -1053,12 +1054,12 @@
     const index = {};
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
-      const destino = (row[col.destino] || '').trim();
-      const docaCell = (row[col.doca] || '').trim();
-      if (!destino || !docaCell) continue;
-      if (!index[destino]) index[destino] = [];
-      docaCell.split(';').map((d) => d.trim()).filter(Boolean).forEach((doca) => {
-        if (!index[destino].includes(doca)) index[destino].push(doca);
+      const doca = (row[col.doca] || '').trim();
+      const destinoCell = (row[col.destino] || '').trim();
+      if (!doca || !destinoCell) continue;
+      if (!index[doca]) index[doca] = [];
+      destinoCell.split(';').map((d) => d.trim()).filter(Boolean).forEach((destino) => {
+        if (!index[doca].includes(destino)) index[doca].push(destino);
       });
     }
 
@@ -2189,8 +2190,8 @@
         { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'hu', header: 'HU' },
-        { field: 'destino', header: 'Destino' },
         { field: 'doca', header: 'Doca' },
+        { field: 'destino', header: 'Destino' },
         { field: 'resultado', header: 'Resultado' },
       ],
       fields: [],

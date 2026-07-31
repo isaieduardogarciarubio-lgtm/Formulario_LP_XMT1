@@ -13,7 +13,7 @@ Sistema completo de auditoría integrado con Grid: captura de formularios + dash
 **Ubicación**: `grid/captura_auditoria.html` (en Grid)
 
 Formulario dinámico para 7 logs:
-- **Destino/Doca (Pre-Missort)**: Escaneo continuo de HU (pensado para handheld), valida destino y doca contra el catálogo publicado desde el Dashboard
+- **Destino/Doca (Pre-Missort)**: Doca fija por sesión (persistida, botón "Cambiar" rápido); escanea HU en loop continuo y elige destino por cada uno, contra el catálogo publicado desde el Dashboard
 - **FURY**: Escanea shipment, captura foto y situación
 - **Contenerizado**: Escanea shipment y situación (foto si hay daño)
 - **Linehaul**: Escanea HU, área, origen y canalización
