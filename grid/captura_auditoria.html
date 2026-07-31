@@ -5288,11 +5288,14 @@ class CapturaApp {
   }
 
   /**
-   * Cierra sesión del usuario actual: limpia solo el estado ligado al
-   * usuario (no catálogos ni registros pendientes), intenta invalidar la
-   * sesión de Grid contra varios endpoints candidatos (no hay uno
-   * documentado en la Biblia — ver terminateGridSession) y sale del
-   * documento hacia la raíz de Grid para reflejar el resultado.
+   * Cierra sesión del usuario actual. No hay endpoint de logout documentado
+   * en la Biblia Grid (solo GET /api/v1/me vía cookie) ni expuesto al
+   * documento embebido (los candidatos de API dan 403 RBAC/TrafficCatalog),
+   * pero se confirmó empíricamente que navegar a /logout en la misma
+   * pestaña sí termina la sesión de verdad (redirige al SSO de la
+   * empresa). Si el SSO corporativo sigue activo, puede volver a autenticar
+   * al usuario automáticamente ahí — eso es comportamiento normal de SSO,
+   * no algo que la app deba evitar.
    */
   async logout() {
     const ok = await ConfirmModal.show({
@@ -5303,37 +5306,8 @@ class CapturaApp {
     });
     if (!ok) return;
 
-    this.showToast('Cerrando sesión...', 'info');
-    await this.terminateGridSession();
     this.userEmail = null;
-    location.href = location.origin;
-  }
-
-  /**
-   * No hay endpoint de logout documentado en la Biblia Grid (solo GET
-   * /api/v1/me para identidad, vía cookie de sesión) — se prueban
-   * candidatos comunes contra el mismo origen y se registra en
-   * DebugConsole cuál responde 2xx para confirmarlo empíricamente. Si
-   * ninguno funciona, igual se sale del documento hacia la raíz de Grid.
-   */
-  async terminateGridSession() {
-    const candidates = [
-      { method: 'POST', path: '/api/v1/logout' },
-      { method: 'POST', path: '/api/v1/auth/logout' },
-      { method: 'DELETE', path: '/api/v1/session' },
-      { method: 'DELETE', path: '/api/v1/sessions/current' },
-    ];
-    for (const { method, path } of candidates) {
-      try {
-        const res = await fetch(`${location.origin}${path}`, { method, credentials: 'include' });
-        DebugConsole.log(`Logout ${method} ${path}: HTTP ${res.status}`, res.ok ? 'info' : 'warn');
-        if (res.ok) return true;
-      } catch (e) {
-        DebugConsole.log(`Logout ${method} ${path}: ${e.message}`, 'warn');
-      }
-    }
-    DebugConsole.log('Ningún endpoint de logout respondió 2xx — revisa la consola de depuración', 'warn');
-    return false;
+    location.href = `${location.origin}/logout`;
   }
 
   /**
