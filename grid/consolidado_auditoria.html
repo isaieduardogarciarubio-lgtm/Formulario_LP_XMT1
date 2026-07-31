@@ -1037,10 +1037,21 @@
   // separados por ";" (ej. fila "DOCA1, DESTINO_A;DESTINO_B;DESTINO_C").
   // El índice queda { doca: [destino, destino, ...] } porque en la app la
   // doca es fija por sesión de escaneo y el destino cambia por cada HU.
+  /**
+   * Limpia caracteres invisibles que Sheets/Excel a veces dejan en celdas
+   * de texto al exportar a CSV (espacio de no separación, espacios/guiones
+   * de ancho cero, BOM perdido a mitad de celda) además del trim normal —
+   * si no se quitan, un valor que se ve como "10" puede no matchear como
+   * numérico puro.
+   */
+  function cleanCell(v) {
+    return String(v || '').replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim();
+  }
+
   function buildDestinoDocaCatalogIndex(rows) {
     if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
 
-    const header = rows[0].map(h => h.trim().toUpperCase());
+    const header = rows[0].map(h => cleanCell(h).toUpperCase());
     const idx = (name) => header.indexOf(name);
     const col = {
       destino: idx('DESTINO'),
@@ -1054,15 +1065,15 @@
     const index = {};
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
-      const rawDoca = (row[col.doca] || '').trim();
+      const rawDoca = cleanCell(row[col.doca]);
       // Excel suele exportar una columna numérica como "10.0" en vez de
       // "10" si la celda quedó con formato de número/general — se
       // normaliza para que la doca siga siendo reconocida como numérica.
       const doca = /^[0-9]+\.0+$/.test(rawDoca) ? rawDoca.split('.')[0] : rawDoca;
-      const destinoCell = (row[col.destino] || '').trim();
+      const destinoCell = cleanCell(row[col.destino]);
       if (!doca || !destinoCell) continue;
       if (!index[doca]) index[doca] = [];
-      destinoCell.split(';').map((d) => d.trim()).filter(Boolean).forEach((destino) => {
+      destinoCell.split(';').map((d) => cleanCell(d)).filter(Boolean).forEach((destino) => {
         if (!index[doca].includes(destino)) index[doca].push(destino);
       });
     }
