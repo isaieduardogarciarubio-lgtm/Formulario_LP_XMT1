@@ -5190,7 +5190,7 @@ class CapturaApp {
     this.pendingCount = 0;
     this.lastDestino = null;
     this.lastDoca = null;
-    this.folderId = null; // carpeta fija para organizar fotos
+    this.folderIds = {}; // folder_id de Grid por tipo de log (cache en memoria)
     // Modo de captura de códigos: 'handheld' (lector integrado, principal) o
     // 'camera'. Se restaura desde IndexedDB en init() (por dispositivo).
     this.scanMode = 'handheld';
@@ -5291,31 +5291,68 @@ class CapturaApp {
   }
 
   /**
-   * Carpeta fija en Grid para mantener las fotos organizadas en vez de
-   * sueltas entre todos los documentos. No es bloqueante: si falla, la
-   * app sigue funcionando normalmente, solo sin esa organización.
+   * Folder_id de Grid para un tipo de log — una carpeta POR LOG (no una
+   * compartida), reutilizada entre dispositivos vía el State Bucket
+   * photo_folders en vez de crear una carpeta nueva en cada sincronización.
+   * No es bloqueante: si falla, la foto ya subió igual, solo sin organizar.
    */
-  async ensureFolderId() {
+  async getOrCreateFolderId(formId) {
+    if (this.folderIds[formId]) return this.folderIds[formId];
+
     try {
-      DebugConsole.log('Creando/obteniendo carpeta de fotos...', 'info');
+      const bucket = await this.gridClient.getStateBucket('photo_folders');
+      if (bucket && bucket[formId]) {
+        this.folderIds[formId] = bucket[formId];
+        return bucket[formId];
+      }
+    } catch (e) {
+      DebugConsole.log(`No se pudo leer photo_folders: ${e.message}`, 'warn');
+    }
+
+    const label = (FORMS_CONFIG[formId] && FORMS_CONFIG[formId].title) || formId;
+    try {
+      DebugConsole.log(`Creando carpeta de fotos para ${label}...`, 'info');
       const res = await this.gridClient._fetchWithTimeout(
         `${location.origin}/api/v1/folders`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ name: 'Auditoría Grid' }),
+          body: JSON.stringify({ name: label }),
         }
       );
       const data = await res.json();
-      if (res.ok && data.folder_id) {
-        this.folderId = data.folder_id;
-        DebugConsole.log(`Carpeta lista: ${this.folderId}`, 'info');
-      } else {
-        DebugConsole.log(`No se pudo crear carpeta: ${res.status}`, 'warn');
+      if (!res.ok || !data.folder_id) {
+        DebugConsole.log(`No se pudo crear carpeta para ${label}: ${res.status}`, 'warn');
+        return null;
       }
+      this.folderIds[formId] = data.folder_id;
+      await this.savePhotoFolder(formId, data.folder_id);
+      DebugConsole.log(`Carpeta lista para ${label}: ${data.folder_id}`, 'info');
+      return data.folder_id;
     } catch (e) {
-      DebugConsole.log(`Error creando carpeta: ${e.message}`, 'warn');
+      DebugConsole.log(`Error creando carpeta para ${label}: ${e.message}`, 'warn');
+      return null;
+    }
+  }
+
+  /**
+   * Guarda el folder_id recién creado en photo_folders (bucket compartido
+   * entre dispositivos) con reintento en conflicto (409). Si otro
+   * dispositivo ya resolvió ese mismo log mientras tanto, se usa el suyo
+   * en vez del propio (queda una carpeta huérfana vacía en Grid, pero
+   * eso es preferible a una carpeta distinta por dispositivo).
+   */
+  async savePhotoFolder(formId, folderId) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const current = (await this.gridClient.getStateBucket('photo_folders')) || {};
+      if (current[formId]) {
+        this.folderIds[formId] = current[formId];
+        return;
+      }
+      const result = await this.gridClient.setStateBucket('photo_folders', { ...current, [formId]: folderId });
+      if (!result || !result.conflict) return;
+      await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
     }
   }
 
@@ -5332,7 +5369,6 @@ class CapturaApp {
       await this.loadDriversCatalog();
       await this.loadBarreduraCatalog();
       await this.loadOutboxFromStorage();
-      await this.ensureFolderId();
 
       this.renderMenu();
     } catch (e) {
@@ -5825,12 +5861,14 @@ class CapturaApp {
         const docId = await this.gridClient.uploadPublicDocument(blob, `${field.id}_${record.uid}.jpg`);
         record[field.id] = docId;
 
-        // Asociar la foto a la carpeta fija (si existe) — no es bloqueante,
-        // la foto ya quedó subida aunque esto falle, solo sin organizar.
-        if (this.folderId && docId) {
+        // Asociar la foto a la carpeta de este tipo de log (si se pudo
+        // resolver) — no es bloqueante, la foto ya quedó subida aunque
+        // esto falle, solo sin organizar.
+        const folderId = await this.getOrCreateFolderId(record.formId);
+        if (folderId && docId) {
           try {
             await this.gridClient._fetchWithTimeout(
-              `${location.origin}/api/v1/folders/${this.folderId}/documents`,
+              `${location.origin}/api/v1/folders/${folderId}/documents`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

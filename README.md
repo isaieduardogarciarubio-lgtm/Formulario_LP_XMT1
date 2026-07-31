@@ -106,6 +106,7 @@ barredura_master        → Registros del log Barredura (1 por shipment escanead
 catalogo_destino_doca   → Catálogo destino/doca [DESTINO, DOCA] (publicado desde el Dashboard)
 catalogo_inbound_drivers → Catálogo de rutas/shipments Frágil/HV (publicado desde el Dashboard)
 catalogo_barredura      → Catálogo/inventario del día [Shipment_ID, Fecha_Inbound, HUB_Status]
+photo_folders           → { formId: folder_id } — una carpeta de fotos por tipo de log, compartida entre dispositivos
 ```
 
 ### Fotos
