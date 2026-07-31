@@ -1062,19 +1062,30 @@
       throw new Error(`Faltan columnas en el CSV: ${missing.join(', ')}`);
     }
 
+    // Excel suele exportar una columna numérica como "10.0" en vez de "10"
+    // si la celda quedó con formato de número/general — se normaliza para
+    // que la doca siga siendo reconocida como numérica.
+    const normalizeDoca = (d) => (/^[0-9]+\.0+$/.test(d) ? d.split('.')[0] : d);
+
     const index = {};
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
-      const rawDoca = cleanCell(row[col.doca]);
-      // Excel suele exportar una columna numérica como "10.0" en vez de
-      // "10" si la celda quedó con formato de número/general — se
-      // normaliza para que la doca siga siendo reconocida como numérica.
-      const doca = /^[0-9]+\.0+$/.test(rawDoca) ? rawDoca.split('.')[0] : rawDoca;
+      const docaCell = cleanCell(row[col.doca]);
       const destinoCell = cleanCell(row[col.destino]);
-      if (!doca || !destinoCell) continue;
-      if (!index[doca]) index[doca] = [];
-      destinoCell.split(';').map((d) => cleanCell(d)).filter(Boolean).forEach((destino) => {
-        if (!index[doca].includes(destino)) index[doca].push(destino);
+      if (!docaCell || !destinoCell) continue;
+
+      // El ";" puede venir en cualquiera de las dos columnas (varias docas
+      // para un destino, varios destinos para una doca, o ambos) — se
+      // separan las dos y se cruzan, así funciona sin importar de qué
+      // lado viene la lista en cada fila.
+      const docas = docaCell.split(';').map((d) => normalizeDoca(cleanCell(d))).filter(Boolean);
+      const destinos = destinoCell.split(';').map((d) => cleanCell(d)).filter(Boolean);
+
+      docas.forEach((doca) => {
+        if (!index[doca]) index[doca] = [];
+        destinos.forEach((destino) => {
+          if (!index[doca].includes(destino)) index[doca].push(destino);
+        });
       });
     }
 
