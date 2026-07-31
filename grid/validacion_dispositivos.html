@@ -243,28 +243,6 @@
       color: var(--on-state);
     }
 
-    .search-wrapper {
-      display: none;
-      flex-direction: column;
-      gap: 8px;
-      animation: slideDown 0.2s ease;
-    }
-
-    .search-wrapper.active {
-      display: flex;
-    }
-
-    @keyframes slideDown {
-      from {
-        opacity: 0;
-        transform: translateY(-8px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
     .search-input {
       padding: 12px 16px;
       font-family: inherit;
@@ -278,27 +256,64 @@
 
     .search-input:focus {
       outline: none;
-      border-color: var(--accent);
+      border-color: var(--state);
     }
 
     .search-input::placeholder {
       color: var(--text-mut);
     }
 
-    .btn-search {
-      padding: 12px 16px;
-      background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-      border: none;
-      border-radius: var(--r-md);
-      color: var(--on-accent);
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
+    /* ──── TOGGLE HANDHELD / CÁMARA ──── */
+    /* Handheld (lector HID integrado que "teclea" el código + Enter) es el */
+    /* modo principal de captura; Cámara queda como alternativa.            */
+    .scan-mode-toggle {
+      display: flex;
+      gap: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      padding: 4px;
     }
 
-    .btn-search:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(255, 209, 0, 0.2);
+    .scan-mode-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-sub);
+      font-family: inherit;
+      border-radius: var(--r-pill);
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.16s;
+    }
+
+    .scan-mode-btn svg {
+      flex-shrink: 0;
+    }
+
+    .scan-mode-btn.active {
+      background: var(--text);
+      color: var(--bg);
+    }
+
+    .scan-mode-btn:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .scan-hint {
+      font-size: 12px;
+      color: var(--text-mut);
+      text-align: center;
+    }
+
+    .scan-hint.error {
+      color: var(--c-red);
     }
 
     /* ──── RESULTADO ──── */
@@ -620,17 +635,20 @@
       </div>
     </nav>
     <div class="scanner-wrapper">
-      <video id="scanner-video" autoplay playsinline muted></video>
-      <button class="btn" id="btn-toggle-search" style="width: 100%; justify-content: center;">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        Buscar manualmente
-      </button>
-      <div class="search-wrapper" id="search-wrapper">
-        <input type="text" class="search-input" id="search-input" placeholder="Driver ID, Device ID o QR..." />
-        <button class="btn-search" id="btn-search">Validar</button>
+      <div class="scan-mode-toggle">
+        <button type="button" class="scan-mode-btn active" id="btn-scanmode-handheld" data-scan-mode="handheld">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10"/><line x1="10" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="14" y2="10"/><line x1="18" y1="10" x2="18" y2="10"/><line x1="6" y1="14" x2="18" y2="14"/></svg>
+          <span>Handheld</span>
+        </button>
+        <button type="button" class="scan-mode-btn" id="btn-scanmode-camera" data-scan-mode="camera">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+          <span>Cámara</span>
+        </button>
       </div>
+
+      <div id="scanner-body"></div>
+
+      <div class="scan-hint" id="scan-hint"></div>
     </div>
   </section>
 
@@ -936,6 +954,7 @@
         this.devicesBucket = null;
         this.scansBucket = null;
         this.mode = localStorage.getItem("validacion-mode") || "entrada";
+        this.scanMode = localStorage.getItem("validacion-scanmode") || "handheld";
 
         DebugConsole.setup();
         DebugConsole.log(`Documento: ${this.docId}`, "info");
@@ -956,8 +975,8 @@
         this.loadLogo();
         await this.loadUser();
         await this.loadDevices();
-        await this.startScanner();
         this.bindEvents();
+        this.applyScanMode();
       }
 
       loadLogo() {
@@ -1002,7 +1021,71 @@
         }
       }
 
-      async startScanner() {
+      // Handheld (lector HID integrado que "teclea" el código + Enter) es el
+      // modo principal de captura, ya que en el sitio se escanea sobre todo
+      // con el lector propio de la handheld. Cámara queda como alternativa
+      // para cuando no hay lector disponible. El modo se persiste por
+      // dispositivo en localStorage.
+      setScanMode(mode) {
+        if (mode !== "handheld" && mode !== "camera") return;
+        this.scanMode = mode;
+        localStorage.setItem("validacion-scanmode", mode);
+        document.getElementById("btn-scanmode-handheld").classList.toggle("active", mode === "handheld");
+        document.getElementById("btn-scanmode-camera").classList.toggle("active", mode === "camera");
+        DebugConsole.log(`Modo de escaneo: ${mode}`, "info");
+        this.applyScanMode();
+      }
+
+      applyScanMode() {
+        this.scanner.stop();
+        if (this.scanMode === "camera") {
+          this.enterCameraState();
+        } else {
+          this.enterHandheldState();
+        }
+      }
+
+      // Input siempre enfocado y auto-reenfocado: el lector HID solo
+      // "escribe" donde está el foco. Enter confirma, igual que la
+      // búsqueda manual que reemplaza.
+      enterHandheldState() {
+        this.scanner.stop();
+        const body = document.getElementById("scanner-body");
+        body.innerHTML = `<input type="text" class="search-input" id="handheld-input" placeholder="Escanea con el lector..." style="width: 100%;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />`;
+
+        const hint = document.getElementById("scan-hint");
+        hint.textContent = "Modo handheld — escanea con el lector (o escribe y Enter).";
+        hint.classList.remove("error");
+
+        const input = document.getElementById("handheld-input");
+
+        input.addEventListener("keydown", (e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const val = input.value.trim();
+          if (!val) return;
+          input.value = "";
+          this.onDetect(val);
+        });
+
+        input.addEventListener("blur", () => {
+          setTimeout(() => {
+            if (this.scanMode === "handheld" && document.body.contains(input)) input.focus();
+          }, 50);
+        });
+
+        setTimeout(() => input.focus(), 60);
+      }
+
+      async enterCameraState() {
+        this.scanner.stop();
+        const body = document.getElementById("scanner-body");
+        body.innerHTML = `<video id="scanner-video" autoplay playsinline muted></video>`;
+
+        const hint = document.getElementById("scan-hint");
+        hint.textContent = "Escaneando... Apunta la cámara al código.";
+        hint.classList.remove("error");
+
         try {
           await this.scanner.start(
             document.getElementById("scanner-video"),
@@ -1011,6 +1094,8 @@
           DebugConsole.log("Escáner iniciado", "info");
         } catch (e) {
           DebugConsole.log(`Error escáner: ${e.message}`, "error");
+          hint.textContent = "Cámara no disponible. Cambia a modo Handheld.";
+          hint.classList.add("error");
         }
       }
 
@@ -1032,15 +1117,12 @@
           this.backToScanner()
         );
 
-        document.getElementById("btn-toggle-search").addEventListener("click", () =>
-          this.toggleSearchBox()
+        document.getElementById("btn-scanmode-handheld").addEventListener("click", () =>
+          this.setScanMode("handheld")
         );
-        document.getElementById("btn-search").addEventListener("click", () =>
-          this.handleManualSearch()
+        document.getElementById("btn-scanmode-camera").addEventListener("click", () =>
+          this.setScanMode("camera")
         );
-        document.getElementById("search-input").addEventListener("keydown", (e) => {
-          if (e.key === "Enter") this.handleManualSearch();
-        });
 
         document.getElementById("btn-mode-entrada").addEventListener("click", () =>
           this.setMode("entrada")
@@ -1324,25 +1406,6 @@
         }
       }
 
-      toggleSearchBox() {
-        const wrapper = document.getElementById("search-wrapper");
-        wrapper.classList.toggle("active");
-        if (wrapper.classList.contains("active")) {
-          document.getElementById("search-input").focus();
-        }
-      }
-
-      async handleManualSearch() {
-        const value = document.getElementById("search-input").value.trim();
-        if (!value) {
-          DebugConsole.log("Ingrese un búsqueda válida", "warn");
-          return;
-        }
-        document.getElementById("search-input").value = "";
-        document.getElementById("search-wrapper").classList.remove("active");
-        await this.onDetect(value);
-      }
-
       showValid(devices) {
         const list = document.getElementById("devices-list");
         list.innerHTML = devices
@@ -1396,12 +1459,7 @@
         document.getElementById("stage-valid").classList.remove("active");
         document.getElementById("stage-denied").classList.remove("active");
 
-        // Reiniciar escáner
-        this.scanner.stream = null;
-        this.scanner.start(
-          document.getElementById("scanner-video"),
-          (value) => this.onDetect(value)
-        );
+        this.applyScanMode();
       }
 
       viewPhoto(docId, deviceId) {
