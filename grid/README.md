@@ -16,7 +16,7 @@ Aplicación web de captura de auditorías integrada con Grid, soportando 7 logs 
 ## 🎯 Características (Captura)
 
 - **Motor de captura**: el mismo de Auditorias_SVC (probado en iOS/Android), con los 7 logs de esta app adaptados sobre él
-- **7 Logs**: FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura activos — **Pre-Missort (Destino/Doca) deshabilitado temporalmente** hasta republicar el catálogo en el formato correcto (ver sección abajo)
+- **7 Logs activos**: Pre-Missort (Destino/Doca), FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura
 - **Offline-first**: Almacenamiento en IndexedDB, sincronización automática al conectar
 - **Modo Handheld / Cámara (toggle)**: el modo **principal es Handheld** (lector integrado HID que "teclea" el código + Enter, con input enfocado y auto-reenfocado); un toggle en cada pantalla de escaneo permite cambiar a **Cámara** (BarcodeDetector nativo o ZXing vendorizado como respaldo en iOS/Safari/Firefox). La preferencia se guarda **por dispositivo** en IndexedDB. Sirve igual para códigos de barras y para el QR del conductor (Inbound/Drivers)
 - **Confirmación visual de escaneo**: en modo cámara muestra el código detectado antes de avanzar (evita falsos positivos)
@@ -29,19 +29,15 @@ Aplicación web de captura de auditorías integrada con Grid, soportando 7 logs 
 - **Diseño responsivo**: OLED minimalist, mobile-first, una pregunta por pantalla
 - **Sin dependencias externas**: HTML/CSS/JS puro, autocontenido (ZXing vendorizado inline)
 
-## ⏸️ Pre-Missort deshabilitado temporalmente
+## 🎯 Pre-Missort — catálogo destino/doca
 
-El log "Pre - Missort" (Destino/Doca) aparece atenuado en el menú y no se puede abrir hasta que se publique el catálogo `catalogo_destino_doca` en el State Bucket con el formato:
+Este log necesita el catálogo publicado en el State Bucket `catalogo_destino_doca` — si no está publicado, el log avisa y no abre. Se publica desde el **Dashboard** (único botón de carga en el navbar, detecta el tipo de catálogo automáticamente — ver sección de Dashboard abajo), subiendo un CSV con las columnas `DESTINO, DOCA` (puede repetirse el destino en varias filas, una por doca).
 
-```json
-{ "index": { "DESTINO_A": ["DOCA1", "DOCA2"], "DESTINO_B": ["DOCA3"] } }
-```
-
-Para reactivarlo: en `captura_auditoria.html`, busca `FORMS_CONFIG.destino_doca` y elimina la línea `disabled: true`.
+**Flujo de captura:** pensado para ser rápido en handheld — se elige destino/doca **una sola vez por sesión** (picker de búsqueda) y después se escanean HUs en loop continuo sin volver a preguntar destino/doca en cada uno. El "Resultado" se calcula automáticamente: doca puramente numérica → "Sin incidencia"; si no → "Erroneo".
 
 ## 🚚 Inbound / Drivers — catálogo de rutas/shipments
 
-Este log necesita el catálogo publicado en el State Bucket `catalogo_inbound_drivers` — si no está publicado, el log se abre pero avisa que falta el catálogo. Se publica desde el **Dashboard** (botón de carga en el navbar, ver sección de Dashboard abajo), subiendo un CSV con estas columnas (el resto se ignora):
+Este log necesita el catálogo publicado en el State Bucket `catalogo_inbound_drivers` — si no está publicado, el log se abre pero avisa que falta el catálogo. Se publica desde el **Dashboard** (único botón de carga en el navbar, ver sección de Dashboard abajo), subiendo un CSV con estas columnas (el resto se ignora):
 
 ```
 dia_colecta, TIPO_DE_RUTA, CICLOS, FACILITY, ID_ROUTE, SHP_LG_CODE, CARRIER, PLACA,
@@ -62,7 +58,7 @@ Si el QR trae un carrier/placa distinto al del catálogo, no se muestra la compa
 
 ## 🧹 Barredura — inventario del día
 
-Este log necesita el catálogo del inventario publicado en `catalogo_barredura` — si no está publicado, el log no abre y avisa. Se publica desde el **Dashboard** (segundo botón de carga en el navbar), subiendo un CSV con estas columnas (solo `SHIPMENT_ID` es obligatoria):
+Este log necesita el catálogo del inventario publicado en `catalogo_barredura` — si no está publicado, el log no abre y avisa. Se publica desde el **Dashboard** (único botón de carga en el navbar), subiendo un CSV con estas columnas (solo `SHIPMENT_ID` es obligatoria):
 
 ```
 Shipment_ID, Fecha_Inbound, HUB_Status
@@ -86,9 +82,9 @@ Shipment_ID, Fecha_Inbound, HUB_Status
 3. Copia el `DOC_ID` de la URL: `https://grid.melioffice.com/d/{DOC_ID}/...`
 4. Guarda este valor como `DATA_DOC_ID`
 
-### Paso 2: Crear catálogo (opcional, pero recomendado)
+### Paso 2: Crear catálogo (necesario para Pre-Missort)
 
-Si usas el log "Pre-Missort" (destino/doca), necesitas un catálogo en el State Bucket `catalogo_destino_doca`:
+El log "Pre-Missort" (destino/doca) necesita el catálogo en el State Bucket `catalogo_destino_doca`. La forma recomendada es subir un CSV con columnas `DESTINO, DOCA` desde el Dashboard (único botón de carga en el navbar — detecta el tipo de catálogo automáticamente). También se puede publicar el JSON a mano en Grid (sección 23 de Biblia, State Buckets):
 
 ```json
 {
@@ -99,7 +95,7 @@ Si usas el log "Pre-Missort" (destino/doca), necesitas un catálogo en el State 
 }
 ```
 
-Publica este JSON en Grid (sección 23 de Biblia, State Buckets). El "Resultado" del registro se calcula automáticamente: si la doca elegida es puramente numérica → "Sin incidencia"; si no → "Erroneo" (mismo criterio que la app original).
+El "Resultado" del registro se calcula automáticamente: si la doca elegida es puramente numérica → "Sin incidencia"; si no → "Erroneo" (mismo criterio que la app original).
 
 ### Paso 3: Subir captura_auditoria.html a Grid
 
@@ -180,14 +176,14 @@ Un **dashboard de solo lectura en Grid** que:
 - Permite **refresh manual** con reintento automático en conflictos
 - Permite **borrar un registro** individual (tabla → ícono de basura), escribiendo el bucket actualizado
 - **Descarga consolidada** en CSV
-- **Publica los catálogos de Inbound / Drivers y de Barredura** (dos botones de carga en el navbar): sube un CSV, lo valida/parsea y lo escribe en `catalogo_inbound_drivers` / `catalogo_barredura`
+- **Publica los catálogos de Pre-Missort, Inbound / Drivers y Barredura** (un solo botón de carga en el navbar): sube un CSV, detecta automáticamente el tipo por sus columnas, lo valida/parsea y lo escribe en `catalogo_destino_doca` / `catalogo_inbound_drivers` / `catalogo_barredura`
 - **Exporta faltantes y sobrantes de Barredura** como CSV (botones en la pestaña Barredura)
 
 ## 📋 Logs Soportados (Dashboard)
 
 | Log | Campos | KPIs | Gráficos |
 |-----|--------|------|----------|
-| **Destino/Doca** (deshabilitado en captura por ahora) | HU, Destino, Doca, Resultado (auto) | Total, Sin incidencia, Erroneo | Resultado (dona), Top Destinos (barras), Top Docas (barras) |
+| **Destino/Doca** | HU, Destino, Doca, Resultado (auto) | Total, Sin incidencia, Erroneo | Resultado (dona), Top Destinos (barras), Top Docas (barras) |
 | **FURY** | Shipment, Foto, Situación, Valor (opt) | Total, por Situación | Situación (barras), Top Shipments (barras) |
 | **Contenerizado** | Shipment, Situación, Foto (cond: si "Dañado") | Total, por Situación | Situación (barras), Top Shipments (barras) |
 | **Linehaul** | HU, Área, Armado Sitio, Origen (cond), Canalización, Foto (opt), Comentarios (opt) | Total, por Área | Área (dona), Canalización (barras) |
@@ -195,12 +191,15 @@ Un **dashboard de solo lectura en Grid** que:
 | **Inbound / Drivers** | Ruta, Carrier, Placa, Shipment ID, Domain, Cost USD, Tipo (Frágil/HV), Estado, Foto | Total, por Estado, Costo USD auditado, Rutas con divergencia QR | Estado (dona), Costo USD por Ruta (barras) |
 | **Barredura** | Shipment ID, Estado (En/Fuera de catálogo), Situación (sobrantes), Fecha Inbound, HUB Status | Escaneados, En catálogo, Sobrantes, Faltantes, Total catálogo | Cobertura del inventario (dona), Estatus de sobrantes (barras) |
 
-## 📤 Publicar el catálogo de Barredura
+## 📤 Publicar catálogos (Pre-Missort, Inbound/Drivers, Barredura)
 
-1. Prepara un CSV con las columnas `Shipment_ID, Fecha_Inbound, HUB_Status` (solo `Shipment_ID` es obligatoria).
-2. En el Dashboard, haz clic en el **segundo** ícono de carga (⬆ con líneas, catálogo Barredura) en el navbar y selecciona el archivo.
-3. El dashboard indexa por `Shipment_ID` y publica el inventario en `catalogo_barredura` — **sobreescribe** la versión anterior — y recalcula los faltantes al instante.
-4. En la pestaña **Barredura** aparecen los botones **Exportar faltantes** (IDs del catálogo no escaneados en el rango de fecha) y **Exportar sobrantes** (IDs escaneados fuera de catálogo con su estatus).
+Hay un solo ícono de carga (⬆) en el navbar del Dashboard para los 3 catálogos — detecta cuál es por las columnas del CSV, no hay que elegir nada:
+
+- **Pre-Missort**: columnas `DESTINO, DOCA` → publica en `catalogo_destino_doca`.
+- **Inbound/Drivers**: columnas `ID_ROUTE, CARRIER, PLACA, SHIPMENT_ID, DOMAIN, COST_USD, RESULTADO` (entre otras) → publica en `catalogo_inbound_drivers`.
+- **Barredura**: columna `Shipment_ID` (con `Fecha_Inbound`/`HUB_Status` opcionales) → publica en `catalogo_barredura`.
+
+Cada catálogo **sobreescribe** la versión anterior (no hace merge). Para Barredura, además recalcula los faltantes al instante y habilita en la pestaña **Barredura** los botones **Exportar faltantes** (IDs del catálogo no escaneados en el rango de fecha) y **Exportar sobrantes** (IDs escaneados fuera de catálogo con su estatus).
 
 ## 📤 Publicar el catálogo de Inbound / Drivers
 
@@ -314,9 +313,10 @@ Todos con tema Nocturne: fondo #1a1a19, texto blanco.
 | Fotos no se ven | La foto no terminó de sincronizar (sigue como data:URL local en el dispositivo del operador) | Espera a que ese dispositivo tenga conexión y sincronice |
 | 409 Conflict | Dos usuarios escriben simultáneamente | App reintenta automático en 500-1000ms |
 | Gráficos en blanco | Plotly no cargó | Verifica `/d/_libs/plotly.min.js` |
+| "Catálogo de destino/doca no publicado" en Pre-Missort | Nadie subió el CSV todavía | Sube el catálogo desde el Dashboard (ícono ⬆ en el navbar, detecta el tipo solo) |
 | "Catálogo de rutas no publicado" en Inbound/Drivers | Nadie subió el CSV todavía | Sube el catálogo desde el Dashboard (ícono ⬆ en el navbar) |
 | "Ruta no encontrada en el catálogo" | El `route_id` del QR/manual no existe en el CSV publicado | Verifica el `ID_ROUTE` en el catálogo, o vuelve a publicarlo |
-| "Catálogo de barredura no publicado" | Nadie subió el CSV del inventario | Sube el catálogo Barredura desde el Dashboard (segundo ícono ⬆ en el navbar) |
+| "Catálogo de barredura no publicado" | Nadie subió el CSV del inventario | Sube el catálogo Barredura desde el Dashboard (mismo ícono ⬆ en el navbar) |
 | "Ya escaneado en las últimas 12h" en Barredura | El ID ya se registró en el inventario (dedup 12h global) | Es esperado — no se repiten IDs en 12h; usa el conteo de faltantes para ver qué falta |
 
 ## 🔄 Auto-Polling

@@ -1596,36 +1596,18 @@ class RecordStore {
  * Form configuration
  */
 const FORMS_CONFIG = {
-  // Desactivado temporalmente: el catálogo destino/doca real todavía no
-  // está publicado en el formato correcto. Se deja definido (no se borra)
-  // para reactivarlo apenas se resuelva, sin tener que rehacer el log.
+  // No usa el wizard genérico de un campo por pantalla: fija destino/doca
+  // una vez por sesión y escanea HUs en loop continuo (ver
+  // DestinoDocaSession), igual que Inbound/Drivers y Barredura.
   destino_doca: {
     id: 'destino_doca',
     title: 'Pre - Missort',
     description: 'Escanea HU, valida destino y doca',
     icon: 'scan',
-    disabled: true,
     fields: [
-      {
-        id: 'hu',
-        label: '¿Cuál es el HU?',
-        type: 'scanner',
-        idType: 'hu',
-        required: true,
-        placeholder: 'Ej. 2420997802886101',
-      },
-      {
-        id: 'destino',
-        label: '¿Cuál es el destino?',
-        type: 'destino_picker',
-        required: true,
-      },
-      {
-        id: 'doca',
-        label: '¿Cuál es la doca?',
-        type: 'doca_picker',
-        required: true,
-      },
+      { id: 'hu', type: 'scanner', idType: 'hu' },
+      { id: 'destino', type: 'destino_picker' },
+      { id: 'doca', type: 'doca_picker' },
     ],
   },
 
@@ -5374,10 +5356,9 @@ class CapturaApp {
   }
 
   /**
-   * Catálogo destino → docas para el log Pre-Missort (destino_doca).
-   * Deshabilitado por ahora (ver FORMS_CONFIG.destino_doca.disabled), pero
-   * se sigue cargando en segundo plano para que quede listo apenas se
-   * reactive el log — no bloquea el resto de los logs si falla.
+   * Catálogo destino → docas para el log Pre-Missort (destino_doca),
+   * publicado desde el uploader del dashboard. No bloquea el resto de los
+   * logs si falla.
    */
   async loadCatalog() {
     this.catalogAccessDenied = false;
@@ -5645,6 +5626,16 @@ class CapturaApp {
     }
     if (formConfig.disabled) {
       this.showToast('Este log está deshabilitado temporalmente', 'warn');
+      return;
+    }
+
+    if (formId === 'destino_doca' && Object.keys(this.catalogIndex).length === 0) {
+      this.showToast(
+        this.catalogAccessDenied
+          ? 'Sin permiso para leer el catálogo de destino/doca'
+          : 'Catálogo de destino/doca no publicado — súbelo desde el dashboard',
+        'warn'
+      );
       return;
     }
 

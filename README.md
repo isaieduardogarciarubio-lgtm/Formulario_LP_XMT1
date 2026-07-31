@@ -13,7 +13,7 @@ Sistema completo de auditoría integrado con Grid: captura de formularios + dash
 **Ubicación**: `grid/captura_auditoria.html` (en Grid)
 
 Formulario dinámico para 7 logs:
-- **Destino/Doca**: Escanea HU, valida destino y doca
+- **Destino/Doca (Pre-Missort)**: Escaneo continuo de HU (pensado para handheld), valida destino y doca contra el catálogo publicado desde el Dashboard
 - **FURY**: Escanea shipment, captura foto y situación
 - **Contenerizado**: Escanea shipment y situación (foto si hay daño)
 - **Linehaul**: Escanea HU, área, origen y canalización
@@ -35,7 +35,7 @@ Formulario dinámico para 7 logs:
 Visualización de datos en tiempo real:
 - Carga automática desde los 7 State Buckets
 - Tabs por tipo de log (Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura)
-- Uploaders de CSV para publicar los catálogos de Inbound / Drivers y de Barredura
+- Un solo uploader de CSV que detecta automáticamente el tipo de catálogo (Pre-Missort, Inbound / Drivers o Barredura) por sus columnas y lo publica
 - Exportación de faltantes y sobrantes de Barredura como CSV
 - KPIs + gráficos interactivos (Plotly)
 - Tabla filtrable con búsqueda
@@ -103,7 +103,7 @@ linehaul_master         → Registros del log Linehaul
 inbound_fm_master       → Registros del log Inbound FM
 inbound_drivers_master  → Registros del log Inbound / Drivers (1 por shipment auditado)
 barredura_master        → Registros del log Barredura (1 por shipment escaneado)
-catalogo_destino_doca   → Catálogo de destinos/docas (opcional)
+catalogo_destino_doca   → Catálogo destino/doca [DESTINO, DOCA] (publicado desde el Dashboard)
 catalogo_inbound_drivers → Catálogo de rutas/shipments Frágil/HV (publicado desde el Dashboard)
 catalogo_barredura      → Catálogo/inventario del día [Shipment_ID, Fecha_Inbound, HUB_Status]
 ```

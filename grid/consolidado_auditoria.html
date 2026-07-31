@@ -565,7 +565,7 @@
         <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
     </button>
-    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo Inbound/Drivers (CSV)">
+    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort, Inbound/Drivers o Barredura">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
         <polyline points="7 8 12 3 17 8"/>
@@ -573,17 +573,6 @@
       </svg>
     </button>
     <input type="file" id="catalog-file-input" accept=".csv,text/csv" hidden />
-    <button class="btn-icon" id="btn-upload-barredura" title="Cargar catálogo Barredura (CSV)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-4"/>
-        <polyline points="16 6 19 3 22 6"/>
-        <line x1="19" y1="3" x2="19" y2="13"/>
-        <line x1="7" y1="9" x2="12" y2="9"/>
-        <line x1="7" y1="13" x2="12" y2="13"/>
-        <line x1="7" y1="17" x2="14" y2="17"/>
-      </svg>
-    </button>
-    <input type="file" id="barredura-file-input" accept=".csv,text/csv" hidden />
     <button class="btn-icon" id="btn-debug-console" title="Consola de errores" style="position: relative;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="4 17 10 11 4 5"/>
@@ -1043,6 +1032,54 @@
     return index;
   }
 
+  // Catálogo de Pre-Missort: [DESTINO, DOCA] → índice por destino, con la
+  // lista de docas válidas para ese destino (puede repetirse destino en
+  // varias filas, una por doca).
+  function buildDestinoDocaCatalogIndex(rows) {
+    if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
+
+    const header = rows[0].map(h => h.trim().toUpperCase());
+    const idx = (name) => header.indexOf(name);
+    const col = {
+      destino: idx('DESTINO'),
+      doca: idx('DOCA'),
+    };
+    const missing = Object.entries(col).filter(([, i]) => i === -1).map(([k]) => k);
+    if (missing.length > 0) {
+      throw new Error(`Faltan columnas en el CSV: ${missing.join(', ')}`);
+    }
+
+    const index = {};
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const destino = (row[col.destino] || '').trim();
+      const doca = (row[col.doca] || '').trim();
+      if (!destino || !doca) continue;
+      if (!index[destino]) index[destino] = [];
+      if (!index[destino].includes(doca)) index[destino].push(doca);
+    }
+
+    if (Object.keys(index).length === 0) {
+      throw new Error('No se encontraron destinos/docas válidos en el CSV');
+    }
+    return index;
+  }
+
+  /**
+   * Detecta el tipo de catálogo a partir del header del CSV (ya en
+   * mayúsculas), para que un solo botón de carga sirva para los 3
+   * catálogos publicables desde el dashboard. Inbound/Drivers se checa
+   * primero porque también trae SHIPMENT_ID (columna que por sí sola
+   * identificaría Barredura).
+   */
+  function detectCatalogType(header) {
+    const has = (name) => header.includes(name);
+    if (has('ID_ROUTE') && has('CARRIER') && has('SHIPMENT_ID')) return 'inbound_drivers';
+    if (has('DESTINO') && has('DOCA')) return 'destino_doca';
+    if (has('SHIPMENT_ID')) return 'barredura';
+    return null;
+  }
+
   // ==========================================================================
   // AuditDashboard
   // ==========================================================================
@@ -1125,15 +1162,7 @@
       document.getElementById('catalog-file-input').addEventListener('change', async (e) => {
         const file = e.target.files && e.target.files[0];
         e.target.value = '';
-        if (file) await this.uploadDriversCatalog(file);
-      });
-      document.getElementById('btn-upload-barredura').addEventListener('click', () => {
-        document.getElementById('barredura-file-input').click();
-      });
-      document.getElementById('barredura-file-input').addEventListener('change', async (e) => {
-        const file = e.target.files && e.target.files[0];
-        e.target.value = '';
-        if (file) await this.uploadBarreduraCatalog(file);
+        if (file) await this.uploadCatalogAuto(file);
       });
       document.getElementById('btn-export-faltantes').addEventListener('click', () => this.exportBarreduraFaltantes());
       document.getElementById('btn-export-sobrantes').addEventListener('click', () => this.exportBarreduraSobrantes());
@@ -2046,88 +2075,70 @@
     }
 
     /**
-     * Publica el catálogo de rutas/shipments Inbound/Drivers (CSV con las
-     * 14 columnas de origen) en el State Bucket catalogo_inbound_drivers,
-     * que la app de captura lee para armar la lista de faltantes por ruta.
-     * Sobreescribe el catálogo completo (no hace merge) — si dos personas
-     * suben a la vez, gana el reintento con el if_updated_at más reciente.
+     * Publica un índice de catálogo ya armado en un State Bucket, con el
+     * mismo reintento por conflicto (409) que usan los 3 catálogos.
      */
-    async uploadDriversCatalog(file) {
+    async publishCatalogIndex(bucketName, index) {
+      await this.gridClient.getStateBucket(bucketName);
+      let result = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        result = await this.gridClient.setStateBucket(bucketName, {
+          index,
+          generatedAt: new Date().toISOString(),
+        });
+        if (!result || !result.conflict) break;
+        await this.gridClient.getStateBucket(bucketName);
+        await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
+      }
+      if (!result || result.conflict) {
+        throw new Error('No se pudo publicar el catálogo (conflicto persistente, intenta de nuevo)');
+      }
+    }
+
+    /**
+     * Único punto de carga de catálogo del dashboard: detecta el tipo
+     * (Pre-Missort, Inbound/Drivers o Barredura) por las columnas del CSV
+     * y lo publica en su State Bucket correspondiente. Sobreescribe el
+     * catálogo completo (no hace merge).
+     */
+    async uploadCatalogAuto(file) {
       const btn = document.getElementById('btn-upload-catalog');
       if (btn) btn.classList.add('spinning');
       try {
         const text = await file.text();
         const rows = parseCsvText(text);
-        const index = buildDriversCatalogIndex(rows);
-        const routeCount = Object.keys(index).length;
-        const shipmentCount = Object.values(index).reduce((sum, r) => sum + r.shipments.length, 0);
+        if (rows.length < 1) throw new Error('El CSV está vacío');
+        const header = rows[0].map(h => h.trim().toUpperCase());
+        const type = detectCatalogType(header);
 
-        await this.gridClient.getStateBucket('catalogo_inbound_drivers');
-
-        let result = null;
-        for (let attempt = 0; attempt < 5; attempt++) {
-          result = await this.gridClient.setStateBucket('catalogo_inbound_drivers', {
-            index,
-            generatedAt: new Date().toISOString(),
-          });
-          if (!result || !result.conflict) break;
-          await this.gridClient.getStateBucket('catalogo_inbound_drivers');
-          await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
+        if (type === 'inbound_drivers') {
+          const index = buildDriversCatalogIndex(rows);
+          const routeCount = Object.keys(index).length;
+          const shipmentCount = Object.values(index).reduce((sum, r) => sum + r.shipments.length, 0);
+          await this.publishCatalogIndex('catalogo_inbound_drivers', index);
+          this.showNotification(`Catálogo Inbound/Drivers publicado · ${routeCount} rutas · ${shipmentCount} shipments`, 'success');
+          DebugConsole.log(`Catálogo Inbound/Drivers publicado: ${routeCount} rutas, ${shipmentCount} shipments`, 'info');
+        } else if (type === 'destino_doca') {
+          const index = buildDestinoDocaCatalogIndex(rows);
+          const destinoCount = Object.keys(index).length;
+          const docaCount = Object.values(index).reduce((sum, docas) => sum + docas.length, 0);
+          await this.publishCatalogIndex('catalogo_destino_doca', index);
+          this.showNotification(`Catálogo Pre-Missort publicado · ${destinoCount} destinos · ${docaCount} docas`, 'success');
+          DebugConsole.log(`Catálogo Pre-Missort publicado: ${destinoCount} destinos, ${docaCount} docas`, 'info');
+        } else if (type === 'barredura') {
+          const index = buildBarreduraCatalogIndex(rows);
+          const shipmentCount = Object.keys(index).length;
+          await this.publishCatalogIndex('catalogo_barredura', index);
+          this.barreduraCatalog = index;
+          this.showNotification(`Catálogo Barredura publicado · ${shipmentCount} shipments`, 'success');
+          DebugConsole.log(`Catálogo Barredura publicado: ${shipmentCount} shipments`, 'info');
+          this.render();
+        } else {
+          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), ID_ROUTE+CARRIER+SHIPMENT_ID (Inbound/Drivers), o SHIPMENT_ID (Barredura).');
         }
-
-        if (!result || result.conflict) {
-          throw new Error('No se pudo publicar el catálogo (conflicto persistente, intenta de nuevo)');
-        }
-
-        this.showNotification(`Catálogo publicado · ${routeCount} rutas · ${shipmentCount} shipments`, 'success');
-        DebugConsole.log(`Catálogo Inbound/Drivers publicado: ${routeCount} rutas, ${shipmentCount} shipments`, 'info');
       } catch (e) {
         this.showNotification(`Error al publicar catálogo: ${e.message}`, 'error');
-        DebugConsole.log(`Error al publicar catálogo Inbound/Drivers: ${e.message}`, 'error');
-      } finally {
-        if (btn) btn.classList.remove('spinning');
-      }
-    }
-
-    /**
-     * Publica el catálogo del inventario de Barredura (CSV Shipment_ID,
-     * Fecha_Inbound, HUB_Status) en catalogo_barredura. Sobreescribe la
-     * versión anterior; el dashboard recarga su copia local para recalcular
-     * faltantes al instante.
-     */
-    async uploadBarreduraCatalog(file) {
-      const btn = document.getElementById('btn-upload-barredura');
-      if (btn) btn.classList.add('spinning');
-      try {
-        const text = await file.text();
-        const rows = parseCsvText(text);
-        const index = buildBarreduraCatalogIndex(rows);
-        const shipmentCount = Object.keys(index).length;
-
-        await this.gridClient.getStateBucket('catalogo_barredura');
-
-        let result = null;
-        for (let attempt = 0; attempt < 5; attempt++) {
-          result = await this.gridClient.setStateBucket('catalogo_barredura', {
-            index,
-            generatedAt: new Date().toISOString(),
-          });
-          if (!result || !result.conflict) break;
-          await this.gridClient.getStateBucket('catalogo_barredura');
-          await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
-        }
-
-        if (!result || result.conflict) {
-          throw new Error('No se pudo publicar el catálogo (conflicto persistente, intenta de nuevo)');
-        }
-
-        this.barreduraCatalog = index;
-        this.showNotification(`Catálogo Barredura publicado · ${shipmentCount} shipments`, 'success');
-        DebugConsole.log(`Catálogo Barredura publicado: ${shipmentCount} shipments`, 'info');
-        this.render();
-      } catch (e) {
-        this.showNotification(`Error al publicar catálogo Barredura: ${e.message}`, 'error');
-        DebugConsole.log(`Error al publicar catálogo Barredura: ${e.message}`, 'error');
+        DebugConsole.log(`Error al publicar catálogo: ${e.message}`, 'error');
       } finally {
         if (btn) btn.classList.remove('spinning');
       }
