@@ -3681,6 +3681,13 @@ class DestinoDocaSession {
   }
 
   async finishHu(hu, destino) {
+    // Guard contra doble toque: onScan (guardar + sincronizar) tarda un
+    // instante y el picker de destino sigue en pantalla mientras tanto, así
+    // que un segundo toque rápido duplicaba el registro. savingDestino se
+    // libera solo al volver a renderLoop (nueva sesión de escaneo).
+    if (this.savingDestino) return;
+    this.savingDestino = true;
+
     const resultado = this.isNum(this.doca) ? 'Sin incidencia' : 'Erroneo';
     this.vibrate(resultado === 'Sin incidencia' ? 60 : [40, 60, 40]);
 
@@ -3690,6 +3697,7 @@ class DestinoDocaSession {
     this.count += 1;
     this.pendingHu = null;
     this.locked = false;
+    this.savingDestino = false;
     this.renderLoop();
     this.flash(resultado === 'Sin incidencia' ? 'ok' : 'error', `${hu} · ${destino} · ${resultado}`);
   }
@@ -4428,6 +4436,20 @@ class InboundDriversSession {
   }
 
   async persistShipment(shipment, estado, foto) {
+    // Guard contra doble toque: onScan (guardar + sincronizar) tarda un
+    // instante y el botón sigue clicable mientras tanto, así que un
+    // segundo toque rápido en "Auditado OK"/"Divergencia"/"Faltante
+    // confirmado" duplicaba el registro.
+    if (this.savingShipment) return;
+    this.savingShipment = true;
+    try {
+      await this._persistShipment(shipment, estado, foto);
+    } finally {
+      this.savingShipment = false;
+    }
+  }
+
+  async _persistShipment(shipment, estado, foto) {
     if (!this.onScan) return;
     await this.onScan({
       route_id: this.routeId,
@@ -4879,6 +4901,12 @@ class BarreduraSession {
   }
 
   async saveSobrante(id, situacion) {
+    // Guard contra doble toque: un segundo click rápido en la misma
+    // opción (o Enter dos veces en "Otro") duplicaba el registro mientras
+    // el primer persist todavía no terminaba.
+    if (this.savingSobrante) return;
+    this.savingSobrante = true;
+
     this.sobrantesSet.add(id);
     this.recentMap.set(id, new Date().toISOString());
     await this.persist({
@@ -4888,6 +4916,7 @@ class BarreduraSession {
       hub_status: '',
       situacion,
     });
+    this.savingSobrante = false;
     this.locked = false;
     this.renderLoop();
   }
