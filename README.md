@@ -22,7 +22,8 @@ Formulario dinámico para 7 logs:
 - **Barredura**: Escaneo continuo de shipments contra el inventario del día (catálogo publicado desde el Dashboard). Marca faltantes/sobrantes, no repite un ID en 12h (dedup global) y para sobrantes pide estatus del paquete
 
 **Características**:
-- ✅ Escaneo nativo (BarcodeDetector para HU/shipment/patente)
+- ✅ Modo **Handheld** (lector integrado HID, principal) o **Cámara** (BarcodeDetector) con toggle, preferencia guardada por dispositivo
+- ✅ Fotos con **cámara in-app** (getUserMedia + obturador), no lanza la cámara del sistema — funciona en handhelds con cámara externa bloqueada
 - ✅ Compresión de fotos (WebP → JPEG, 25% menos datos)
 - ✅ Offline-first (IndexedDB + sincronización automática)
 - ✅ Una pregunta por pantalla (mobile-first)

@@ -18,10 +18,10 @@ Aplicación web de captura de auditorías integrada con Grid, soportando 7 logs 
 - **Motor de captura**: el mismo de Auditorias_SVC (probado en iOS/Android), con los 7 logs de esta app adaptados sobre él
 - **7 Logs**: FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura activos — **Pre-Missort (Destino/Doca) deshabilitado temporalmente** hasta republicar el catálogo en el formato correcto (ver sección abajo)
 - **Offline-first**: Almacenamiento en IndexedDB, sincronización automática al conectar
-- **Escaneo robusto**: cámara (BarcodeDetector nativo o ZXing vendorizado inline como respaldo en iOS/Safari/Firefox), entrada manual con reenfoque automático (lector físico HID), y escaneo desde imagen cargada si la cámara no está disponible
-- **Confirmación visual de escaneo**: muestra el código detectado y pide confirmar antes de avanzar (evita falsos positivos)
+- **Modo Handheld / Cámara (toggle)**: el modo **principal es Handheld** (lector integrado HID que "teclea" el código + Enter, con input enfocado y auto-reenfocado); un toggle en cada pantalla de escaneo permite cambiar a **Cámara** (BarcodeDetector nativo o ZXing vendorizado como respaldo en iOS/Safari/Firefox). La preferencia se guarda **por dispositivo** en IndexedDB. Sirve igual para códigos de barras y para el QR del conductor (Inbound/Drivers)
+- **Confirmación visual de escaneo**: en modo cámara muestra el código detectado antes de avanzar (evita falsos positivos)
 - **Feedback táctil**: vibración al escanear/validar
-- **Compresión de fotos**: WebP con fallback a JPEG (25% reducción de datos), con retomar/reintentar
+- **Fotos con cámara in-app**: la foto se toma **dentro de la app** vía `getUserMedia` (preview en vivo + obturador), no lanza la cámara del sistema — así funciona en handhelds donde el MDM bloquea la cámara externa. Comprime a WebP con fallback a JPEG, con opción de flash y retomar
 - **Sincronización inteligente**: Manejo de conflictos (409) con reintento exponencial
 - **Navbar con identidad**: Logo compartido + avatar con iniciales del email del operador
 - **Botón atrás visible + nativo**: botón explícito en cada paso (necesario en iOS, que no tiene gesto de sistema) y también intercepta el atrás de Android/navegador
