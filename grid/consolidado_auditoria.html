@@ -558,11 +558,20 @@
         <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
       </svg>
     </button>
-    <button class="btn-icon" id="btn-download" title="Descargar">
+    <button class="btn-icon" id="btn-download" title="Descargar consolidado (todo, JSON/CSV)">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
         <polyline points="7 10 12 15 17 10"/>
         <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+    </button>
+    <button class="btn-icon" id="btn-download-today" title="Exportar capturados de hoy (todos los logs, CSV)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+        <path d="M9 16l2 2 4-4"/>
       </svg>
     </button>
     <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort, Inbound/Drivers o Barredura">
@@ -1180,6 +1189,7 @@
     setupEventListeners() {
       document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
       document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
+      document.getElementById('btn-download-today').addEventListener('click', () => this.downloadToday());
       document.getElementById('btn-upload-catalog').addEventListener('click', () => {
         document.getElementById('catalog-file-input').click();
       });
@@ -2016,6 +2026,40 @@
       a.download = `consolidado_${new Date().toISOString().split('T')[0]}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    /**
+     * Exporta en un solo CSV lo capturado HOY (fecha local del navegador,
+     * 00:00 a 23:59:59) en los 7 logs, sin importar el filtro de fecha ni
+     * la pestaña activa — misma idea que "Descargar" (todo, consolidado)
+     * pero acotado al día en curso.
+     */
+    downloadToday() {
+      const now = new Date();
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+
+      const allRecords = [];
+      for (const [logType, records] of Object.entries(this.logs)) {
+        records.forEach((rec) => {
+          const recDate = rec.ts ? new Date(rec.ts) : null;
+          if (!recDate || recDate < startOfDay || recDate >= endOfDay) return;
+          allRecords.push({ 'Tipo de Log': FORMS_CONFIG[logType].title, ...rec });
+        });
+      }
+
+      if (allRecords.length === 0) {
+        this.showNotification('No hay registros capturados hoy', 'error');
+        return;
+      }
+
+      const allFields = new Set();
+      allRecords.forEach((rec) => Object.keys(rec).forEach((k) => allFields.add(k)));
+      const headers = ['Tipo de Log', ...Array.from(allFields).filter((f) => f !== 'Tipo de Log')]
+        .map((h) => ({ field: h, header: h }));
+
+      this.downloadCsv(`capturados_hoy_${now.toISOString().split('T')[0]}.csv`, headers, allRecords);
+      this.showNotification(`Exportado · ${allRecords.length} registros de hoy`, 'success');
     }
 
     // Descarga un CSV genérico (con BOM UTF-8) a partir de encabezados +
