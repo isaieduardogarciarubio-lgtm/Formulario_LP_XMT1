@@ -641,8 +641,9 @@
         <!-- Charts -->
         <div class="charts-grid" id="charts-grid"></div>
 
-        <!-- Exports específicos de Barredura (faltantes / sobrantes) -->
+        <!-- Exports específicos de Barredura (capturados / faltantes / sobrantes) -->
         <div id="barredura-tools" style="display: none; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+          <button id="btn-export-capturados" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px;">Exportar capturados (CSV)</button>
           <button id="btn-export-faltantes" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px;">Exportar faltantes (CSV)</button>
           <button id="btn-export-sobrantes" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px;">Exportar sobrantes (CSV)</button>
         </div>
@@ -1198,6 +1199,7 @@
         e.target.value = '';
         if (file) await this.uploadCatalogAuto(file);
       });
+      document.getElementById('btn-export-capturados').addEventListener('click', () => this.exportBarreduraCapturados());
       document.getElementById('btn-export-faltantes').addEventListener('click', () => this.exportBarreduraFaltantes());
       document.getElementById('btn-export-sobrantes').addEventListener('click', () => this.exportBarreduraSobrantes());
       document.getElementById('btn-debug-console').addEventListener('click', () => DebugConsole.toggle());
@@ -2084,6 +2086,23 @@
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+    }
+
+    // Capturados = todos los registros escaneados en Barredura (encontrados
+    // y sobrantes tal cual quedaron guardados), respetando el filtro de
+    // fecha activo (por defecto este mes, acotable a hoy con los selectores
+    // de fecha de arriba).
+    exportBarreduraCapturados() {
+      const records = this.getFilteredRecords();
+      if (records.length === 0) {
+        this.showNotification('No hay capturas en el rango seleccionado', 'error');
+        return;
+      }
+      this.downloadCsv(
+        `barredura_capturados_${new Date().toISOString().split('T')[0]}.csv`,
+        FORMS_CONFIG.barredura.csvColumns,
+        records
+      );
     }
 
     // Faltantes = IDs del catálogo que NO se escanearon en el rango de fecha
