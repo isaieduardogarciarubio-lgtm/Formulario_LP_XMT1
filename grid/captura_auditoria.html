@@ -5288,26 +5288,24 @@ class CapturaApp {
   }
 
   /**
-   * Cierra sesión del usuario actual. No hay endpoint de logout documentado
-   * en la Biblia Grid (solo GET /api/v1/me vía cookie) ni expuesto al
-   * documento embebido (los candidatos de API dan 403 RBAC/TrafficCatalog),
-   * pero se confirmó empíricamente que navegar a /logout en la misma
-   * pestaña sí termina la sesión de verdad (redirige al SSO de la
-   * empresa). Si el SSO corporativo sigue activo, puede volver a autenticar
-   * al usuario automáticamente ahí — eso es comportamiento normal de SSO,
-   * no algo que la app deba evitar.
+   * Cierra sesión del usuario actual. Grid no expone un endpoint de logout
+   * al documento embebido (candidatos de API dan 403 RBAC/TrafficCatalog,
+   * y no hay ninguno documentado en la Biblia), así que en vez de terminar
+   * solo la sesión de Grid se manda al usuario al UserHome del SSO
+   * corporativo (auth-meli/Okta), donde tiene un "Sign Out" real que sí
+   * cierra la sesión completa (Grid y el resto de las apps de la empresa).
    */
   async logout() {
     const ok = await ConfirmModal.show({
       title: 'Cerrar sesión',
-      message: `¿Cerrar sesión de ${this.userEmail}?`,
+      message: `¿Cerrar sesión de ${this.userEmail}? Se te llevará a la página de tu cuenta para confirmar el cierre de sesión.`,
       confirmText: 'Cerrar sesión',
       danger: true,
     });
     if (!ok) return;
 
     this.userEmail = null;
-    location.href = `${location.origin}/logout`;
+    location.href = 'https://auth-meli.adminml.com/app/UserHome?session_hint=AUTHENTICATED';
   }
 
   /**
