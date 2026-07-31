@@ -1197,6 +1197,77 @@ select.step-input {
   flex-wrap: wrap;
 }
 
+/* Modal de confirmación in-app (reemplaza confirm() nativo del navegador,
+   que en la handheld se ve fuera de lugar con el resto del diseño OLED). */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 2000;
+  padding: var(--spacing-md);
+}
+
+.confirm-overlay.active {
+  display: flex;
+}
+
+.confirm-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  padding: var(--spacing-lg);
+  margin-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.confirm-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: var(--spacing-sm);
+}
+
+.confirm-message {
+  font-size: var(--font-body);
+  color: var(--color-text-muted);
+  margin-bottom: var(--spacing-lg);
+}
+
+.confirm-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.confirm-actions button {
+  flex: 1;
+  padding: var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-popover);
+  font-size: var(--font-button);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.confirm-btn-cancel {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+}
+
+.confirm-btn-accept {
+  background: var(--color-text-primary);
+  color: var(--color-bg);
+}
+
+.confirm-btn-accept.danger {
+  background: var(--color-error);
+  color: #fff;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -1264,6 +1335,18 @@ select.step-input {
 </div>
 
 <div id="debug-console-badge" style="position: fixed; bottom: 20px; right: 20px; width: 32px; height: 32px; background: #ff453a; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.75rem; cursor: pointer; z-index: 999; display: none;" onclick="DebugConsole.toggle()"></div>
+
+<!-- Modal de confirmación in-app -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-card">
+    <div class="confirm-title" id="confirm-title"></div>
+    <div class="confirm-message" id="confirm-message"></div>
+    <div class="confirm-actions">
+      <button type="button" class="confirm-btn-cancel" id="confirm-btn-cancel"></button>
+      <button type="button" class="confirm-btn-accept" id="confirm-btn-accept"></button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ZXing library (vendored) — fallback barcode scanner for browsers without native BarcodeDetector (Safari desktop/iOS, Firefox) */
@@ -4349,15 +4432,20 @@ class InboundDriversSession {
     this.renderLoop();
   }
 
-  markFaltante(shipmentId) {
+  async markFaltante(shipmentId) {
     const shipment = this.pending.get(shipmentId);
     if (!shipment) return;
-    if (!confirm(`¿Confirmas que el shipment ${shipmentId} falta en esta ruta?`)) return;
-    this.persistShipment(shipment, 'Faltante confirmado', null).then(() => {
-      this.pending.delete(shipmentId);
-      this.handled.set(shipmentId, 'Faltante confirmado');
-      this.renderLoop();
+    const ok = await ConfirmModal.show({
+      title: 'Confirmar faltante',
+      message: `¿Confirmas que el shipment ${shipmentId} falta en esta ruta?`,
+      confirmText: 'Confirmar',
+      danger: true,
     });
+    if (!ok) return;
+    await this.persistShipment(shipment, 'Faltante confirmado', null);
+    this.pending.delete(shipmentId);
+    this.handled.set(shipmentId, 'Faltante confirmado');
+    this.renderLoop();
   }
 
   async persistShipment(shipment, estado, foto) {
@@ -4916,6 +5004,36 @@ class DebugConsole {
 }
 
 /**
+ * ConfirmModal — confirmación in-app (reemplaza confirm() nativo, que se ve
+ * fuera de lugar con el resto del diseño OLED). Singleton: reutiliza el
+ * mismo overlay del DOM para cualquier confirmación de la app.
+ */
+class ConfirmModal {
+  static show({ title, message, confirmText = 'Confirmar', cancelText = 'Cancelar', danger = false } = {}) {
+    return new Promise((resolve) => {
+      const overlay = document.getElementById('confirm-overlay');
+      const btnAccept = document.getElementById('confirm-btn-accept');
+      const btnCancel = document.getElementById('confirm-btn-cancel');
+
+      document.getElementById('confirm-title').textContent = title || '';
+      document.getElementById('confirm-message').textContent = message || '';
+      btnAccept.textContent = confirmText;
+      btnAccept.classList.toggle('danger', !!danger);
+      btnCancel.textContent = cancelText;
+
+      const close = (result) => {
+        overlay.classList.remove('active');
+        resolve(result);
+      };
+
+      btnAccept.addEventListener('click', () => close(true), { once: true });
+      btnCancel.addEventListener('click', () => close(false), { once: true });
+      overlay.classList.add('active');
+    });
+  }
+}
+
+/**
  * GridClient — interact with Grid API for state buckets and document uploads
  */
 class GridClient {
@@ -5171,13 +5289,51 @@ class CapturaApp {
 
   /**
    * Cierra sesión del usuario actual: limpia solo el estado ligado al
-   * usuario (no catálogos ni registros pendientes) y recarga la misma URL
-   * para que la app vuelva a resolver /api/v1/me desde cero.
+   * usuario (no catálogos ni registros pendientes), intenta invalidar la
+   * sesión de Grid contra varios endpoints candidatos (no hay uno
+   * documentado en la Biblia — ver terminateGridSession) y sale del
+   * documento hacia la raíz de Grid para reflejar el resultado.
    */
-  logout() {
-    if (!confirm(`¿Cerrar sesión de ${this.userEmail}?`)) return;
+  async logout() {
+    const ok = await ConfirmModal.show({
+      title: 'Cerrar sesión',
+      message: `¿Cerrar sesión de ${this.userEmail}?`,
+      confirmText: 'Cerrar sesión',
+      danger: true,
+    });
+    if (!ok) return;
+
+    this.showToast('Cerrando sesión...', 'info');
+    await this.terminateGridSession();
     this.userEmail = null;
-    location.reload();
+    location.href = location.origin;
+  }
+
+  /**
+   * No hay endpoint de logout documentado en la Biblia Grid (solo GET
+   * /api/v1/me para identidad, vía cookie de sesión) — se prueban
+   * candidatos comunes contra el mismo origen y se registra en
+   * DebugConsole cuál responde 2xx para confirmarlo empíricamente. Si
+   * ninguno funciona, igual se sale del documento hacia la raíz de Grid.
+   */
+  async terminateGridSession() {
+    const candidates = [
+      { method: 'POST', path: '/api/v1/logout' },
+      { method: 'POST', path: '/api/v1/auth/logout' },
+      { method: 'DELETE', path: '/api/v1/session' },
+      { method: 'DELETE', path: '/api/v1/sessions/current' },
+    ];
+    for (const { method, path } of candidates) {
+      try {
+        const res = await fetch(`${location.origin}${path}`, { method, credentials: 'include' });
+        DebugConsole.log(`Logout ${method} ${path}: HTTP ${res.status}`, res.ok ? 'info' : 'warn');
+        if (res.ok) return true;
+      } catch (e) {
+        DebugConsole.log(`Logout ${method} ${path}: ${e.message}`, 'warn');
+      }
+    }
+    DebugConsole.log('Ningún endpoint de logout respondió 2xx — revisa la consola de depuración', 'warn');
+    return false;
   }
 
   /**
