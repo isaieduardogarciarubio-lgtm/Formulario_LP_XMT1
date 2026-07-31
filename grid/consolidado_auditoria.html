@@ -1054,7 +1054,11 @@
     const index = {};
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
-      const doca = (row[col.doca] || '').trim();
+      const rawDoca = (row[col.doca] || '').trim();
+      // Excel suele exportar una columna numérica como "10.0" en vez de
+      // "10" si la celda quedó con formato de número/general — se
+      // normaliza para que la doca siga siendo reconocida como numérica.
+      const doca = /^[0-9]+\.0+$/.test(rawDoca) ? rawDoca.split('.')[0] : rawDoca;
       const destinoCell = (row[col.destino] || '').trim();
       if (!doca || !destinoCell) continue;
       if (!index[doca]) index[doca] = [];

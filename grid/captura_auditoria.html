@@ -5376,7 +5376,7 @@ class CapturaApp {
 
       this.catalogIndex = data.index && typeof data.index === 'object' ? data.index : data;
       this.catalogLoadedAt = data.generatedAt ? new Date(data.generatedAt) : Date.now();
-      DebugConsole.log(`Catálogo destino/doca cargado: ${Object.keys(this.catalogIndex).length} destinos`, 'info');
+      DebugConsole.log(`Catálogo destino/doca cargado: ${Object.keys(this.catalogIndex).length} docas`, 'info');
     } catch (e) {
       // 403: el usuario está autenticado en Grid pero no tiene permiso
       // sobre ESTE documento (ACL por documento, no por login) — muy
