@@ -2257,6 +2257,10 @@ const ScanUI = (() => {
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('autocapitalize', uppercase ? 'characters' : 'off');
+    // Este input es solo para el lector (HID, teclea como si fuera físico) —
+    // inputmode="none" bloquea el teclado virtual en pantallas táctiles sin
+    // afectar al lector, que sigue disparando eventos de teclado normales.
+    input.setAttribute('inputmode', 'none');
     input.spellcheck = false;
     wrap.appendChild(input);
 
