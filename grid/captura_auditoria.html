@@ -4849,26 +4849,58 @@ class BarreduraSession {
 
   /** Días transcurridos desde fecha_inbound hasta hoy (o '' si no hay fecha válida). */
   /**
-   * Parsea fecha_inbound tolerando el formato DD/MM/YYYY (con o sin hora)
-   * que trae el catálogo — Date.parse lo interpreta como MM/DD/YYYY
-   * (estilo EE.UU.) y descuadra por completo los días en sitio (ej. "4/08"
-   * se leía como 8 de abril en vez de 4 de agosto). Si viene en formato
-   * ISO (YYYY-MM-DD…), no hay ambigüedad y se deja tal cual.
+   * Parsea fecha_inbound tolerando los formatos reales que suele traer un
+   * catálogo exportado de Excel/Sheets:
+   *   - DD/MM/YYYY o DD/MM/YY, separador "/" o "-", hora opcional en 24h
+   *     o con AM/PM (ej. "4/08/2026 22:18:41", "04-08-26 10:18 PM").
+   *   - Fecha serial de Excel (número puro, ej. "46247"): pasa cuando la
+   *     celda quedó en formato "General" en vez de fecha al exportar.
+   *   - ISO (YYYY-MM-DD…): sin ambigüedad día/mes, se deja tal cual.
+   * DD/MM es la convención esperada (México) — si el día quedara >12 en
+   * la posición de mes (o viceversa), se corrige solo porque en ese caso
+   * ya no es ambiguo. Para "4/08" (ambos ≤12) no hay forma de saber con
+   * certeza cuál es cuál sin el formato explícito, así que se asume DD/MM.
+   * Si nada de esto reconoce el valor, se cae a Date.parse y se registra
+   * en DebugConsole para poder ajustar el parser con el formato real.
    */
   parseFechaInbound(str) {
     const s = String(str || '').trim();
     if (!s) return NaN;
 
-    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-    if (m) {
-      const [, dd, mm, yyyy, hh, min, ss] = m;
-      return new Date(
-        Number(yyyy), Number(mm) - 1, Number(dd),
-        Number(hh || 0), Number(min || 0), Number(ss || 0)
-      ).getTime();
+    // Fecha serial de Excel: día 0 = 1899-12-30 (incluye el bug histórico
+    // del año bisiesto 1900 que Excel también arrastra, por eso -25569
+    // y no -25567 — mismo ajuste que usa Google Sheets/Excel entre sí).
+    if (/^\d{4,6}(\.\d+)?$/.test(s)) {
+      const serial = Number(s);
+      const ms = Math.round((serial - 25569) * 86400 * 1000);
+      if (!Number.isNaN(ms) && ms > 0) return ms;
     }
 
-    return Date.parse(s);
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2}|\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?)?$/);
+    if (m) {
+      const [, a, b, yearStr, hhStr, minStr, ssStr, ampm] = m;
+      let day = Number(a);
+      let month = Number(b);
+      // Si vino al revés (MM/DD) y solo esa lectura es válida, se corrige.
+      if (month > 12 && day <= 12) {
+        [day, month] = [month, day];
+      }
+      const year = yearStr.length === 2 ? 2000 + Number(yearStr) : Number(yearStr);
+      let hours = Number(hhStr || 0);
+      if (ampm) {
+        const isPM = /p/i.test(ampm);
+        if (isPM && hours < 12) hours += 12;
+        if (!isPM && hours === 12) hours = 0;
+      }
+      const d = new Date(year, month - 1, day, hours, Number(minStr || 0), Number(ssStr || 0));
+      if (!Number.isNaN(d.getTime())) return d.getTime();
+    }
+
+    const fallback = Date.parse(s);
+    if (Number.isNaN(fallback)) {
+      DebugConsole.log(`fecha_inbound no reconocida, dias_en_sitio quedará vacío: "${s}"`, 'warn');
+    }
+    return fallback;
   }
 
   diasEnSitio(fechaInbound) {

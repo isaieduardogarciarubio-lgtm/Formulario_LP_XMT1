@@ -1781,7 +1781,16 @@
           const td = document.createElement('td');
           const value = record[col.field] || '';
 
-          if (col.field === 'resultado') {
+          if (col.field === 'ts') {
+            // ts se guarda en UTC (toISOString) — mostrarlo tal cual hace
+            // parecer que todo pasó "un día adelantado" para quien está
+            // en zona horaria negativa (México, UTC-6). Se muestra en
+            // hora local del navegador.
+            td.textContent = value ? new Date(value).toLocaleString('es-MX', {
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit',
+            }) : '';
+          } else if (col.field === 'resultado') {
             td.className = value === 'Sin incidencia' ? 'status-good' : 'status-critical';
             td.textContent = value;
           } else if (isPhotoField(col.field)) {
