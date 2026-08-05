@@ -67,7 +67,7 @@ Shipment_ID, Fecha_Inbound, HUB_Status, Ultimo_Nodo, Estatus, Subestatus
 Solo `Shipment_ID` es obligatoria. `Fecha_Inbound` se usa para calcular los días que el shipment lleva en el sitio (se guarda como dato); `HUB_Status`, `Ultimo_Nodo`, `Estatus` y `Subestatus` se guardan tal cual para el dashboard/CSV.
 
 **Flujo de captura:**
-1. Primer paso: **¿Dónde estás escaneando?** (texto libre, ej. "ANDÉN 5"). Se pregunta una sola vez — queda fijo entre escaneos y persiste entre aperturas de la app (no se repregunta cada vez), con un botón **Cambiar** siempre visible para ajustarlo.
+1. Primer paso: **¿En qué zona estás?** — enum: `Sorting Large, Sorting GM1, Sorting GM2, Inbound FM, Inbound LH, Mesa de Ayuda, Inventarios, Otro` (texto libre). Se pregunta una sola vez — queda fijo entre escaneos y persiste entre aperturas de la app (no se repregunta cada vez), con un botón **Cambiar** siempre visible para ajustarlo.
 2. Cada shipment escaneado se compara contra el catálogo:
    - **En catálogo** → se guarda directo con Días en Sitio (calculado), HUB Status, Último Nodo, Estatus y Subestatus — sin preguntar nada.
    - **Subestatus `on_hold`** → alerta obligatoria: *"Este paquete debe llevar un proceso de auditoría fiscal, canalízalo con tu equipo de LP"*. Al aceptar, se guarda con ese accionable automáticamente.

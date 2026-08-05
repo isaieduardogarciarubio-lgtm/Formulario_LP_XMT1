@@ -4498,6 +4498,8 @@ class BarreduraSession {
 
   static ACCIONABLE_OPTIONS = ['Canalizar a Mesa de Ayuda', 'Canalizar a Inventarios', 'Sin acción', 'Otro'];
 
+  static ZONA_OPTIONS = ['Sorting Large', 'Sorting GM1', 'Sorting GM2', 'Inbound FM', 'Inbound LH', 'Mesa de Ayuda', 'Inventarios', 'Otro'];
+
   constructor(opts = {}) {
     this.onScan = opts.onScan;
     this.onExit = opts.onExit;
@@ -4593,22 +4595,54 @@ class BarreduraSession {
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Barredura</div>
         </div>
-        <h1 class="step-question">¿Dónde estás escaneando?</h1>
-        <div class="step-input-wrap">
-          <input type="text" class="step-input barredura-lugar-input" placeholder="Ej. ANDÉN 5" />
-        </div>
-        <div class="step-support">Escribe el lugar y presiona Enter.</div>
+        <h1 class="step-question">¿En qué zona estás?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
       </div>
     `;
 
     this.supportEl = this.container.querySelector('.step-support');
-    const input = this.container.querySelector('.barredura-lugar-input');
+    const options = this.container.querySelector('.choice-options');
 
     this.container.querySelector('.step-back-btn').addEventListener('click', () => {
       if (this.lugar) this.renderLoop();
       else if (this.onExit) this.onExit();
     });
 
+    BarreduraSession.ZONA_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => {
+        if (opt === 'Otro') this.pickLugarOtro();
+        else this.setLugar(opt);
+      });
+      options.appendChild(btn);
+    });
+  }
+
+  pickLugarOtro() {
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Barredura — otra zona</div>
+        </div>
+        <h1 class="step-question">Describe la zona</h1>
+        <div class="step-input-wrap">
+          <input type="text" class="step-input barredura-lugar-input" placeholder="Ej. PATIO 3" inputMode="none" />
+        </div>
+        <div class="step-support">Solo mayúsculas. Presiona Enter para continuar.</div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.pickLugar();
+    });
+
+    const input = this.container.querySelector('.barredura-lugar-input');
     input.addEventListener('input', () => {
       const start = input.selectionStart;
       const end = input.selectionEnd;
@@ -4618,18 +4652,22 @@ class BarreduraSession {
     input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
-      const val = input.value.trim();
+      const val = input.value.trim().toUpperCase();
       if (!val) {
-        this.supportEl.textContent = 'Escribe un lugar para continuar.';
+        this.supportEl.textContent = 'Escribe una zona para continuar.';
         this.supportEl.classList.add('error');
         return;
       }
-      this.lugar = val;
-      this.initialLugar = val;
-      this.renderLoop();
+      this.setLugar(val);
     });
 
     setTimeout(() => input.focus(), 60);
+  }
+
+  setLugar(lugar) {
+    this.lugar = lugar;
+    this.initialLugar = lugar;
+    this.renderLoop();
   }
 
   /* ====================================================================== */
