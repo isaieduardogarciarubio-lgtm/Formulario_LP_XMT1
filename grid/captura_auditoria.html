@@ -4848,8 +4848,31 @@ class BarreduraSession {
   }
 
   /** Días transcurridos desde fecha_inbound hasta hoy (o '' si no hay fecha válida). */
+  /**
+   * Parsea fecha_inbound tolerando el formato DD/MM/YYYY (con o sin hora)
+   * que trae el catálogo — Date.parse lo interpreta como MM/DD/YYYY
+   * (estilo EE.UU.) y descuadra por completo los días en sitio (ej. "4/08"
+   * se leía como 8 de abril en vez de 4 de agosto). Si viene en formato
+   * ISO (YYYY-MM-DD…), no hay ambigüedad y se deja tal cual.
+   */
+  parseFechaInbound(str) {
+    const s = String(str || '').trim();
+    if (!s) return NaN;
+
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (m) {
+      const [, dd, mm, yyyy, hh, min, ss] = m;
+      return new Date(
+        Number(yyyy), Number(mm) - 1, Number(dd),
+        Number(hh || 0), Number(min || 0), Number(ss || 0)
+      ).getTime();
+    }
+
+    return Date.parse(s);
+  }
+
   diasEnSitio(fechaInbound) {
-    const parsed = Date.parse(fechaInbound);
+    const parsed = this.parseFechaInbound(fechaInbound);
     if (!fechaInbound || Number.isNaN(parsed)) return '';
     const days = Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000));
     return days >= 0 ? days : '';
