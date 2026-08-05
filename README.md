@@ -19,7 +19,7 @@ Formulario dinámico para 7 logs:
 - **Linehaul**: Escanea HU, área, origen y canalización
 - **Inbound FM**: Escanea patente, diferencia y hallazgo
 - **Inbound / Drivers**: Escanea el QR del conductor (o ingresa la ruta a mano), y audita en loop continuo los shipments Frágil/HV de esa ruta contra el catálogo publicado desde el Dashboard
-- **Barredura**: Lugar fijo por sesión (persistido, botón "Cambiar" rápido); escaneo libre y continuo de shipments, sin catálogo, no repite un ID en 12h (dedup global)
+- **Barredura**: Lugar fijo por sesión (persistido, botón "Cambiar" rápido); escanea contra el catálogo del día (opcional, no bloquea) — muestra días en sitio/estatus si está en catálogo, alerta de auditoría fiscal si el subestatus es on_hold, o pide revisar Sauron y elegir un accionable si no aparece. No repite un ID en 12h (dedup global)
 
 **Características**:
 - ✅ Modo **Handheld** (lector integrado HID, principal) o **Cámara** (BarcodeDetector) con toggle, preferencia guardada por dispositivo
@@ -35,7 +35,7 @@ Formulario dinámico para 7 logs:
 Visualización de datos en tiempo real:
 - Carga automática desde los 7 State Buckets
 - Tabs por tipo de log (Destino/Doca, FURY, Contenerizado, Linehaul, Inbound FM, Inbound / Drivers, Barredura)
-- Un solo uploader de CSV que detecta automáticamente el tipo de catálogo (Pre-Missort o Inbound / Drivers) por sus columnas y lo publica
+- Un solo uploader de CSV que detecta automáticamente el tipo de catálogo (Pre-Missort, Inbound / Drivers o Barredura) por sus columnas y lo publica
 - Exportación de lo capturado en Barredura como CSV
 - KPIs + gráficos interactivos (Plotly)
 - Tabla filtrable con búsqueda
@@ -103,6 +103,7 @@ linehaul_master         → Registros del log Linehaul
 inbound_fm_master       → Registros del log Inbound FM
 inbound_drivers_master  → Registros del log Inbound / Drivers (1 por shipment auditado)
 barredura_master        → Registros del log Barredura (1 por shipment escaneado)
+catalogo_barredura      → Catálogo del día [Shipment_ID, Fecha_Inbound, HUB_Status, Ultimo_Nodo, Estatus, Subestatus] (opcional, publicado desde el Dashboard)
 catalogo_destino_doca   → Catálogo destino/doca [DESTINO, DOCA] (publicado desde el Dashboard)
 catalogo_inbound_drivers → Catálogo de rutas/shipments Frágil/HV (publicado desde el Dashboard)
 photo_folders           → { formId: folder_id } — una carpeta de fotos por tipo de log, compartida entre dispositivos

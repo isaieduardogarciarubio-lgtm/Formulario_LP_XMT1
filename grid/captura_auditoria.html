@@ -1823,17 +1823,18 @@ const FORMS_CONFIG = {
   },
 
   // Tampoco usa el wizard genérico: fija el lugar una vez por sesión y
-  // escanea shipments en loop continuo sin comparar contra ningún
-  // catálogo, sin permitir repetir un ID en un rango de 12h (dedup global
-  // entre dispositivos). Ver BarreduraSession.
+  // escanea shipments en loop continuo contra el catálogo catalogo_barredura
+  // (opcional — funciona igual sin él, solo avisa), sin permitir repetir un
+  // ID en un rango de 12h (dedup global entre dispositivos). Ver BarreduraSession.
   barredura: {
     id: 'barredura',
     title: 'Barredura',
-    description: 'Escaneo continuo de shipments por lugar (dedup 12h)',
+    description: 'Escaneo continuo de shipments por lugar contra el catálogo del día',
     icon: 'clipboard',
     fields: [
       { id: 'lugar', type: 'text' },
       { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
+      { id: 'accionable', type: 'text' },
     ],
   },
 };
@@ -1850,7 +1851,7 @@ const HISTORY_FIELD_MAP = {
   linehaul: { id: 'hu', result: 'area' },
   inbound_fm: { id: 'patente', result: 'hallazgo' },
   inbound_drivers: { id: 'shipment_id', result: 'estado' },
-  barredura: { id: 'shipment_id', result: 'lugar' },
+  barredura: { id: 'shipment_id', result: 'estado' },
 };
 
 /**
@@ -4473,23 +4474,38 @@ class InboundDriversSession {
 
 /**
  * Barredura — escaneo continuo de shipments en un lugar fijo por sesión
- * (ej. andén, zona), sin catálogo: cada shipment se guarda tal cual
- * (shipment_id, lugar) sin comparar contra ningún inventario. No se puede
+ * (ej. andén, zona; se pregunta una vez y queda fijo hasta que se cambie
+ * a mano con "Cambiar", igual que la doca en Pre-Missort), comparando
+ * cada shipment contra el catálogo catalogo_barredura (Shipment_ID →
+ * fecha_inbound/hub_status/ultimo_nodo/estatus/subestatus):
+ *   - En catálogo: guarda directo con esos datos + los días en sitio
+ *     calculados desde fecha_inbound. Si el subestatus es "on_hold",
+ *     alerta que el paquete requiere auditoría fiscal con LP y lo guarda
+ *     con ese accionable automáticamente.
+ *   - Fuera de catálogo: pide revisar Sauron (link directo al shipment) y
+ *     elegir un accionable (Mesa de Ayuda / Inventarios / Sin acción /
+ *     Otro).
+ * La barredura funciona igual sin catálogo publicado (o con uno viejo) —
+ * solo avisa una vez al abrir el log, no bloquea el escaneo. No se puede
  * repetir un ID en un rango de 12h — la deduplicación es global: al abrir
  * el log se leen los registros de barredura_master (+ la cola local) de
  * las últimas 12h, y esos IDs quedan bloqueados desde el arranque aunque
- * sean de otra sesión/dispositivo. El lugar se pregunta una vez y queda
- * fijo hasta que se cambie a mano ("Cambiar"), igual que la doca en
- * Pre-Missort.
+ * sean de otra sesión/dispositivo.
  */
 class BarreduraSession {
   static DEDUP_WINDOW_MS = 12 * 60 * 60 * 1000;
+  static CATALOG_STALE_MS = 12 * 60 * 60 * 1000;
+
+  static ACCIONABLE_OPTIONS = ['Canalizar a Mesa de Ayuda', 'Canalizar a Inventarios', 'Sin acción', 'Otro'];
 
   constructor(opts = {}) {
     this.onScan = opts.onScan;
     this.onExit = opts.onExit;
+    this.onWarning = opts.onWarning;
     this.initialLugar = opts.initialLugar || null;
     this.lugar = null;
+    this.catalogIndex = opts.catalogIndex || {};
+    this.catalogGeneratedAt = opts.catalogGeneratedAt || null;
 
     this.container = null;
     this.scanner = null;
@@ -4509,11 +4525,29 @@ class BarreduraSession {
 
   render(containerId) {
     this.container = document.getElementById(containerId);
+    this.warnIfCatalogStale();
     if (this.initialLugar) {
       this.lugar = this.initialLugar;
       this.renderLoop();
     } else {
       this.pickLugar();
+    }
+  }
+
+  /**
+   * Aviso único (no bloqueante) si no hay catálogo publicado o si tiene
+   * más de 12h de antigüedad — la barredura sigue funcionando igual.
+   */
+  warnIfCatalogStale() {
+    if (this._catalogWarningShown || !this.onWarning) return;
+    this._catalogWarningShown = true;
+    if (!this.catalogGeneratedAt) {
+      this.onWarning('No hay catálogo de Barredura publicado — puedes seguir escaneando sin comparar contra inventario.');
+      return;
+    }
+    const ageMs = Date.now() - this.catalogGeneratedAt.getTime();
+    if (ageMs > BarreduraSession.CATALOG_STALE_MS) {
+      this.onWarning('El catálogo de Barredura tiene más de 12 horas de antigüedad.');
     }
   }
 
@@ -4677,8 +4711,11 @@ class BarreduraSession {
       if (input) input.value = '';
       return;
     }
+    // Si va a navegar (duplicado no, fuera de catálogo sí) no limpiar el
+    // input todavía — se limpia al volver al loop.
+    const willNavigate = !this.isDuplicate(parsed) && !this.catalogIndex[parsed];
     this.processShipment(parsed);
-    if (input && document.body.contains(input)) {
+    if (!willNavigate && input && document.body.contains(input)) {
       input.value = '';
       input.focus();
     }
@@ -4741,8 +4778,10 @@ class BarreduraSession {
   }
 
   /**
-   * Duplicado en 12h -> aviso, no agrega. Si no, se guarda directo (sin
-   * preguntar nada más) y el loop sigue sin interrupción.
+   * Duplicado en 12h -> aviso, no agrega. En catálogo -> guarda directo
+   * con sus datos (o alerta de auditoría fiscal si el subestatus es
+   * on_hold). Fuera de catálogo -> pide revisar Sauron y elegir un
+   * accionable antes de guardar.
    */
   processShipment(shipmentId) {
     const id = String(shipmentId);
@@ -4753,22 +4792,178 @@ class BarreduraSession {
       return;
     }
 
-    this.vibrate(60);
-    this.saveShipment(id);
+    const meta = this.catalogIndex[id];
+    if (meta) {
+      this.vibrate(60);
+      if ((meta.subestatus || '').trim().toLowerCase() === 'on_hold') {
+        this.handleOnHold(id, meta);
+      } else {
+        this.saveFound(id, meta);
+      }
+      return;
+    }
+
+    this.locked = true;
+    if (this.scanner) this.scanner.pause();
+    this.vibrate([40, 60, 40]);
+    this.renderNotFound(id);
   }
 
-  async saveShipment(id) {
-    // Dedup se marca de inmediato (síncrono) para que un segundo escaneo
-    // casi simultáneo del mismo ID, mientras este todavía no termina de
-    // guardar, se detecte como duplicado en vez de guardarse dos veces.
-    this.recentMap.set(id, new Date().toISOString());
-    this.flash('ok', `${id} · Escaneado`);
+  /** Días transcurridos desde fecha_inbound hasta hoy (o '' si no hay fecha válida). */
+  diasEnSitio(fechaInbound) {
+    const parsed = Date.parse(fechaInbound);
+    if (!fechaInbound || Number.isNaN(parsed)) return '';
+    const days = Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000));
+    return days >= 0 ? days : '';
+  }
 
+  async saveFound(id, meta, accionable = '') {
+    this.recentMap.set(id, new Date().toISOString());
+    this.flash('ok', `${id} · En catálogo`);
     if (this.onScan) {
-      await this.onScan({ shipment_id: id, lugar: this.lugar });
+      await this.onScan({
+        shipment_id: id,
+        lugar: this.lugar,
+        estado: 'En catálogo',
+        dias_en_sitio: this.diasEnSitio(meta.fecha_inbound),
+        hub_status: meta.hub_status || '',
+        ultimo_nodo: meta.ultimo_nodo || '',
+        estatus: meta.estatus || '',
+        subestatus: meta.subestatus || '',
+        accionable,
+      });
     }
     this.count += 1;
     if (this.counterEl) this.counterEl.textContent = `${this.count} escaneados en esta sesión`;
+  }
+
+  /**
+   * Subestatus on_hold: alerta obligatoria de auditoría fiscal antes de
+   * guardar — el accionable queda resuelto por la alerta, no hace falta
+   * que el usuario elija nada.
+   */
+  async handleOnHold(id, meta) {
+    await ConfirmModal.show({
+      title: 'Auditoría fiscal',
+      message: 'Este paquete debe llevar un proceso de auditoría fiscal, canalízalo con tu equipo de LP',
+      confirmText: 'Entendido',
+      danger: true,
+    });
+    await this.saveFound(id, meta, 'Auditoría Fiscal - LP');
+  }
+
+  /* ====================================================================== */
+  /* Fuera de catálogo: Sauron + accionable (enum + "Otro" texto libre)     */
+  /* ====================================================================== */
+
+  renderNotFound(id) {
+    const sauronUrl = `https://shipping-bo.adminml.com/sauron/shipments/shipment/${encodeURIComponent(id)}`;
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Fuera de catálogo</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${id}</div>
+          <div class="driver-shipment-row">
+            <span class="driver-badge driver-badge-out">No está en el catálogo</span>
+          </div>
+        </div>
+        <a href="${sauronUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
+        <h1 class="step-question">¿Qué accionable requiere?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    BarreduraSession.ACCIONABLE_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => {
+        if (opt === 'Otro') this.renderNotFoundOtro(id);
+        else this.saveNotFound(id, opt);
+      });
+      options.appendChild(btn);
+    });
+  }
+
+  renderNotFoundOtro(id) {
+    this.container.innerHTML = `
+      <div class="step-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Fuera de catálogo — otro accionable</div>
+        </div>
+        <h1 class="step-question">Escribe el accionable (${id})</h1>
+        <div class="step-input-wrap">
+          <input type="text" class="step-input barredura-accionable-input" placeholder="ACCIONABLE" inputMode="none" />
+        </div>
+        <div class="step-support">Solo mayúsculas. Presiona Enter para guardar.</div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.renderNotFound(id);
+    });
+
+    const input = this.container.querySelector('.barredura-accionable-input');
+    input.addEventListener('input', () => {
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      input.value = input.value.toUpperCase();
+      input.setSelectionRange(start, end);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const val = input.value.trim().toUpperCase();
+      if (!val) {
+        this.supportEl.textContent = 'Escribe un accionable para continuar.';
+        this.supportEl.classList.add('error');
+        return;
+      }
+      this.saveNotFound(id, val);
+    });
+    setTimeout(() => input.focus(), 60);
+  }
+
+  async saveNotFound(id, accionable) {
+    // Guard contra doble toque: un segundo click rápido en la misma
+    // opción (o Enter dos veces en "Otro") duplicaba el registro mientras
+    // el primer guardado todavía no terminaba.
+    if (this.savingAccionable) return;
+    this.savingAccionable = true;
+
+    this.recentMap.set(id, new Date().toISOString());
+    if (this.onScan) {
+      await this.onScan({
+        shipment_id: id,
+        lugar: this.lugar,
+        estado: 'Fuera de catálogo',
+        dias_en_sitio: '',
+        hub_status: '',
+        ultimo_nodo: '',
+        estatus: '',
+        subestatus: '',
+        accionable,
+      });
+    }
+    this.count += 1;
+    this.savingAccionable = false;
+    this.locked = false;
+    this.renderLoop();
   }
 
   flash(kind, message) {
@@ -5065,6 +5260,9 @@ class CapturaApp {
     this.pendingCount = 0;
     this.lastDoca = null;
     this.lastLugar = null;
+    this.barreduraCatalogIndex = {};
+    this.barreduraCatalogGeneratedAt = null;
+    this.barreduraCatalogAccessDenied = false;
     this.folderIds = {}; // folder_id de Grid por tipo de log (cache en memoria)
     // Modo de captura de códigos: 'handheld' (lector integrado, principal) o
     // 'camera'. Se restaura desde IndexedDB en init() (por dispositivo).
@@ -5244,6 +5442,7 @@ class CapturaApp {
       await this.loadLastLugar();
       await this.loadCatalog();
       await this.loadDriversCatalog();
+      await this.loadBarreduraCatalog();
       await this.loadOutboxFromStorage();
 
       this.renderMenu();
@@ -5349,6 +5548,36 @@ class CapturaApp {
       await RecordStore.setSetting('lastLugar', lugar);
     } catch (e) {
       DebugConsole.log(`No se pudo guardar el lugar: ${e.message}`, 'warn');
+    }
+  }
+
+  /**
+   * Catálogo de Barredura (Shipment_ID → fecha_inbound/hub_status/
+   * ultimo_nodo/estatus/subestatus), publicado desde el dashboard. No
+   * bloquea el log si falta o falla — Barredura funciona sin catálogo,
+   * BarreduraSession solo avisa si no hay uno o está desactualizado.
+   */
+  async loadBarreduraCatalog() {
+    this.barreduraCatalogAccessDenied = false;
+    try {
+      DebugConsole.log('Cargando catálogo Barredura...', 'info');
+      const data = await this.gridClient.getStateBucket('catalogo_barredura');
+
+      if (!data || typeof data !== 'object') {
+        DebugConsole.log('Catálogo Barredura vacío o no publicado', 'warn');
+        this.barreduraCatalogIndex = {};
+        this.barreduraCatalogGeneratedAt = null;
+        return;
+      }
+
+      this.barreduraCatalogIndex = data.index && typeof data.index === 'object' ? data.index : data;
+      this.barreduraCatalogGeneratedAt = data.generatedAt ? new Date(data.generatedAt) : null;
+      DebugConsole.log(`Catálogo Barredura cargado: ${Object.keys(this.barreduraCatalogIndex).length} shipments`, 'info');
+    } catch (e) {
+      this.barreduraCatalogAccessDenied = /^403$/.test(e.message);
+      DebugConsole.log(`Error al cargar catálogo Barredura: ${e.message}`, 'warn');
+      this.barreduraCatalogIndex = {};
+      this.barreduraCatalogGeneratedAt = null;
     }
   }
 
@@ -5662,8 +5891,11 @@ class CapturaApp {
     this.currentEngine = new BarreduraSession({
       initialLugar: this.lastLugar,
       recentRecords,
+      catalogIndex: this.barreduraCatalogIndex,
+      catalogGeneratedAt: this.barreduraCatalogGeneratedAt,
       onScan: (values) => this.onFormComplete('barredura', values, { stayInSession: true }),
       onExit: () => this.renderMenu(),
+      onWarning: (msg) => this.showToast(msg, 'warn'),
     });
     this.currentEngine.render('form-container');
   }

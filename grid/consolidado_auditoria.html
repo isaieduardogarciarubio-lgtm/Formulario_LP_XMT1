@@ -574,7 +574,7 @@
         <path d="M9 16l2 2 4-4"/>
       </svg>
     </button>
-    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort o Inbound/Drivers">
+    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort, Inbound/Drivers o Barredura">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
         <polyline points="7 8 12 3 17 8"/>
@@ -1064,16 +1064,59 @@
     return index;
   }
 
+  // Catálogo de Barredura: [Shipment_ID, Fecha_Inbound, HUB_Status,
+  // Ultimo_Nodo, Estatus, Subestatus] → índice por Shipment_ID. Solo
+  // Shipment_ID es obligatoria; el resto se guarda tal cual para mostrar
+  // en captura y exportar desde el dashboard.
+  function buildBarreduraCatalogIndex(rows) {
+    if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
+
+    const header = rows[0].map(h => cleanCell(h).toUpperCase());
+    const idx = (name) => header.indexOf(name);
+    const col = {
+      shipment: idx('SHIPMENT_ID'),
+      fecha: idx('FECHA_INBOUND'),
+      hub: idx('HUB_STATUS'),
+      nodo: idx('ULTIMO_NODO'),
+      estatus: idx('ESTATUS'),
+      subestatus: idx('SUBESTATUS'),
+    };
+    if (col.shipment === -1) {
+      throw new Error('Falta la columna SHIPMENT_ID en el CSV');
+    }
+
+    const index = {};
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const shipmentId = cleanCell(row[col.shipment]);
+      if (!shipmentId) continue;
+      index[shipmentId] = {
+        fecha_inbound: col.fecha !== -1 ? cleanCell(row[col.fecha]) : '',
+        hub_status: col.hub !== -1 ? cleanCell(row[col.hub]) : '',
+        ultimo_nodo: col.nodo !== -1 ? cleanCell(row[col.nodo]) : '',
+        estatus: col.estatus !== -1 ? cleanCell(row[col.estatus]) : '',
+        subestatus: col.subestatus !== -1 ? cleanCell(row[col.subestatus]) : '',
+      };
+    }
+
+    if (Object.keys(index).length === 0) {
+      throw new Error('No se encontraron shipments válidos en el CSV');
+    }
+    return index;
+  }
+
   /**
    * Detecta el tipo de catálogo a partir del header del CSV (ya en
-   * mayúsculas), para que un solo botón de carga sirva para los 2
-   * catálogos publicables desde el dashboard (Barredura ya no usa
-   * catálogo — es escaneo libre por lugar).
+   * mayúsculas), para que un solo botón de carga sirva para los 3
+   * catálogos publicables desde el dashboard. Inbound/Drivers se checa
+   * primero porque también trae SHIPMENT_ID (columna que por sí sola
+   * identificaría Barredura).
    */
   function detectCatalogType(header) {
     const has = (name) => header.includes(name);
     if (has('ID_ROUTE') && has('CARRIER') && has('SHIPMENT_ID')) return 'inbound_drivers';
     if (has('DESTINO') && has('DOCA')) return 'destino_doca';
+    if (has('SHIPMENT_ID')) return 'barredura';
     return null;
   }
 
@@ -1377,12 +1420,14 @@
           this.addKpiCard(container, divergentRoutes.toString(), 'Rutas con divergencia QR');
         }
       } else if (this.currentLog === 'barredura') {
-        const lugares = new Set(records.map(r => r.lugar));
         this.addKpiCard(container, total.toString(), 'Total');
-        lugares.forEach(l => {
-          const count = records.filter(r => r.lugar === l).length;
-          this.addKpiCard(container, count.toString(), l || '(sin lugar)');
-        });
+        const enCatalogo = records.filter(r => r.estado === 'En catálogo').length;
+        this.addKpiCard(container, enCatalogo.toString(), 'En catálogo');
+        this.addKpiCard(container, (total - enCatalogo).toString(), 'Fuera de catálogo');
+        const conAccionable = records.filter(r => (r.accionable || '').trim()).length;
+        if (conAccionable > 0) {
+          this.addKpiCard(container, conAccionable.toString(), 'Con accionable');
+        }
       }
     }
 
@@ -1456,6 +1501,7 @@
           ];
         } else if (this.currentLog === 'barredura') {
           builders = [
+            () => this.buildBarreduraEstadoChart(records),
             () => this.buildBarreduraLugarChart(records),
           ];
         }
@@ -1651,6 +1697,30 @@
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 40 },
+      };
+
+      return { data, layout };
+    }
+
+    buildBarreduraEstadoChart(records) {
+      const enCatalogo = records.filter(r => r.estado === 'En catálogo').length;
+      const fueraCatalogo = records.length - enCatalogo;
+
+      const data = [{
+        labels: ['En catálogo', 'Fuera de catálogo'],
+        values: [enCatalogo, fueraCatalogo],
+        type: 'pie',
+        marker: { colors: ['#34C759', '#FF453A'] },
+      }];
+
+      const layout = {
+        title: 'Estado del escaneo',
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        showlegend: true,
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
+        margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
       return { data, layout };
@@ -2044,8 +2114,14 @@
           await this.publishCatalogIndex('catalogo_destino_doca', index);
           this.showNotification(`Catálogo Pre-Missort publicado · ${destinoCount} destinos · ${docaCount} docas`, 'success');
           DebugConsole.log(`Catálogo Pre-Missort publicado: ${destinoCount} destinos, ${docaCount} docas`, 'info');
+        } else if (type === 'barredura') {
+          const index = buildBarreduraCatalogIndex(rows);
+          const shipmentCount = Object.keys(index).length;
+          await this.publishCatalogIndex('catalogo_barredura', index);
+          this.showNotification(`Catálogo Barredura publicado · ${shipmentCount} shipments`, 'success');
+          DebugConsole.log(`Catálogo Barredura publicado: ${shipmentCount} shipments`, 'info');
         } else {
-          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort) o ID_ROUTE+CARRIER+SHIPMENT_ID (Inbound/Drivers).');
+          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), ID_ROUTE+CARRIER+SHIPMENT_ID (Inbound/Drivers), o SHIPMENT_ID (Barredura).');
         }
       } catch (e) {
         this.showNotification(`Error al publicar catálogo: ${e.message}`, 'error');
@@ -2179,6 +2255,13 @@
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'shipment_id', header: 'Shipment ID' },
         { field: 'lugar', header: 'Lugar' },
+        { field: 'estado', header: 'Estado' },
+        { field: 'dias_en_sitio', header: 'Días en Sitio' },
+        { field: 'hub_status', header: 'HUB Status' },
+        { field: 'ultimo_nodo', header: 'Último Nodo' },
+        { field: 'estatus', header: 'Estatus' },
+        { field: 'subestatus', header: 'Subestatus' },
+        { field: 'accionable', header: 'Accionable' },
       ],
       fields: [],
     },
