@@ -80,6 +80,26 @@ function parseFechaConvencionMexicana(str) {
 }
 ```
 
+### Bonus: "días desde X" debe compararse por día calendario, no por horas exactas
+
+Segundo bug real, mismo feature: con la fecha ya bien parseada, el cálculo de "días en sitio" restaba timestamps exactos (`Date.now() - parsed`). Si `fecha_inbound` traía una hora del día **más tarde** que la hora del escaneo — aunque fuera el **mismo día calendario** — la resta daba un número negativo y el campo se mostraba vacío. Vacío se ve como un bug (peor que un número incorrecto, porque no da ninguna pista).
+
+```js
+// MAL: compara timestamps exactos — sensible a la hora del día.
+const days = Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000));
+return days >= 0 ? days : ''; // negativo -> vacío, confuso
+
+// BIEN: compara solo la fecha (medianoche a medianoche), sin horas.
+const inbound = new Date(parsed);
+const inboundDay = new Date(inbound.getFullYear(), inbound.getMonth(), inbound.getDate());
+const today = new Date();
+const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+const days = Math.round((todayDay - inboundDay) / (24 * 60 * 60 * 1000));
+return Math.max(days, 0); // nunca negativo, nunca vacío
+```
+
+Regla: cuando el resultado que le importa al usuario es "cuántos días" (no "cuántas horas exactas"), trunca ambos lados a medianoche antes de restar — de lo contrario la hora del día se vuelve una fuente de bugs invisible.
+
 ### Checklist al construir cualquier feature que calcule algo a partir de una fecha de catálogo/CSV
 
 - [ ] ¿El dato viene de un humano llenando Excel/Sheets? → asume ambigüedad DD/MM vs MM/DD, **no confíes en `Date.parse`**.

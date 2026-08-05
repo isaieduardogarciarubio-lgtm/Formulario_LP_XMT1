@@ -4903,11 +4903,23 @@ class BarreduraSession {
     return fallback;
   }
 
+  /**
+   * Días en sitio por DÍA CALENDARIO, no por horas exactas — si solo se
+   * restaran timestamps, un fecha_inbound con hora más tarde que la del
+   * escaneo (aunque sea el mismo día) daba un número negativo y el campo
+   * quedaba vacío (parecía un bug). Cualquier resultado negativo (mismo
+   * día con hora posterior, o una fecha futura por error de captura) se
+   * muestra como 0 — más claro para el operador que dejarlo en blanco.
+   */
   diasEnSitio(fechaInbound) {
     const parsed = this.parseFechaInbound(fechaInbound);
     if (!fechaInbound || Number.isNaN(parsed)) return '';
-    const days = Math.floor((Date.now() - parsed) / (24 * 60 * 60 * 1000));
-    return days >= 0 ? days : '';
+    const inbound = new Date(parsed);
+    const inboundDay = new Date(inbound.getFullYear(), inbound.getMonth(), inbound.getDate());
+    const today = new Date();
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const days = Math.round((todayDay - inboundDay) / (24 * 60 * 60 * 1000));
+    return Math.max(days, 0);
   }
 
   async saveFound(id, meta, accionable = '') {
