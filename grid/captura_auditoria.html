@@ -1285,10 +1285,95 @@ select.step-input {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning {
+  animation: spin 1s linear infinite !important;
+}
+
+/* Overlay bloqueante de guardado/sincronización (micro-orb fluida) */
+
+.loading-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 3000;
+  align-items: center;
+  justify-content: center;
+}
+
+.loading-overlay.active {
+  display: flex;
+}
+
+.loading-overlay-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  padding: 16px 24px;
+  border-radius: var(--radius-card);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.loading-orb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #27272a;
+  flex-shrink: 0;
+  transition: all 0.4s ease;
+}
+
+.loading-orb.saving {
+  background: radial-gradient(circle at 30% 30%, #a855f7, #3b82f6, #06b6d4);
+  filter: blur(1px);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+  animation: loading-orb-morph 2s infinite alternate, loading-orb-spin 3s linear infinite;
+}
+
+.loading-orb.saved {
+  background: #10b981;
+  filter: blur(0);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.6);
+  transform: scale(1.15);
+  animation: none;
+}
+
+.loading-orb.error {
+  background: var(--color-error);
+  filter: blur(0);
+  box-shadow: 0 0 10px rgba(255, 69, 58, 0.6);
+  animation: none;
+}
+
+@keyframes loading-orb-morph {
+  0% { border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%; }
+  100% { border-radius: 60% 40% 30% 70% / 50% 60% 30% 60%; }
+}
+
+@keyframes loading-orb-spin {
+  100% { transform: rotate(360deg); }
+}
   </style>
 
 </head>
 <body>
+
+<div id="loading-overlay" class="loading-overlay">
+  <div class="loading-overlay-content">
+    <div id="loading-orb" class="loading-orb"></div>
+    <span id="loading-overlay-text">Guardando...</span>
+  </div>
+</div>
 
 <div class="app-container">
   <!-- Navbar -->
@@ -5168,6 +5253,58 @@ class DebugConsole {
 }
 
 /**
+ * LoadingOverlay — bloqueo visual de pantalla completa mientras se guarda/
+ * sincroniza un registro. Evita que un doble-tap dispare un segundo
+ * guardado mientras el primero todavía está en curso — el backdrop cubre
+ * toda la pantalla y captura los clicks, así que nada por debajo es
+ * interactuable hasta que se oculta.
+ */
+const LoadingOverlay = (() => {
+  let overlayEl, orbEl, textEl, hideTimer;
+
+  function refs() {
+    if (!overlayEl) {
+      overlayEl = document.getElementById('loading-overlay');
+      orbEl = document.getElementById('loading-orb');
+      textEl = document.getElementById('loading-overlay-text');
+    }
+    return !!overlayEl;
+  }
+
+  function show(text = 'Guardando...') {
+    if (!refs()) return;
+    clearTimeout(hideTimer);
+    overlayEl.classList.add('active');
+    orbEl.className = 'loading-orb saving';
+    textEl.textContent = text;
+  }
+
+  function success(text = 'Guardado', autoHideMs = 500) {
+    if (!refs()) return;
+    orbEl.className = 'loading-orb saved';
+    textEl.textContent = text;
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hide, autoHideMs);
+  }
+
+  function error(text = 'Error al guardar', autoHideMs = 1600) {
+    if (!refs()) return;
+    orbEl.className = 'loading-orb error';
+    textEl.textContent = text;
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hide, autoHideMs);
+  }
+
+  function hide() {
+    if (!refs()) return;
+    clearTimeout(hideTimer);
+    overlayEl.classList.remove('active');
+  }
+
+  return { show, success, error, hide };
+})();
+
+/**
  * ConfirmModal — confirmación in-app (reemplaza confirm() nativo, que se ve
  * fuera de lugar con el resto del diseño OLED). Singleton: reutiliza el
  * mismo overlay del DOM para cualquier confirmación de la app.
@@ -5364,6 +5501,7 @@ class CapturaApp {
     this.driversCatalogLoadedAt = null;
     this.driversCatalogAccessDenied = false;
     this.outboxRecords = [];
+    this.syncing = false;
     this.currentEngine = null;
     this.userEmail = null;
     this.pendingCount = 0;
@@ -5818,8 +5956,8 @@ class CapturaApp {
         ${this.outboxRecords.length > 0 ? `
           <div style="margin-top: 32px;">
             <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Registros Pendientes (${this.outboxRecords.length})</h3>
-            <button onclick="window.app.flushOutbox()" class="btn btn-primary" style="width: 100%;">
-              ${Icons.svg('refresh', { size: 16 })} <span>Sincronizar Ahora</span>
+            <button id="btn-sync-now" onclick="window.app.flushOutbox()" class="btn btn-primary" style="width: 100%;">
+              ${Icons.svg('refresh', { size: 16 })} <span class="btn-sync-now-label">Sincronizar Ahora</span>
             </button>
           </div>
         ` : ''}
@@ -5845,6 +5983,11 @@ class CapturaApp {
       this._historyWindowMinutes = parseInt(e.target.value, 10);
       this.renderHistoryList();
     });
+
+    // El botón acaba de pintarse desde cero — si había una sincronización
+    // en curso al momento de re-renderizar el menú, refleja ese estado de
+    // inmediato en vez de esperar a que flushOutbox termine.
+    this.setSyncButtonState(this.syncing);
 
     await this.renderHistoryList();
   }
@@ -6012,7 +6155,7 @@ class CapturaApp {
   async onFormComplete(formId, values, { stayInSession = false } = {}) {
     try {
       DebugConsole.log('Procesando registro...', 'info');
-      if (!stayInSession) this.showToast('Guardando...', 'info');
+      if (!stayInSession) LoadingOverlay.show('Guardando...');
 
       if (formId === 'destino_doca') {
         this.lastDoca = values.doca;
@@ -6058,14 +6201,18 @@ class CapturaApp {
 
       // Try to sync immediately if online
       if (navigator.onLine) {
+        if (!stayInSession) LoadingOverlay.show('Sincronizando con Grid...');
         await this.flushOutbox();
+        if (!stayInSession) LoadingOverlay.success('Guardado');
       } else if (!stayInSession) {
+        LoadingOverlay.success('Guardado local');
         this.showToast('Guardado local — se sincronizará al reconectar', 'info');
       }
 
       if (!stayInSession) this.renderMenu();
     } catch (e) {
       DebugConsole.log(`Error al guardar: ${e.message}`, 'error');
+      if (!stayInSession) LoadingOverlay.error('Error al guardar');
       this.showToast('Error al guardar el registro', 'error');
     }
   }
@@ -6130,6 +6277,22 @@ class CapturaApp {
     }
   }
 
+  // Alterna el estado visual del botón "Sincronizar Ahora" (deshabilitado +
+  // ícono girando) mientras hay una sincronización en curso. Se llama tanto
+  // desde flushOutbox como al final de renderMenu, por si el menú se
+  // vuelve a pintar mientras this.syncing sigue en true.
+  setSyncButtonState(syncing) {
+    const btn = document.getElementById('btn-sync-now');
+    if (!btn) return;
+    btn.disabled = syncing;
+    btn.style.opacity = syncing ? '0.6' : '';
+    btn.style.cursor = syncing ? 'not-allowed' : '';
+    const label = btn.querySelector('.btn-sync-now-label');
+    if (label) label.textContent = syncing ? 'Sincronizando...' : 'Sincronizar Ahora';
+    const icon = btn.querySelector('svg');
+    if (icon) icon.classList.toggle('spinning', syncing);
+  }
+
   async flushOutbox() {
     if (this.outboxRecords.length === 0) {
       this.showToast('No hay registros pendientes', 'info');
@@ -6141,57 +6304,73 @@ class CapturaApp {
       return;
     }
 
-    DebugConsole.log('Sincronizando registros...', 'info');
+    if (this.syncing) {
+      // Ya hay un flushOutbox en curso (llamado desde el botón, el evento
+      // 'online', u onFormComplete tras cada registro) — ignorar la
+      // llamada duplicada en vez de sincronizar el mismo lote dos veces.
+      DebugConsole.log('Sincronización ya en curso — se ignora la llamada duplicada', 'info');
+      return;
+    }
 
-    const synced = [];
-    let networkDown = false;
+    this.syncing = true;
+    this.setSyncButtonState(true);
 
-    for (const record of this.outboxRecords) {
-      try {
-        await this.syncOneRecord(record);
-        synced.push(record.uid);
-        await RecordStore.markHistorySynced(record.uid);
-        DebugConsole.log(`Sincronizado: ${record.uid}`, 'info');
-      } catch (e) {
-        if (e.isNetworkError || e.isTimeout) {
-          // La red no responde: seguir intentando registro por registro
-          // solo repetiría el mismo fallo. Se corta el lote y se deja el
-          // resto en la cola para el próximo intento (evento 'online',
-          // botón manual, o reintento automático).
-          DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
-          networkDown = true;
-          break;
+    try {
+      DebugConsole.log('Sincronizando registros...', 'info');
+
+      const synced = [];
+      let networkDown = false;
+
+      for (const record of this.outboxRecords) {
+        try {
+          await this.syncOneRecord(record);
+          synced.push(record.uid);
+          await RecordStore.markHistorySynced(record.uid);
+          DebugConsole.log(`Sincronizado: ${record.uid}`, 'info');
+        } catch (e) {
+          if (e.isNetworkError || e.isTimeout) {
+            // La red no responde: seguir intentando registro por registro
+            // solo repetiría el mismo fallo. Se corta el lote y se deja el
+            // resto en la cola para el próximo intento (evento 'online',
+            // botón manual, o reintento automático).
+            DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
+            networkDown = true;
+            break;
+          }
+          DebugConsole.log(`Error al sincronizar ${record.uid}: ${e.message}`, 'error');
         }
-        DebugConsole.log(`Error al sincronizar ${record.uid}: ${e.message}`, 'error');
       }
-    }
 
-    // Remove synced from outbox
-    for (const uid of synced) {
-      await RecordStore.delete(uid);
-    }
+      // Remove synced from outbox
+      for (const uid of synced) {
+        await RecordStore.delete(uid);
+      }
 
-    this.outboxRecords = this.outboxRecords.filter(r => !synced.includes(r.uid));
-    this.updatePendingBadge();
+      this.outboxRecords = this.outboxRecords.filter(r => !synced.includes(r.uid));
+      this.updatePendingBadge();
 
-    if (synced.length > 0) {
-      DebugConsole.log(`${synced.length} registros sincronizados`, 'info');
-      this.showToast(`${synced.length} registros sincronizados`, 'success');
-    }
+      if (synced.length > 0) {
+        DebugConsole.log(`${synced.length} registros sincronizados`, 'info');
+        this.showToast(`${synced.length} registros sincronizados`, 'success');
+      }
 
-    if (networkDown) {
-      this.showToast(
-        `Sin conexión con Grid — ${this.outboxRecords.length} pendiente(s), se reintentará al reconectar`,
-        'warn'
-      );
-    } else if (synced.length === 0 && this.outboxRecords.length > 0) {
-      this.showToast('No se pudo sincronizar — ver consola de errores', 'error');
-    }
+      if (networkDown) {
+        this.showToast(
+          `Sin conexión con Grid — ${this.outboxRecords.length} pendiente(s), se reintentará al reconectar`,
+          'warn'
+        );
+      } else if (synced.length === 0 && this.outboxRecords.length > 0) {
+        this.showToast('No se pudo sincronizar — ver consola de errores', 'error');
+      }
 
-    // Si el menú está visible, refrescar el historial para reflejar los
-    // nuevos badges "Sincronizado" sin esperar a la próxima navegación.
-    if (document.getElementById('history-list')) {
-      this.renderHistoryList();
+      // Si el menú está visible, refrescar el historial para reflejar los
+      // nuevos badges "Sincronizado" sin esperar a la próxima navegación.
+      if (document.getElementById('history-list')) {
+        this.renderHistoryList();
+      }
+    } finally {
+      this.syncing = false;
+      this.setSyncButtonState(false);
     }
   }
 
