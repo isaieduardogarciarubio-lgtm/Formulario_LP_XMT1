@@ -2658,7 +2658,8 @@ class FormEngine {
     this.inputWrapEl   = scanArea;
     this.errorTargetEl = scanArea;
 
-    const isActive = () => !!this.scannerBody && this.scannerBody.contains(hidInput) && ScanUI.mode() === 'handheld';
+    let modalOpen = false;
+    const isActive = () => !!this.scannerBody && this.scannerBody.contains(hidInput) && ScanUI.mode() === 'handheld' && !modalOpen;
     const armHid   = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
 
     hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
@@ -2705,8 +2706,8 @@ class FormEngine {
     this.container.appendChild(modal);
 
     const modalInput = modal.querySelector('.hh-manual-input');
-    const openModal  = () => { modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
-    const closeModal = () => { modal.classList.remove('open'); setTimeout(armHid, 80); };
+    const openModal  = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+    const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
     const confirmModal = () => {
       const val = modalInput.value.trim();
       if (!val) return;
@@ -3709,7 +3710,8 @@ class ContenedorAuditSession {
     scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
     this.errorTargetEl = scanArea;
 
-    const isActive = () => !!this.scannerBody && this.scannerBody.contains(hidInput) && ScanUI.mode() === 'handheld';
+    let modalOpen = false;
+    const isActive = () => !!this.scannerBody && this.scannerBody.contains(hidInput) && ScanUI.mode() === 'handheld' && !modalOpen;
     const armHid = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
 
     hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
@@ -3759,8 +3761,8 @@ class ContenedorAuditSession {
     this._hhModal = modal;
 
     const modalInput = modal.querySelector('.hh-manual-input');
-    const openModal = () => { modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
-    const closeModal = () => { modal.classList.remove('open'); setTimeout(armHid, 80); };
+    const openModal = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+    const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
     const confirmModal = () => {
       const val = modalInput.value.trim().toUpperCase();
       if (!val) return;
