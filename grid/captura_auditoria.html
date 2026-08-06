@@ -2296,6 +2296,15 @@ class PhotoCamera {
  * mismo control y la misma entrada handheld.
  */
 const ScanUI = (() => {
+  // iOS Safari renderiza inputmode="none" ocultando solo las teclas y
+  // dejando la fila de sugerencias/portapapeles — ahí no interfiere con
+  // lectores Bluetooth (se comportan como teclado físico real, canal
+  // distinto al del teclado en pantalla). En Android, en cambio, varias
+  // versiones de WebView/Chrome bloquean con este atributo la conexión de
+  // entrada completa, incluyendo lectores que inyectan el código como
+  // teclado emulado — por eso solo se aplica en iOS.
+  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
   function mode() {
     return (window.app && window.app.scanMode) || 'handheld';
   }
@@ -2342,17 +2351,10 @@ const ScanUI = (() => {
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('autocapitalize', uppercase ? 'characters' : 'off');
-    // NOTA: se probó inputmode="none" para bloquear el teclado virtual y
-    // dejar el campo "solo lector" — se revirtió porque en varios
-    // dispositivos/versiones de WebView bloquea TODA entrada al input, no
-    // solo el teclado en pantalla: muchos lectores Bluetooth/handheld
-    // inyectan el código a través del mismo canal de método de entrada
-    // (IME) que inputmode="none" desactiva, así que también se bloqueaba
-    // el lector. El navegador no puede distinguir de forma confiable un
-    // lector físico de un teclado humano — ambos llegan como el mismo
-    // evento de teclado — así que no hay forma 100% segura de "solo
-    // escaneo" puramente del lado del cliente sin arriesgar bloquear el
-    // lector real en algún dispositivo.
+    // Solo en iOS: oculta las teclas del teclado virtual (deja la fila de
+    // sugerencias/portapapeles) sin afectar al lector. En Android se deja
+    // el teclado normal a propósito — ver nota de IS_IOS más arriba.
+    if (IS_IOS) input.setAttribute('inputmode', 'none');
     input.spellcheck = false;
     wrap.appendChild(input);
 
