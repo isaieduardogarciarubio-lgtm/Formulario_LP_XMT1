@@ -163,15 +163,29 @@
 
     .last-code.visible { opacity: 0.55; }
 
-    /* ── Input oculto para el lector HID ── */
-    .scanner-input {
+    /* ── Input HID: en pantalla pero invisible, necesario para autofocus ── */
+    #hidInput {
       position: fixed;
-      left: -9999px;
-      width: 1px;
-      height: 1px;
+      top: 0; left: 0;
+      width: 100%; height: 0;
+      overflow: hidden;
+      border: 0; outline: 0; padding: 0; margin: 0;
       opacity: 0;
       pointer-events: none;
+      font-size: 16px; /* evita zoom en iOS */
     }
+
+    /* Indicador de foco: puntito en esquina sup-derecha */
+    #focusIndicator {
+      position: fixed;
+      top: 10px; right: 10px;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #2c2c2e;
+      transition: background 0.3s;
+      z-index: 100;
+    }
+    #focusIndicator.armed { background: var(--success); }
 
     /* ── Log panel ── */
     .log-panel {
@@ -351,7 +365,15 @@
 </head>
 <body>
 
-  <main class="scanner-screen" id="scannerScreen" onclick="armScanner()">
+  <!-- Input HID: autofocus + height:0 = invisible pero enfocable desde carga -->
+  <input id="hidInput" type="text" autofocus
+         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+         aria-label="Lector de código de barras" tabindex="0">
+
+  <!-- Punto verde = listo para escanear, gris = sin foco -->
+  <div id="focusIndicator"></div>
+
+  <main class="scanner-screen" id="scannerScreen">
 
     <div class="package-icon idle" id="packageIcon">
       <!--
@@ -419,13 +441,15 @@
 
 
   <script>
-    const statusEl    = document.getElementById('status');
-    const lastCodeEl  = document.getElementById('lastCode');
-    const packageIcon = document.getElementById('packageIcon');
-    const logList     = document.getElementById('logList');
-    const logEmpty    = document.getElementById('logEmpty');
-    const logBadge    = document.getElementById('logBadge');
-    const testInput   = document.getElementById('testInput');
+    const hidInput       = document.getElementById('hidInput');
+    const focusIndicator = document.getElementById('focusIndicator');
+    const statusEl       = document.getElementById('status');
+    const lastCodeEl     = document.getElementById('lastCode');
+    const packageIcon    = document.getElementById('packageIcon');
+    const logList        = document.getElementById('logList');
+    const logEmpty       = document.getElementById('logEmpty');
+    const logBadge       = document.getElementById('logBadge');
+    const testInput      = document.getElementById('testInput');
 
     const ICON_CHECK = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,10 8,14 16,6"/></svg>`;
     const ICON_X     = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>`;
@@ -508,29 +532,34 @@
       }
     }
 
-    // ── HID: escucha keydown en el documento, sin necesidad de foco ────────
-    // El lector envía los caracteres del código + Enter en ráfaga rápida.
-    // Ignoramos eventos mientras el input de prueba manual está activo.
-    let hidBuffer = '';
-    let hidTimer  = null;
+    // ── HID input: autofocus + re-arm on blur ─────────────────────────────
+    function armScanner() {
+      hidInput.focus({ preventScroll: true });
+    }
 
-    document.addEventListener('keydown', (event) => {
-      if (document.activeElement === testInput) return;
-      if (event.ctrlKey || event.altKey || event.metaKey) return;
+    function setArmed(armed) {
+      focusIndicator.className = armed ? 'armed' : '';
+    }
 
-      if (event.key === 'Enter') {
-        clearTimeout(hidTimer);
-        const code = hidBuffer.trim();
-        hidBuffer = '';
-        if (code) handleCode(code);
-        return;
-      }
+    hidInput.addEventListener('focus', () => setArmed(true));
+    hidInput.addEventListener('blur',  () => {
+      setArmed(false);
+      // Re-enfocar salvo que el usuario esté en el input de prueba
+      requestAnimationFrame(() => {
+        if (document.activeElement !== testInput) armScanner();
+      });
+    });
 
-      if (event.key.length === 1) {
-        hidBuffer += event.key;
-        clearTimeout(hidTimer);
-        hidTimer = setTimeout(() => { hidBuffer = ''; }, 500);
-      }
+    // Clic en cualquier parte de la pantalla vuelve a enfocar
+    document.getElementById('scannerScreen').addEventListener('click', armScanner);
+
+    // El lector envía los caracteres del código + Enter
+    hidInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      const code = hidInput.value.trim();
+      hidInput.value = '';
+      if (code) handleCode(code);
     });
 
     // ── Input de prueba manual ────────────────────────────────────────────
@@ -538,7 +567,7 @@
       const code = testInput.value.trim();
       if (!code) return;
       testInput.value = '';
-      testInput.blur();
+      testInput.blur(); // devuelve el foco al hidInput vía el blur handler
       await handleCode(code);
     }
 
