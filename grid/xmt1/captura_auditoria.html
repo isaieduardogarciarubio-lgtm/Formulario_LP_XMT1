@@ -208,6 +208,14 @@ body {
   }
 }
 
+/* Reduce gap between pull-tab and back button on scanner screens */
+.content:has(.scanner-screen) {
+  padding-top: 4px;
+}
+.scanner-screen {
+  padding-top: 4px;
+}
+
 /* Pantallas de poca altura (iPhone SE, Android compactos, o el navbar del
    teclado abierto): se reduce tipografía/espaciado y los topes de alto de
    cámara/foto para que el paso completo (pregunta + cuerpo + acciones)
