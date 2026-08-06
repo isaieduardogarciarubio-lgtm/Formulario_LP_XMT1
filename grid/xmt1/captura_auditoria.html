@@ -1630,8 +1630,6 @@ select.step-input {
   </div>
 </div>
 
-<div id="debug-console-badge" style="position: fixed; bottom: 20px; right: 20px; width: 32px; height: 32px; background: #ff453a; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.75rem; cursor: pointer; z-index: 999; display: none;" onclick="DebugConsole.toggle()"></div>
-
 <!-- Modal de confirmación in-app -->
 <div class="confirm-overlay" id="confirm-overlay">
   <div class="confirm-card">
@@ -4734,12 +4732,82 @@ class InboundDriversSession {
       this.supportEl.insertAdjacentElement('afterend', link);
       this.startShipmentCamera();
     } else {
-      const { wrap, input } = ScanUI.buildHandheldInput({
-        placeholder: 'Shipment ID',
-        isActive: () => !!body && body.contains(input) && ScanUI.mode() === 'handheld' && !this.locked,
-        onSubmit: (val) => this.submitShipmentValue(val, input),
+      // Hidden HID input
+      const hidInput = document.createElement('input');
+      hidInput.type = 'text';
+      hidInput.className = 'hh-hid-input';
+      hidInput.setAttribute('inputmode', 'none');
+      body.appendChild(hidInput);
+
+      // Scan area
+      const scanArea = document.createElement('div');
+      scanArea.className = 'hh-scan-area';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'hh-icon idle';
+      iconWrap.innerHTML = HHScanIcons.forField({ idType: 'shipment' });
+      scanArea.appendChild(iconWrap);
+      const lastCodeEl = document.createElement('div');
+      lastCodeEl.className = 'hh-last-code';
+      scanArea.appendChild(lastCodeEl);
+      body.appendChild(scanArea);
+      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
+
+      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked;
+      const armHid = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
+
+      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
+
+      hidInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const raw = hidInput.value.trim();
+        if (!raw || this.locked) return;
+        hidInput.value = '';
+        lastCodeEl.textContent = raw;
+        lastCodeEl.className = 'hh-last-code visible';
+        this.submitShipmentValue(raw, hidInput);
       });
-      body.appendChild(wrap);
+
+      setTimeout(armHid, 80);
+
+      // Floating manual button
+      const manualBtn = document.createElement('button');
+      manualBtn.type = 'button';
+      manualBtn.className = 'btn-manual-hid';
+      manualBtn.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h4"/></svg>`;
+      body.appendChild(manualBtn);
+
+      // Bottom-sheet modal
+      const modal = document.createElement('div');
+      modal.className = 'hh-manual-modal';
+      modal.innerHTML = `
+        <div class="hh-manual-inner">
+          <p class="hh-manual-label">Shipment ID</p>
+          <input type="text" class="hh-manual-input" placeholder="Shipment ID" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
+          <div class="hh-manual-actions">
+            <button type="button" class="hh-manual-cancel">Cancelar</button>
+            <button type="button" class="hh-manual-confirm">Confirmar</button>
+          </div>
+        </div>`;
+      this.container.appendChild(modal);
+
+      const modalInput = modal.querySelector('.hh-manual-input');
+      const openModal = () => { modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+      const closeModal = () => { modal.classList.remove('open'); setTimeout(armHid, 80); };
+      const confirmModal = () => {
+        const val = modalInput.value.trim().toUpperCase();
+        if (!val) return;
+        modalInput.value = '';
+        closeModal();
+        this.submitShipmentValue(val, hidInput);
+      };
+
+      manualBtn.addEventListener('click', openModal);
+      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
+      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
+      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
     }
   }
 
@@ -5335,12 +5403,82 @@ class BarreduraSession {
       this.supportEl.insertAdjacentElement('afterend', link);
       this.startCamera();
     } else {
-      const { wrap, input } = ScanUI.buildHandheldInput({
-        placeholder: 'Shipment ID',
-        isActive: () => !!body && body.contains(input) && ScanUI.mode() === 'handheld' && !this.locked,
-        onSubmit: (val) => this.submitScanValue(val, input),
+      // Hidden HID input
+      const hidInput = document.createElement('input');
+      hidInput.type = 'text';
+      hidInput.className = 'hh-hid-input';
+      hidInput.setAttribute('inputmode', 'none');
+      body.appendChild(hidInput);
+
+      // Scan area
+      const scanArea = document.createElement('div');
+      scanArea.className = 'hh-scan-area';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'hh-icon idle';
+      iconWrap.innerHTML = HHScanIcons.forField({ idType: 'shipment' });
+      scanArea.appendChild(iconWrap);
+      const lastCodeEl = document.createElement('div');
+      lastCodeEl.className = 'hh-last-code';
+      scanArea.appendChild(lastCodeEl);
+      body.appendChild(scanArea);
+      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
+
+      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked;
+      const armHid = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
+
+      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
+
+      hidInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const raw = hidInput.value.trim();
+        if (!raw || this.locked) return;
+        hidInput.value = '';
+        lastCodeEl.textContent = raw;
+        lastCodeEl.className = 'hh-last-code visible';
+        this.submitScanValue(raw, hidInput);
       });
-      body.appendChild(wrap);
+
+      setTimeout(armHid, 80);
+
+      // Floating manual button
+      const manualBtn = document.createElement('button');
+      manualBtn.type = 'button';
+      manualBtn.className = 'btn-manual-hid';
+      manualBtn.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h4"/></svg>`;
+      body.appendChild(manualBtn);
+
+      // Bottom-sheet modal
+      const modal = document.createElement('div');
+      modal.className = 'hh-manual-modal';
+      modal.innerHTML = `
+        <div class="hh-manual-inner">
+          <p class="hh-manual-label">Shipment ID</p>
+          <input type="text" class="hh-manual-input" placeholder="Shipment ID" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
+          <div class="hh-manual-actions">
+            <button type="button" class="hh-manual-cancel">Cancelar</button>
+            <button type="button" class="hh-manual-confirm">Confirmar</button>
+          </div>
+        </div>`;
+      this.container.appendChild(modal);
+
+      const modalInput = modal.querySelector('.hh-manual-input');
+      const openModal = () => { modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+      const closeModal = () => { modal.classList.remove('open'); setTimeout(armHid, 80); };
+      const confirmModal = () => {
+        const val = modalInput.value.trim().toUpperCase();
+        if (!val) return;
+        modalInput.value = '';
+        closeModal();
+        this.submitScanValue(val, hidInput);
+      };
+
+      manualBtn.addEventListener('click', openModal);
+      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
+      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
+      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
     }
   }
 
@@ -5726,11 +5864,6 @@ class DebugConsole {
     ).join('');
     el.scrollTop = el.scrollHeight;
     const errorCount = this.entries.filter(e => e.level === 'error').length;
-    const badge = document.getElementById('debug-console-badge');
-    if (badge) {
-      badge.style.display = errorCount > 0 ? 'flex' : 'none';
-      badge.textContent = errorCount > 9 ? '9+' : String(errorCount);
-    }
     const inlineBadge = document.getElementById('debug-console-inline-badge');
     if (inlineBadge) {
       inlineBadge.style.display = errorCount > 0 ? 'flex' : 'none';
