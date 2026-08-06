@@ -1308,23 +1308,20 @@ select.step-input {
 
 /* Pull-tab — reveals the navbar from inside a log */
 .nav-pull-tab {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 88px;
-  height: 22px;
-  z-index: 300;
+  flex-shrink: 0;
+  height: 14px;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
-  padding-bottom: 4px;
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s;
 }
-.nav-pull-tab.visible { opacity: 1; pointer-events: auto; }
+.navbar.nav-hidden + .nav-pull-tab {
+  opacity: 1;
+  pointer-events: auto;
+}
 .nav-pull-pill {
   width: 36px; height: 3px;
   border-radius: 2px;
@@ -2664,14 +2661,14 @@ class FormEngine {
 
     screen.appendChild(this.buildProgress());
 
+    // Toggle Handheld / Cámara. Handheld es el modo principal (lector
+    // integrado); al cambiar se persiste y se re-renderiza el cuerpo.
+    screen.appendChild(ScanUI.buildToggle(() => this.applyScanMode(field)));
+
     const h1 = document.createElement('h1');
     h1.className = 'step-question';
     h1.textContent = field.label;
     screen.appendChild(h1);
-
-    // Toggle Handheld / Cámara. Handheld es el modo principal (lector
-    // integrado); al cambiar se persiste y se re-renderiza el cuerpo.
-    screen.appendChild(ScanUI.buildToggle(() => this.applyScanMode(field)));
 
     const body = document.createElement('div');
     body.className = 'scanner-body';
@@ -2729,7 +2726,7 @@ class FormEngine {
 
     const iconWrap = document.createElement('div');
     iconWrap.className = 'hh-icon idle';
-    iconWrap.innerHTML = Icons.svg(this.formConfig?.icon || 'inbox', { size: 64 });
+    iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
     scanArea.appendChild(iconWrap);
 
     const lastCodeEl = document.createElement('div');
@@ -3669,8 +3666,8 @@ class ContenedorAuditSession {
             ${Icons.svg('inbox', { size: 14 })}<span>Doca: ${this.doca}</span>
           </button>
         </div>
-        <h1 class="step-question">Escanea el shipment</h1>
         <div class="scan-mode-slot"></div>
+        <h1 class="step-question">Escanea el shipment</h1>
         <div class="scanner-body" id="loop-scanner-body"></div>
         <div class="step-support" id="loop-support"></div>
       </div>
@@ -3788,7 +3785,7 @@ class ContenedorAuditSession {
     scanArea.className = 'hh-scan-area';
     const iconWrap = document.createElement('div');
     iconWrap.className = 'hh-icon idle';
-    iconWrap.innerHTML = Icons.svg('inbox', { size: 64 });
+    iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
     scanArea.appendChild(iconWrap);
     const lastCodeEl = document.createElement('div');
     lastCodeEl.className = 'hh-last-code';
@@ -4471,14 +4468,12 @@ class CapturaApp {
 
   hideNavbar() {
     document.querySelector('.navbar').classList.add('nav-hidden');
-    document.getElementById('nav-pull-tab').classList.add('visible');
     document.getElementById('nav-overlay').classList.remove('visible');
     clearTimeout(this._navRevealTimer);
   }
 
   showNavbar() {
     document.querySelector('.navbar').classList.remove('nav-hidden');
-    document.getElementById('nav-pull-tab').classList.remove('visible');
     document.getElementById('nav-overlay').classList.remove('visible');
     clearTimeout(this._navRevealTimer);
   }
