@@ -1593,98 +1593,49 @@ select.step-input {
 }
 .hh-manual-confirm:hover { opacity: 0.86; }
 
-/* Navbar dropdown */
-.navbar { position: relative; overflow: visible; }
+/* Collapsible navbar */
+.navbar {
+  flex-shrink: 0;
+  overflow: hidden;
+  max-height: 120px;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.navbar.nav-hidden { max-height: 0; }
 .navbar-logo { cursor: pointer; }
 
-.navbar-form-btn {
+/* Pull-tab — reveals the navbar from inside a log */
+.nav-pull-tab {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 88px;
+  height: 22px;
+  z-index: 300;
   display: flex;
-  align-items: center;
-  gap: 4px;
-  background: none;
-  border: none;
-  color: var(--color-text-primary);
-  font-family: 'Proxima Nova', sans-serif;
-  font-size: 0.9rem;
-  font-weight: 700;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  transition: background 0.15s;
-  white-space: nowrap;
-  overflow: hidden;
-  max-width: 180px;
-}
-.navbar-form-btn:hover { background: var(--color-surface-hover); }
-.navbar-form-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.navbar-form-chevron {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
-  transition: transform 0.2s;
-}
-.navbar-form-btn.open .navbar-form-chevron { transform: rotate(180deg); }
-
-.navbar-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0; right: 0;
-  background: var(--color-bg);
-  border-bottom: 1px solid var(--color-border);
-  z-index: 99;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(-6px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-.navbar-dropdown.open {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-}
-.navbar-dropdown-inner {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 10px var(--spacing-lg) 12px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.navbar-dropdown-icon-wrap {
-  display: inline-flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
-  width: 32px; height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
-  flex-shrink: 0;
-  color: var(--color-text-primary);
-}
-.navbar-dropdown-label {
-  flex: 1;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: var(--color-text-primary);
-}
-.navbar-go-home-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border);
-  background: none;
-  color: var(--color-text-secondary);
-  font-size: 0.8rem;
-  font-weight: 500;
+  padding-bottom: 4px;
   cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
 }
-.navbar-go-home-btn:hover { background: var(--color-surface-hover); }
+.nav-pull-tab.visible { opacity: 1; pointer-events: auto; }
+.nav-pull-pill {
+  width: 36px; height: 3px;
+  border-radius: 2px;
+  background: rgba(128, 128, 128, 0.35);
+}
+
+/* Transparent overlay — tapping it dismisses the revealed navbar */
+.nav-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  display: none;
+}
+.nav-overlay.visible { display: block; }
 
 /* Duplicate scan highlight */
 .hh-last-code.duplicate {
@@ -1711,10 +1662,6 @@ select.step-input {
       <div style="display: flex; align-items: center; gap: var(--spacing-sm); min-width: 0;">
         <img id="navbar-logo" class="navbar-logo" alt="Logo" style="display: none;" />
       </div>
-      <button id="navbar-form-btn" class="navbar-form-btn" hidden>
-        <span class="navbar-form-label"></span>
-        <svg class="navbar-form-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-      </button>
       <div style="display: flex; gap: 8px; align-items: center;">
         <span class="status-badge" id="status-badge">0 pendientes</span>
         <button class="icon-btn-plain" id="btn-debug-console" title="Consola de errores" style="position: relative;">
@@ -1732,17 +1679,14 @@ select.step-input {
         <div class="user-avatar" id="user-avatar" title=""></div>
       </div>
     </div>
-    <div id="navbar-dropdown" class="navbar-dropdown">
-      <div class="navbar-dropdown-inner">
-        <span id="navbar-dropdown-icon" class="navbar-dropdown-icon-wrap"></span>
-        <span id="navbar-dropdown-label" class="navbar-dropdown-label"></span>
-        <button id="navbar-go-home-btn" class="navbar-go-home-btn">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          Inicio
-        </button>
-      </div>
-    </div>
   </nav>
+
+  <!-- Pull-tab to reveal navbar from inside a log -->
+  <div id="nav-pull-tab" class="nav-pull-tab">
+    <div class="nav-pull-pill"></div>
+  </div>
+  <!-- Overlay to dismiss revealed navbar -->
+  <div id="nav-overlay" class="nav-overlay"></div>
 
   <!-- Main content -->
   <div class="content" id="app-root"></div>
@@ -6307,7 +6251,7 @@ class CapturaApp {
     // Modo de captura de códigos: 'handheld' (lector integrado, principal) o
     // 'camera'. Se restaura desde IndexedDB en init() (por dispositivo).
     this.scanMode = 'handheld';
-    this._currentForm = null;
+    this._navRevealTimer = null;
 
     // Guard de historial: intercepta el botón/gesto "atrás" del sistema
     // (Android, o el back del navegador) para navegar dentro de la app
@@ -6321,35 +6265,24 @@ class CapturaApp {
     DebugConsole.setup();
     DebugConsole.log(`Documento: ${this.docId}`, 'info');
 
-    // Botón siempre visible en el navbar: antes solo se podía abrir la
-    // consola de debug tocando el círculo rojo, que solo aparece si hubo
-    // errores — sin eso, no había forma de ver el log (ej. a qué
-    // documento apunta, o si de verdad sincronizó) cuando todo "parecía"
-    // funcionar bien.
     const debugBtn = document.getElementById('btn-debug-console');
-    if (debugBtn) {
-      debugBtn.addEventListener('click', () => DebugConsole.toggle());
-    }
+    if (debugBtn) debugBtn.addEventListener('click', () => DebugConsole.toggle());
 
     // Logo = home button
     const navLogo = document.getElementById('navbar-logo');
     if (navLogo) navLogo.addEventListener('click', () => this.renderMenu());
 
-    // Navbar form context dropdown
-    const formBtn = document.getElementById('navbar-form-btn');
-    if (formBtn) formBtn.addEventListener('click', () => this._toggleNavDropdown());
-
-    const goHomeBtn = document.getElementById('navbar-go-home-btn');
-    if (goHomeBtn) goHomeBtn.addEventListener('click', () => this.renderMenu());
-
-    document.addEventListener('click', (e) => {
-      const formBtn = document.getElementById('navbar-form-btn');
-      const dropdown = document.getElementById('navbar-dropdown');
-      if (!formBtn || !dropdown) return;
-      if (!formBtn.contains(e.target) && !dropdown.contains(e.target)) {
-        this._closeNavDropdown();
-      }
+    // Pull-tab reveals the navbar temporarily when inside a log
+    const pullTab = document.getElementById('nav-pull-tab');
+    if (pullTab) pullTab.addEventListener('click', () => {
+      clearTimeout(this._navRevealTimer);
+      document.querySelector('.navbar').classList.remove('nav-hidden');
+      document.getElementById('nav-overlay').classList.add('visible');
+      this._navRevealTimer = setTimeout(() => this._autoHideNavbar(), 4000);
     });
+
+    const navOverlay = document.getElementById('nav-overlay');
+    if (navOverlay) navOverlay.addEventListener('click', () => this._autoHideNavbar());
   }
 
   /**
@@ -6403,36 +6336,22 @@ class CapturaApp {
     el.addEventListener('click', () => this.logout());
   }
 
-  setFormContext(form) {
-    this._currentForm = form;
-    const btn = document.getElementById('navbar-form-btn');
-    const iconEl = document.getElementById('navbar-dropdown-icon');
-    const labelEl = document.getElementById('navbar-dropdown-label');
-    if (!btn) return;
-    if (form) {
-      btn.hidden = false;
-      btn.querySelector('.navbar-form-label').textContent = form.title;
-      if (iconEl) iconEl.innerHTML = Icons.svg(form.icon || 'inbox', { size: 18 });
-      if (labelEl) labelEl.textContent = form.title;
-    } else {
-      btn.hidden = true;
-      this._closeNavDropdown();
-    }
+  hideNavbar() {
+    document.querySelector('.navbar').classList.add('nav-hidden');
+    document.getElementById('nav-pull-tab').classList.add('visible');
+    document.getElementById('nav-overlay').classList.remove('visible');
+    clearTimeout(this._navRevealTimer);
   }
 
-  _toggleNavDropdown() {
-    const btn = document.getElementById('navbar-form-btn');
-    const dropdown = document.getElementById('navbar-dropdown');
-    if (!btn || !dropdown) return;
-    const open = dropdown.classList.toggle('open');
-    btn.classList.toggle('open', open);
+  showNavbar() {
+    document.querySelector('.navbar').classList.remove('nav-hidden');
+    document.getElementById('nav-pull-tab').classList.remove('visible');
+    document.getElementById('nav-overlay').classList.remove('visible');
+    clearTimeout(this._navRevealTimer);
   }
 
-  _closeNavDropdown() {
-    const btn = document.getElementById('navbar-form-btn');
-    const dropdown = document.getElementById('navbar-dropdown');
-    if (btn) btn.classList.remove('open');
-    if (dropdown) dropdown.classList.remove('open');
+  _autoHideNavbar() {
+    if (this._screen !== 'menu') this.hideNavbar();
   }
 
   /**
@@ -6768,7 +6687,7 @@ class CapturaApp {
 
   async renderMenu() {
     this.currentEngine = null;
-    this.setFormContext(null);
+    this.showNavbar();
     this._screen = 'menu';
     this._inSubScreen = false;
 
@@ -6927,7 +6846,7 @@ class CapturaApp {
     // contrarreloj es el punto — no tiene sentido reconfirmar destino/doca
     // en cada HU.
     if (formId === 'destino_doca') {
-      this.setFormContext(FORMS_CONFIG.destino_doca);
+      this.hideNavbar();
       this.currentEngine = new DestinoDocaSession({
         catalogIndex: this.catalogIndex,
         initialDoca: this.lastDoca,
@@ -6943,7 +6862,7 @@ class CapturaApp {
     // escanean en loop continuo contra el catálogo de esa ruta (ver
     // InboundDriversSession).
     if (formId === 'inbound_drivers') {
-      this.setFormContext(FORMS_CONFIG.inbound_drivers);
+      this.hideNavbar();
       this.currentEngine = new InboundDriversSession({
         catalogIndex: this.driversCatalogIndex,
         catalogAccessDenied: this.driversCatalogAccessDenied,
@@ -6954,7 +6873,7 @@ class CapturaApp {
       return;
     }
 
-    this.setFormContext(formConfig);
+    this.hideNavbar();
     this.currentEngine = new FormEngine(formConfig, {
       catalogIndex: this.catalogIndex,
       onComplete: (values) => this.onFormComplete(formId, values),
@@ -6990,7 +6909,7 @@ class CapturaApp {
     // Si el usuario ya salió mientras cargaba, no montar la sesión.
     if (this._screen !== 'form') return;
 
-    this.setFormContext(FORMS_CONFIG.barredura);
+    this.hideNavbar();
     this.currentEngine = new BarreduraSession({
       initialLugar: this.lastLugar,
       recentRecords,
