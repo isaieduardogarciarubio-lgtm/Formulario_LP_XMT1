@@ -41,16 +41,18 @@
       touch-action: manipulation;
     }
 
+    html, body { height: auto; } /* allow log to scroll */
+
     /* ── Layout principal ── */
     .scanner-screen {
-      min-height: 100dvh;
-      min-height: 100vh;
+      min-height: 60dvh;
+      min-height: 60vh;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
-      padding: 40px 32px;
+      padding: 40px 32px 28px;
       cursor: default;
       user-select: none;
     }
@@ -170,6 +172,181 @@
       opacity: 0;
       pointer-events: none;
     }
+
+    /* ── Log panel ── */
+    .log-panel {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 0 16px 40px;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 4px 12px;
+      border-top: 1px solid #1c1c1e;
+      margin-bottom: 12px;
+    }
+
+    .log-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      flex: 1;
+    }
+
+    .log-badge {
+      background: #1c1c1e;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      min-width: 24px;
+      text-align: center;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .log-badge.has-entries {
+      background: #2c2c2e;
+      color: var(--text);
+    }
+
+    .log-clear-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .log-clear-btn:hover { color: var(--error); background: rgba(255,69,58,.1); }
+
+    /* Test input */
+    .log-test {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .log-test-input {
+      flex: 1;
+      background: #1c1c1e;
+      border: 1px solid #2c2c2e;
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .log-test-input::placeholder { color: #3a3a3c; }
+    .log-test-input:focus { border-color: #48484a; }
+
+    .log-test-btn {
+      background: #1c1c1e;
+      border: 1px solid #2c2c2e;
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .log-test-btn:hover { background: #2c2c2e; }
+
+    /* Log entries */
+    .log-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .log-empty {
+      text-align: center;
+      color: #3a3a3c;
+      font-size: 13px;
+      padding: 24px 0;
+    }
+
+    .log-entry {
+      background: #1c1c1e;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: entry-in 0.22s ease;
+    }
+
+    @keyframes entry-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-entry.error { background: rgba(255,69,58,.1); }
+
+    .log-entry-num {
+      font-size: 11px;
+      color: #3a3a3c;
+      font-variant-numeric: tabular-nums;
+      min-width: 22px;
+      text-align: right;
+    }
+
+    .log-entry-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--success);
+      flex-shrink: 0;
+    }
+
+    .log-entry.error .log-entry-dot { background: var(--error); }
+
+    .log-entry-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .log-entry-code {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .log-entry-raw {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .log-entry-time {
+      font-size: 11px;
+      color: #48484a;
+      font-variant-numeric: tabular-nums;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -214,6 +391,32 @@
 
   </main>
 
+  <!-- ── Log panel ── -->
+  <section class="log-panel">
+    <header class="log-header">
+      <h2>Log de escaneos</h2>
+      <span class="log-badge" id="logBadge">0</span>
+      <button class="log-clear-btn" onclick="clearLog()">Limpiar</button>
+    </header>
+
+    <!-- Input manual para pruebas en el navegador -->
+    <div class="log-test">
+      <input
+        id="testInput"
+        class="log-test-input"
+        type="text"
+        placeholder="Escribe o pega un código para probar…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button class="log-test-btn" onclick="submitTest()">Escanear ↵</button>
+    </div>
+
+    <ul class="log-list" id="logList">
+      <li class="log-empty" id="logEmpty">Sin escaneos aún</li>
+    </ul>
+  </section>
+
   <!--
     Input oculto para capturar los keystrokes del lector de código de barras HID.
     inputmode="none" evita que el teclado virtual aparezca en móvil.
@@ -237,13 +440,56 @@
     const statusEl     = document.getElementById('status');
     const lastCodeEl   = document.getElementById('lastCode');
     const packageIcon  = document.getElementById('packageIcon');
+    const logList      = document.getElementById('logList');
+    const logEmpty     = document.getElementById('logEmpty');
+    const logBadge     = document.getElementById('logBadge');
+    const testInput    = document.getElementById('testInput');
 
-    // ── Íconos SVG inline para el área de estado ──────────────────────────
     const ICON_CHECK = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,10 8,14 16,6"/></svg>`;
     const ICON_X     = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>`;
     const ICON_SPIN  = `<div class="spinner"></div>`;
 
-    // ── Foco del escáner ──────────────────────────────────────────────────
+    let scanCount = 0;
+
+    // ── Log ───────────────────────────────────────────────────────────────
+    function addLogEntry(id, rawCode, isError, errorMsg) {
+      scanCount++;
+      logEmpty.style.display = 'none';
+
+      const now   = new Date();
+      const time  = now.toLocaleTimeString('es-MX', { hour12: false });
+      const isDiff = rawCode !== id;
+
+      const li = document.createElement('li');
+      li.className = `log-entry${isError ? ' error' : ''}`;
+      li.innerHTML = `
+        <span class="log-entry-num">#${scanCount}</span>
+        <span class="log-entry-dot"></span>
+        <div class="log-entry-body">
+          <div class="log-entry-code">${isError ? (errorMsg ?? 'Error') : id}</div>
+          ${isDiff && !isError ? `<div class="log-entry-raw">${rawCode}</div>` : ''}
+          ${isError ? `<div class="log-entry-raw">${id}</div>` : ''}
+        </div>
+        <span class="log-entry-time">${time}</span>
+      `;
+
+      logList.insertBefore(li, logList.firstChild);
+      if (logEmpty.parentNode === logList) logList.removeChild(logEmpty);
+
+      logBadge.textContent = scanCount;
+      logBadge.className = 'log-badge has-entries';
+    }
+
+    function clearLog() {
+      scanCount = 0;
+      logList.innerHTML = '';
+      logEmpty.style.display = '';
+      logList.appendChild(logEmpty);
+      logBadge.textContent = '0';
+      logBadge.className = 'log-badge';
+    }
+
+    // ── Scanner focus ─────────────────────────────────────────────────────
     function armScanner() {
       scannerInput.value = '';
       scannerInput.focus({ preventScroll: true });
@@ -259,7 +505,34 @@
       statusEl.innerHTML = '';
     }
 
-    // ── Captura del código ─────────────────────────────────────────────────
+    // ── Core scan handler ─────────────────────────────────────────────────
+    async function handleCode(rawCode) {
+      packageIcon.className = 'package-icon processing';
+      showStatus('loading', ICON_SPIN, 'Procesando…');
+
+      try {
+        const id = await procesarCodigo(rawCode);
+        const resolvedId = id ?? rawCode;
+
+        packageIcon.className = 'package-icon idle';
+        showStatus('success', ICON_CHECK, 'Paquete escaneado');
+        lastCodeEl.textContent = resolvedId;
+        lastCodeEl.className = 'last-code visible';
+        addLogEntry(resolvedId, rawCode, false);
+
+        setTimeout(() => { clearStatus(); armScanner(); }, 2000);
+
+      } catch (err) {
+        packageIcon.className = 'package-icon idle';
+        const msg = err?.message ?? 'No se pudo procesar el paquete';
+        showStatus('error', ICON_X, msg);
+        addLogEntry(rawCode, rawCode, true, msg);
+
+        setTimeout(() => { clearStatus(); armScanner(); }, 2800);
+      }
+    }
+
+    // ── HID scanner input ─────────────────────────────────────────────────
     scannerInput.addEventListener('keydown', async (event) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
@@ -268,57 +541,51 @@
       scannerInput.value = '';
 
       if (!code) { armScanner(); return; }
-
-      packageIcon.className = 'package-icon processing';
-      showStatus('loading', ICON_SPIN, 'Procesando…');
-
-      try {
-        await procesarCodigo(code);
-
-        packageIcon.className = 'package-icon idle';
-        showStatus('success', ICON_CHECK, 'Paquete escaneado');
-        lastCodeEl.textContent = code;
-        lastCodeEl.className = 'last-code visible';
-
-        setTimeout(() => { clearStatus(); armScanner(); }, 2000);
-
-      } catch (err) {
-        packageIcon.className = 'package-icon idle';
-        showStatus('error', ICON_X, err?.message ?? 'No se pudo procesar el paquete');
-
-        setTimeout(() => { clearStatus(); armScanner(); }, 2800);
-      }
+      await handleCode(code);
     });
 
-    // ── Gestión de visibilidad / ciclo de vida ─────────────────────────────
+    // ── Manual test input ─────────────────────────────────────────────────
+    async function submitTest() {
+      const code = testInput.value.trim();
+      if (!code) return;
+      testInput.value = '';
+      await handleCode(code);
+    }
+
+    testInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submitTest(); }
+    });
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) armScanner();
     });
     window.addEventListener('pageshow', armScanner);
     armScanner();
 
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
     // procesarCodigo — integrar aquí la lógica de negocio.
+    // Retorna el id normalizado (string) o lanza Error si falla.
     //
-    // Los lectores HID de MercadoLibre pueden enviar JSON en lugar de texto plano:
-    //   {"id":"12345678","t":"lm"}   → shipment
+    // Formato JSON MeLi:
+    //   {"id":"12345678","t":"lm"}                    → shipment
     //   {"id":"12345678","legacy_id":"...","t":"hu"}  → HU
-    //
-    // El campo `id` ya normalizado está disponible como variable `id` abajo.
-    // ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────
     async function procesarCodigo(rawCode) {
       let id = rawCode;
       try {
         const parsed = JSON.parse(rawCode);
         if (parsed?.id) id = String(parsed.id);
-      } catch { /* código en texto plano — ok */ }
+      } catch { /* texto plano — ok */ }
 
-      console.log('Código escaneado:', id);
+      console.log('Código escaneado:', id, '| raw:', rawCode);
+      return id;
 
-      // Ejemplo con GridClient (disponible en captura_auditoria.html):
+      // Ejemplo con GridClient:
       // const bucket = await GridClient.getStateBucket('escaneo_rapido');
-      // bucket.data.push({ id, ts: Date.now(), user: app.userEmail });
+      // bucket.data.push({ id, ts: Date.now() });
       // await GridClient.putStateBucket('escaneo_rapido', bucket.data);
+      // return id;
     }
   </script>
 
