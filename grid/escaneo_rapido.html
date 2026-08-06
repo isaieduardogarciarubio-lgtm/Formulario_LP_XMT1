@@ -417,33 +417,15 @@
     </ul>
   </section>
 
-  <!--
-    Input oculto para capturar los keystrokes del lector de código de barras HID.
-    inputmode="none" evita que el teclado virtual aparezca en móvil.
-    El lector envía los dígitos del código seguidos de Enter (↵).
-  -->
-  <input
-    id="scannerInput"
-    class="scanner-input"
-    type="text"
-    inputmode="none"
-    autocomplete="off"
-    autocorrect="off"
-    autocapitalize="off"
-    spellcheck="false"
-    aria-label="Lectura de código de barras"
-    tabindex="-1"
-  />
 
   <script>
-    const scannerInput = document.getElementById('scannerInput');
-    const statusEl     = document.getElementById('status');
-    const lastCodeEl   = document.getElementById('lastCode');
-    const packageIcon  = document.getElementById('packageIcon');
-    const logList      = document.getElementById('logList');
-    const logEmpty     = document.getElementById('logEmpty');
-    const logBadge     = document.getElementById('logBadge');
-    const testInput    = document.getElementById('testInput');
+    const statusEl    = document.getElementById('status');
+    const lastCodeEl  = document.getElementById('lastCode');
+    const packageIcon = document.getElementById('packageIcon');
+    const logList     = document.getElementById('logList');
+    const logEmpty    = document.getElementById('logEmpty');
+    const logBadge    = document.getElementById('logBadge');
+    const testInput   = document.getElementById('testInput');
 
     const ICON_CHECK = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,10 8,14 16,6"/></svg>`;
     const ICON_X     = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>`;
@@ -489,12 +471,6 @@
       logBadge.className = 'log-badge';
     }
 
-    // ── Scanner focus ─────────────────────────────────────────────────────
-    function armScanner() {
-      scannerInput.value = '';
-      scannerInput.focus({ preventScroll: true });
-    }
-
     function showStatus(type, icon, message) {
       statusEl.className = `status ${type} visible`;
       statusEl.innerHTML = `${icon}<span>${message}</span>`;
@@ -520,7 +496,7 @@
         lastCodeEl.className = 'last-code visible';
         addLogEntry(resolvedId, rawCode, false);
 
-        setTimeout(() => { clearStatus(); armScanner(); }, 2000);
+        setTimeout(clearStatus, 2000);
 
       } catch (err) {
         packageIcon.className = 'package-icon idle';
@@ -528,40 +504,47 @@
         showStatus('error', ICON_X, msg);
         addLogEntry(rawCode, rawCode, true, msg);
 
-        setTimeout(() => { clearStatus(); armScanner(); }, 2800);
+        setTimeout(clearStatus, 2800);
       }
     }
 
-    // ── HID scanner input ─────────────────────────────────────────────────
-    scannerInput.addEventListener('keydown', async (event) => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
+    // ── HID: escucha keydown en el documento, sin necesidad de foco ────────
+    // El lector envía los caracteres del código + Enter en ráfaga rápida.
+    // Ignoramos eventos mientras el input de prueba manual está activo.
+    let hidBuffer = '';
+    let hidTimer  = null;
 
-      const code = scannerInput.value.trim();
-      scannerInput.value = '';
+    document.addEventListener('keydown', (event) => {
+      if (document.activeElement === testInput) return;
+      if (event.ctrlKey || event.altKey || event.metaKey) return;
 
-      if (!code) { armScanner(); return; }
-      await handleCode(code);
+      if (event.key === 'Enter') {
+        clearTimeout(hidTimer);
+        const code = hidBuffer.trim();
+        hidBuffer = '';
+        if (code) handleCode(code);
+        return;
+      }
+
+      if (event.key.length === 1) {
+        hidBuffer += event.key;
+        clearTimeout(hidTimer);
+        hidTimer = setTimeout(() => { hidBuffer = ''; }, 500);
+      }
     });
 
-    // ── Manual test input ─────────────────────────────────────────────────
+    // ── Input de prueba manual ────────────────────────────────────────────
     async function submitTest() {
       const code = testInput.value.trim();
       if (!code) return;
       testInput.value = '';
+      testInput.blur();
       await handleCode(code);
     }
 
     testInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); submitTest(); }
     });
-
-    // ── Lifecycle ─────────────────────────────────────────────────────────
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) armScanner();
-    });
-    window.addEventListener('pageshow', armScanner);
-    armScanner();
 
     // ─────────────────────────────────────────────────────────────────────
     // procesarCodigo — integrar aquí la lógica de negocio.
