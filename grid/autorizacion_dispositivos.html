@@ -1,0 +1,4477 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Autorización de Dispositivos</title>
+  <style>
+    /* ──────────────────────────────────────────────────────────────────────────── */
+    /* NOCTURNE DESIGN SYSTEM — MercadoLibre Grid Dark Theme */
+    /* ──────────────────────────────────────────────────────────────────────────── */
+    :root {
+      /* Superficies */
+      --bg: #090C0E;
+      --surface: #11161A;
+      --surface-2: #161D22;
+      --border: #1F2830;
+      --border-soft: #161C21;
+
+      /* Acento Meli */
+      --accent: #FFD100;
+      --accent-strong: #E6BC00;
+      --accent-dim: #6E5E00;
+      --accent-glow: rgba(255, 209, 0, 0.14);
+      --on-accent: #1A1A1A;
+
+      /* Texto */
+      --text: #F4F6F8;
+      --text-sub: #AAB4BC;
+      --text-mut: #6B757D;
+
+      /* Badges / estados */
+      --c-green: #00D689;
+      --c-blue: #5A95FF;
+      --c-orange: #FF9E45;
+      --c-red: #FF5C6C;
+
+      /* Forma */
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 18px;
+      --r-pill: 999px;
+      --shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.7);
+
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto,
+        Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+    body {
+      background-image: radial-gradient(
+        1000px 640px at 100% -8%,
+        rgba(255, 209, 0, 0.09),
+        transparent 55%
+      ), radial-gradient(
+        760px 520px at -12% 108%,
+        rgba(255, 209, 0, 0.04),
+        transparent 60%
+      );
+      background-attachment: fixed;
+    }
+
+    /* ──── NAVBAR ──── */
+    /* Mobile-first: las tres piezas (brand · menubar · actions) van    */
+    /* siempre en una sola hilera. En móvil el menubar muestra solo los */
+    /* íconos SVG (labels ocultos) para caber al nivel del logo.        */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 16px;
+      background: linear-gradient(180deg, rgba(9, 12, 14, 0.85), rgba(9, 12, 14, 0));
+      backdrop-filter: blur(10px);
+    }
+
+    .navbar-brand {
+      order: 1;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .navbar-brand b {
+      color: var(--accent);
+    }
+
+    .navbar-logo {
+      display: block;
+      width: 48px;
+      height: 48px;
+      flex-shrink: 0;
+      object-fit: contain;
+      border-radius: var(--r-sm);
+    }
+
+    .navbar-actions {
+      order: 3;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      color: var(--text-sub);
+      cursor: pointer;
+      transition: all 0.16s;
+    }
+
+    .icon-btn:hover {
+      color: var(--text);
+      border-color: var(--accent-dim);
+    }
+
+    /* Avatar con iniciales del email (reemplaza el ícono de config) */
+    .user-avatar {
+      width: 38px;
+      height: 38px;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--r-pill);
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: var(--on-accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    /* ──── CONTAINER ──── */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* ──── MENUBAR (Pastillas Nocturne) ──── */
+    /* Botonera media en píldora: patrón característico de Nocturne para */
+    /* navegación entre secciones (aquí: Registro / Historial).          */
+    .menubar {
+      order: 2;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      padding: 5px;
+      justify-content: center;
+    }
+
+    .menubar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 12px;
+      white-space: nowrap;
+      border-radius: var(--r-pill);
+      cursor: pointer;
+      transition: all 0.16s;
+    }
+
+    .menubar-btn svg {
+      flex-shrink: 0;
+    }
+
+    /* Móvil: solo íconos en las pastillas para que quepan al nivel del */
+    /* logo. Los labels reaparecen desde tablet/escritorio.            */
+    .menubar-label {
+      display: none;
+    }
+
+    .menubar-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .menubar-btn.active {
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* ──── GRID (Skeleton CSS, vendorizado y adaptado mobile-first) ──── */
+    /* Basado en Skeleton v2.0.4 (MIT). Skeleton original es desktop-first */
+    /* (columnas por %, colapsan a 100% bajo 550px); aquí se invierte:     */
+    /* base = 1 columna (móvil), las fracciones de 12 solo aplican desde   */
+    /* tablet/escritorio.                                                  */
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      width: 100%;
+      gap: 16px;
+    }
+
+    .column {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    @media (min-width: 769px) {
+      .row {
+        flex-wrap: nowrap;
+      }
+
+      .column.one { width: 8.3333%; }
+      .column.two { width: 16.6666%; }
+      .column.three { width: 25%; }
+      .column.four { width: 33.3333%; }
+      .column.five { width: 41.6666%; }
+      .column.six { width: 50%; }
+      .column.seven { width: 58.3333%; }
+      .column.eight { width: 66.6666%; }
+      .column.nine { width: 75%; }
+      .column.ten { width: 83.3333%; }
+      .column.eleven { width: 91.6666%; }
+      .column.twelve { width: 100%; }
+    }
+
+    /* ──── CARD ──── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      color: var(--text);
+    }
+
+    /* ──── FORM GROUPS ──── */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      font-family: inherit;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 10px 14px;
+      transition: all 0.16s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .form-group input::placeholder {
+      color: var(--text-mut);
+    }
+
+    .form-group input[type="hidden"] {
+      display: none;
+    }
+
+    /* ──── BUTTONS ──── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: var(--r-pill);
+      padding: 11px 22px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.16s;
+    }
+
+    .btn svg {
+      flex-shrink: 0;
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: var(--on-accent);
+      box-shadow: 0 8px 22px -12px var(--accent-glow),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.05);
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: var(--surface-2);
+      border-color: var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--accent-dim);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-sub);
+    }
+
+    .btn-ghost:hover {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ──── FILE UPLOAD / DROP ZONE ──── */
+    .photo-source-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--r-md);
+      padding: 20px;
+      text-align: center;
+      background: var(--surface-2);
+      cursor: pointer;
+      transition: all 0.16s;
+    }
+
+    .dropzone:hover {
+      border-color: var(--accent-dim);
+      background: var(--surface);
+    }
+
+    .dropzone.drag-over {
+      border-color: var(--accent);
+      background: rgba(255, 209, 0, 0.06);
+    }
+
+    .dropzone input[type="file"] {
+      display: none;
+    }
+
+    .dropzone-text {
+      font-size: 14px;
+      color: var(--text-sub);
+    }
+
+    .dropzone-icon {
+      display: flex;
+      justify-content: center;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+      opacity: 0.6;
+    }
+
+    /* ──── PHOTO PREVIEW ──── */
+    .photo-preview {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .photo-preview-item {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      border-radius: var(--r-md);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .photo-preview-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo-remove {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      background: rgba(0, 0, 0, 0.6);
+      border: none;
+      border-radius: 4px;
+      color: var(--c-red);
+      cursor: pointer;
+      transition: background 0.16s;
+    }
+
+    .photo-remove svg {
+      pointer-events: none;
+    }
+
+    .photo-remove:hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    /* ──── STEP INDICATOR ──── */
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    .step-number {
+      width: 24px;
+      height: 24px;
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      display: grid;
+      place-items: center;
+      font-weight: 600;
+    }
+
+    .step-number.active {
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+
+    /* ──── ALERT / MODAL ──── */
+    .alert {
+      display: flex;
+      gap: 12px;
+      padding: 14px 16px;
+      border-radius: var(--r-md);
+      font-size: 14px;
+      border: 1px solid;
+      margin-bottom: 12px;
+      align-items: center;
+    }
+
+    .alert.success {
+      border-color: rgba(0, 214, 137, 0.35);
+      background: rgba(0, 214, 137, 0.08);
+      color: #7fe9c2;
+    }
+
+    .alert.error {
+      border-color: rgba(255, 92, 108, 0.35);
+      background: rgba(255, 92, 108, 0.08);
+      color: #ffb3bb;
+    }
+
+    .alert.warn {
+      border-color: rgba(255, 209, 0, 0.35);
+      background: rgba(255, 209, 0, 0.08);
+      color: #ffe680;
+    }
+
+    .alert.info {
+      border-color: rgba(90, 149, 255, 0.35);
+      background: rgba(90, 149, 255, 0.08);
+      color: #aac8ff;
+    }
+
+    .alert svg {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+    }
+
+    /* ──── MODAL ──── */
+    .modal-bg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 100;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-bg.active {
+      display: grid;
+      place-items: center;
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      padding: 16px;
+      width: 90vw;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .modal-body {
+      margin-bottom: 20px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .modal-footer {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    /* ──── SCANNER ──── */
+    .scanner-container {
+      border: 2px solid var(--border);
+      border-radius: var(--r-md);
+      overflow: hidden;
+      background: var(--surface-2);
+      margin-bottom: 20px;
+    }
+
+    #scanner-video {
+      width: 100%;
+      height: 240px;
+      background: #000;
+      display: block;
+    }
+
+    #camera-video {
+      width: 100%;
+      max-height: 60vh;
+      object-fit: cover;
+      border-radius: var(--r-md);
+      display: block;
+    }
+
+    .scanner-controls {
+      display: flex;
+      gap: 12px;
+      padding: 12px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+
+    .scan-mode-toggle {
+      display: flex;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      padding: 4px;
+      margin-bottom: 8px;
+    }
+
+    .scan-mode-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text-sub);
+      font-family: inherit;
+      border-radius: var(--r-pill);
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.16s;
+    }
+
+    .scan-mode-btn svg {
+      flex-shrink: 0;
+    }
+
+    .scan-mode-btn.active {
+      background: var(--text);
+      color: var(--bg);
+    }
+
+    .scan-mode-btn:hover:not(.active) {
+      color: var(--text);
+    }
+
+    .scanner-result {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 12px;
+      margin-top: 12px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    /* ──── TABLE ──── */
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      font-size: 13px;
+      border-collapse: collapse;
+    }
+
+    th {
+      background: var(--surface-2);
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--text-sub);
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+
+    td {
+      padding: 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    tr:hover {
+      background: rgba(255, 209, 0, 0.02);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 5px 11px;
+      border-radius: var(--r-pill);
+      border: 1px solid currentColor;
+      background: color-mix(in srgb, currentColor 12%, transparent);
+    }
+
+    .badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .badge.green {
+      color: var(--c-green);
+    }
+
+    .badge.blue {
+      color: var(--c-blue);
+    }
+
+    .badge.orange {
+      color: var(--c-orange);
+    }
+
+    .badge.red {
+      color: var(--c-red);
+    }
+
+    .btn-view-photo {
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.16s;
+    }
+
+    .btn-view-photo:hover {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+    }
+
+    /* ──── QR PREVIEW ──── */
+    .qr-preview {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 20px;
+      background: var(--surface-2);
+      border-radius: var(--r-md);
+      border: 1px solid var(--border);
+      margin-top: 20px;
+    }
+
+    .qr-canvas-wrapper {
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    #qr-canvas {
+      display: block;
+      width: 200px;
+      height: 200px;
+    }
+
+    .qr-info {
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    /* ──── MORPH OVERLAY (animación de carga al guardar) ──── */
+    /* Reskin en tokens Nocturne del componente "botón morphing bloqueante": */
+    /* botón → orbe de carga → estado de éxito/error, con capa que bloquea  */
+    /* la pantalla mientras se guarda el registro.                          */
+    .morph-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 12, 14, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 200;
+      opacity: 1;
+      transition: opacity 0.25s ease;
+    }
+
+    .morph-overlay.hidden {
+      display: none;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .morph-btn {
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+      color: var(--on-accent);
+      border: none;
+      padding: 0 24px;
+      height: 48px;
+      border-radius: var(--r-pill);
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 160px;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: var(--shadow);
+    }
+
+    .morph-btn.is-saving {
+      min-width: 48px;
+      width: 48px;
+      padding: 0;
+      border-radius: 50%;
+      background: transparent;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      color: transparent;
+      animation: morph-spin 0.9s linear infinite;
+      pointer-events: none;
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .morph-btn.is-saved {
+      background: var(--c-green);
+      color: #06251b;
+      min-width: 160px;
+      border-radius: var(--r-pill);
+      border: none;
+      box-shadow: 0 0 20px rgba(0, 214, 137, 0.5);
+    }
+
+    .morph-btn.is-error {
+      background: var(--c-red);
+      color: #2b0a0d;
+      min-width: 160px;
+      border-radius: var(--r-pill);
+      border: none;
+      box-shadow: 0 0 20px rgba(255, 92, 108, 0.5);
+    }
+
+    @keyframes morph-spin {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ──── HISTORIAL: SEGMENTADOR (Dispositivos / Escaneos) ──── */
+    .subtabs {
+      display: flex;
+      gap: 4px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-pill);
+      padding: 5px;
+      margin-bottom: 20px;
+      max-width: 340px;
+    }
+
+    .subtab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: var(--r-pill);
+      cursor: pointer;
+      transition: all 0.16s;
+      white-space: nowrap;
+    }
+
+    .subtab-btn:hover {
+      color: var(--text);
+    }
+
+    .subtab-btn.active {
+      color: var(--on-accent, #1a1a1a);
+      background: var(--accent, #FFD100);
+    }
+
+    .historial-view {
+      display: none;
+    }
+
+    .historial-view.active {
+      display: block;
+    }
+
+    /* ──── HISTORIAL: FILAS COMPACTAS ──── */
+    /* Una línea por registro; el detalle completo va en el modal al   */
+    /* hacer tap/clic. Evita el desborde/estiramiento de tablas anchas */
+    /* en pantallas chicas y mantiene el historial escaneable.          */
+    .record-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .record-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      background: var(--surface-2);
+      cursor: pointer;
+      transition: all 0.16s;
+      text-align: left;
+    }
+
+    .record-row:hover {
+      border-color: var(--accent, #FFD100);
+      background: var(--surface);
+    }
+
+    .record-row-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .record-row-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .record-row-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .record-row-date {
+      font-size: 11px;
+      color: var(--text-mut);
+      white-space: nowrap;
+    }
+
+    .record-row-chevron {
+      color: var(--text-mut);
+      flex-shrink: 0;
+    }
+
+    /* ──── MODAL DE DETALLE: filas clave/valor ──── */
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .detail-row .k {
+      color: var(--text-sub);
+      flex-shrink: 0;
+    }
+
+    .detail-row .v {
+      color: var(--text);
+      font-weight: 600;
+      text-align: right;
+      word-break: break-word;
+    }
+
+    /* ──── RESPONSIVE ──── */
+    /* Mobile-first: los estilos base ya son los de móvil.        */
+    /* Este breakpoint solo añade mejoras progresivas en pantallas */
+    /* más grandes (tablet / escritorio).                          */
+    @media (min-width: 769px) {
+      .navbar {
+        padding: 16px 24px;
+      }
+
+      .navbar-logo {
+        width: 56px;
+        height: 56px;
+      }
+
+      .menubar {
+        gap: 8px;
+      }
+
+      .menubar-btn {
+        padding: 8px 16px;
+        font-size: 14px;
+      }
+
+      /* Reaparecen los labels de las pastillas en pantallas grandes */
+      .menubar-label {
+        display: inline;
+      }
+
+      .container {
+        padding: 20px;
+      }
+
+      .card {
+        padding: 24px;
+      }
+
+      #scanner-video {
+        height: 300px;
+      }
+
+      .modal {
+        padding: 24px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+
+    /* Skeleton */
+    @keyframes skeleton-shine {
+      0%   { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+      background-size: 800px 100%;
+      animation: skeleton-shine 1.4s infinite;
+      border-radius: var(--r-sm);
+    }
+    .skeleton-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 0; border-bottom: 1px solid var(--border);
+    }
+    .skeleton-badge  { width: 52px; height: 20px; flex-shrink: 0; border-radius: 99px; }
+    .skeleton-text   { height: 14px; border-radius: 4px; }
+    .skeleton-date   { width: 60px; height: 12px; flex-shrink: 0; border-radius: 4px; margin-left: auto; }
+  </style>
+<script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KYBPWY7AYSXC0MGZVH1JT2TV";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KYBPWY7AYSXC0MGZVH1JT2TV"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KYBPWY7AYSXC0MGZVH1JT2TV"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KYBPWY7AYSXC0MGZVH1JT2TV"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KYBPWY7AYSXC0MGZVH1JT2TV"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KYBPWY7AYSXC0MGZVH1JT2TV"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KYBPWY7AYSXC0MGZVH1JT2TV"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script></head>
+<body>
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="navbar-brand">
+      <img id="navbar-logo-img" class="navbar-logo" alt="DeviceHub" style="display: none;" />
+    </div>
+    <!-- MENUBAR: pastillas Nocturne (Registro / Historial) -->
+    <!-- En móvil se muestran solo los íconos SVG (labels ocultos) para -->
+    <!-- que quepan al nivel del logo en la misma hilera.                -->
+    <div class="menubar">
+      <button class="menubar-btn active" data-tab="registro">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        <span class="menubar-label">Registro</span>
+      </button>
+      <button class="menubar-btn" data-tab="historial">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6a1 1 0 011 1v1H8V4a1 1 0 011-1z"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="M9 11h6M9 15h6"/></svg>
+        <span class="menubar-label">Historial</span>
+      </button>
+    </div>
+
+    <div class="navbar-actions">
+      <div id="pending-badge" style="display: none; align-items: center; gap: 6px; font-size: 12px; color: var(--c-orange);">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        <span id="pending-count">0</span>
+      </div>
+      <button class="icon-btn" id="btn-bpp-config" title="Catálogo BPP" style="position: relative;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span id="bpp-stale-badge" style="display: none; position: absolute; top: -2px; right: -2px; width: 10px; height: 10px; border-radius: 50%; background: var(--c-orange); border: 2px solid var(--bg);"></span>
+      </button>
+      <button class="icon-btn" id="btn-debug-console" title="Consola de depuración" style="position: relative;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span id="debug-console-inline-badge" style="display: none; position: absolute; top: -2px; right: -2px; width: 16px; height: 16px; border-radius: 50%; background: var(--c-red); color: #fff; font-size: 9px; font-weight: 700; align-items: center; justify-content: center;"></span>
+      </button>
+      <div class="user-avatar" id="user-avatar" title="">?</div>
+    </div>
+  </nav>
+
+  <!-- CONTAINER -->
+  <div class="container">
+    <!-- TAB: REGISTRO -->
+    <div id="tab-registro" class="tab-content active">
+      <div class="card">
+        <div class="card-title">Registrar Nuevo Dispositivo</div>
+
+        <div class="step-indicator">
+          <div class="step-number active">1</div>
+          <span>Tipo de Puesto</span>
+        </div>
+
+        <div id="alert-registro" class="alert" style="display: none;"></div>
+
+        <div class="form-group">
+          <label for="puesto">Puesto *</label>
+          <select id="puesto" required>
+            <option value="">-- Seleccionar --</option>
+            <option value="driver">Driver</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+
+        <!-- PASO 2: DRIVER QR SCAN -->
+        <div id="driver-scan-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>Escanear QR del Driver</span>
+          </div>
+
+          <div class="scan-mode-toggle">
+            <button type="button" class="scan-mode-btn active" id="btn-driver-scanmode-camera" data-scan-mode="camera">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+              <span>Cámara</span>
+            </button>
+            <button type="button" class="scan-mode-btn" id="btn-driver-scanmode-handheld" data-scan-mode="handheld">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
+              <span>Handheld</span>
+            </button>
+          </div>
+
+          <div id="driver-scanner-body">
+            <div class="scanner-container">
+              <video id="scanner-video"></video>
+            </div>
+          </div>
+
+          <div id="scanner-result" class="scanner-result" style="display: none;"></div>
+
+          <input type="hidden" id="driver-id" />
+          <div id="driver-scan-confirm" style="display: none;">
+            <div class="alert success">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+              Driver ID detectado: <strong id="detected-driver-id"></strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- PASO 2: OTRO — ¿YA TIENE REGISTRO? -->
+        <div id="otro-check-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>¿Ya tiene un registro?</span>
+          </div>
+
+          <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <button type="button" class="btn btn-secondary" id="btn-otro-existente">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 14h3v3h-3zM14 18h3v3h-3zM18 18h3v3h-3z"/></svg>
+              Sí, escanear QR existente
+            </button>
+            <button type="button" class="btn btn-ghost" id="btn-otro-nuevo">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              No, es nuevo
+            </button>
+          </div>
+        </div>
+
+        <!-- PASO 2b: OTRO — ESCANEAR QR DE UN DISPOSITIVO YA REGISTRADO -->
+        <div id="otro-scan-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>Escanear QR de un dispositivo ya registrado</span>
+          </div>
+
+          <div class="scan-mode-toggle">
+            <button type="button" class="scan-mode-btn active" id="btn-otro-scanmode-camera" data-scan-mode="camera">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+              <span>Cámara</span>
+            </button>
+            <button type="button" class="scan-mode-btn" id="btn-otro-scanmode-handheld" data-scan-mode="handheld">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
+              <span>Handheld</span>
+            </button>
+          </div>
+
+          <div id="otro-scanner-body">
+            <div class="scanner-container">
+              <video id="otro-scanner-video"></video>
+            </div>
+          </div>
+
+          <div id="otro-scan-result" class="scanner-result" style="display: none;"></div>
+        </div>
+
+        <!-- CONFIRMACIÓN: LA PERSONA YA TIENE DISPOSITIVO(S) -->
+        <div id="existing-devices-card" style="display: none;">
+          <div class="alert success" id="existing-devices-info"></div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
+            <button type="button" class="btn btn-primary" id="btn-add-another-device">
+              Sí, agregar otro dispositivo
+            </button>
+            <button type="button" class="btn btn-ghost" id="btn-cancel-existing">
+              Cancelar
+            </button>
+          </div>
+        </div>
+
+        <!-- PASO 2: CORREO (OTRO, PRIMER REGISTRO) -->
+        <div id="email-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">2</div>
+            <span>Correo de Autorización</span>
+          </div>
+
+          <div class="form-group">
+            <label for="correo">Correo *</label>
+            <input type="email" id="correo" placeholder="usuario@empresa.com" required />
+          </div>
+        </div>
+
+        <!-- PASO 3: TIPO DISPOSITIVO -->
+        <div id="tipo-dispositivo-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">3</div>
+            <span>Tipo de Dispositivo</span>
+          </div>
+
+          <div class="form-group">
+            <label for="tipo-dispositivo">Tipo *</label>
+            <select id="tipo-dispositivo" required>
+              <option value="">-- Seleccionar --</option>
+              <option value="smartphone">Smartphone</option>
+              <option value="smartwatch">Smartwatch</option>
+              <option value="speaker">Speaker</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- PASO 4: IMEI (SI SMARTPHONE) -->
+        <div id="imei-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">4</div>
+            <span>IMEI</span>
+          </div>
+
+          <div class="form-group">
+            <label for="imei">IMEI (15 dígitos) *</label>
+            <input type="text" id="imei" placeholder="000000000000000" maxlength="15" required />
+          </div>
+        </div>
+
+        <!-- PASO 5: DESCRIPCIÓN -->
+        <div id="descripcion-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">5</div>
+            <span>Descripción</span>
+          </div>
+
+          <div class="form-group">
+            <label for="descripcion">Marca + Modelo + Color (MAYÚSCULAS) *</label>
+            <input type="text" id="descripcion" placeholder="APPLE IPHONE 14 BLACK" required />
+          </div>
+        </div>
+
+        <!-- PASO 6: EMPRESA -->
+        <div id="empresa-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">6</div>
+            <span>Empresa</span>
+          </div>
+          <div class="form-group">
+            <label for="empresa">Empresa *</label>
+            <input type="text" id="empresa" placeholder="NOMBRE DE LA EMPRESA" required
+              style="text-transform: uppercase;"
+              oninput="this.value = this.value.toUpperCase()" />
+          </div>
+        </div>
+
+        <!-- PASO 7: FOTO -->
+        <div id="foto-section" style="display: none;">
+          <div class="step-indicator">
+            <div class="step-number active">7</div>
+            <span>Fotografía</span>
+          </div>
+
+          <div class="form-group">
+            <label>Foto del Dispositivo *</label>
+            <div class="photo-source-actions">
+              <button type="button" class="btn btn-secondary" id="btn-open-camera">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9a2 2 0 012-2h1.2a2 2 0 001.6-.8l.4-.6a2 2 0 011.6-.8h4.4a2 2 0 011.6.8l.4.6a2 2 0 001.6.8H19a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3.5"/></svg>
+                Tomar foto
+              </button>
+              <button type="button" class="btn btn-ghost" id="btn-upload-foto">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Subir archivo
+              </button>
+            </div>
+            <input type="file" id="input-foto" accept="image/*" style="display: none;" />
+
+            <!-- CÁMARA EN VIVO -->
+            <div class="scanner-container" id="camera-container" style="display: none;">
+              <video id="camera-video" autoplay playsinline muted></video>
+              <div class="scanner-controls">
+                <button type="button" class="btn btn-primary" id="btn-capture-foto">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg>
+                  Capturar
+                </button>
+                <button type="button" class="btn btn-ghost" id="btn-cancel-camera">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+            <canvas id="camera-canvas" style="display: none;"></canvas>
+
+            <div class="photo-preview" id="photo-preview"></div>
+          </div>
+        </div>
+
+        <!-- CAMPOS OCULTOS -->
+        <input type="hidden" id="timestamp" />
+        <input type="hidden" id="usuario" />
+
+        <!-- BOTONES -->
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px;">
+          <button class="btn btn-secondary" id="btn-reset">Limpiar</button>
+          <button class="btn btn-primary" id="btn-guardar" style="display: none;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
+            Guardar registro
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: HISTORIAL -->
+    <!-- Una sola vista a la vez (segmentador Dispositivos/Escaneos) con -->
+    <!-- filas compactas de una línea; el detalle completo vive en un    -->
+    <!-- modal. Evita el "estiramiento infinito" de tablas anchas en     -->
+    <!-- móvil y la necesidad de scroll horizontal.                      -->
+    <div id="tab-historial" class="tab-content">
+      <div class="card">
+        <div class="card-title">Historial</div>
+
+        <div id="alert-historial" class="alert" style="display: none;"></div>
+
+        <div class="subtabs">
+          <button class="subtab-btn active" id="subtab-devices" data-historial-view="devices">Dispositivos</button>
+          <button class="subtab-btn" id="subtab-scans" data-historial-view="scans">Escaneos</button>
+        </div>
+
+        <!-- VISTA: DISPOSITIVOS -->
+        <div id="historial-view-devices" class="historial-view active">
+          <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+            <input type="text" id="search-devices" placeholder="Buscar por IMEI, Driver, correo..." style="flex: 1; min-width: 200px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); font-size: 13px;">
+            <select id="filter-devices-puesto" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); font-size: 13px;">
+              <option value="">Todos los puestos</option>
+              <option value="driver">Driver</option>
+              <option value="otro">Otro</option>
+            </select>
+            <input type="date" id="filter-devices-from" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text-main);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;" />
+            <input type="date" id="filter-devices-to" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text-main);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;" />
+            <button type="button" id="btn-show-inactive" class="btn btn-ghost" style="font-size:12px; padding: 6px 12px;">
+              Ver inactivos
+            </button>
+          </div>
+
+          <div id="list-devices" class="record-list"></div>
+
+          <p style="margin-top: 16px; font-size: 12px; color: var(--text-mut);" id="devices-empty">
+            No hay registros aún.
+          </p>
+
+          <button type="button" class="btn btn-secondary" id="btn-devices-more" style="display: none; width: 100%; justify-content: center; margin-top: 12px;">
+            Ver más
+          </button>
+        </div>
+
+        <!-- VISTA: ESCANEOS -->
+        <div id="historial-view-scans" class="historial-view">
+          <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 12px;">
+            Datos provenientes de la app de Escaneo.
+          </p>
+
+          <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;">
+            <select id="filter-scans-resultado" style="padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); font-size: 13px;">
+              <option value="">Todos los resultados</option>
+              <option value="valido">Válido</option>
+              <option value="denegado_compartido">Denegado (Compartido)</option>
+              <option value="denegado_sin_ingreso">Denegado (Sin ingreso)</option>
+            </select>
+            <input type="date" id="filter-scans-from" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text-main);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;" />
+            <input type="date" id="filter-scans-to" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text-main);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;" />
+          </div>
+
+          <div id="list-scans" class="record-list"></div>
+
+          <p style="margin-top: 16px; font-size: 12px; color: var(--text-mut);" id="scans-empty">
+            Sin datos aún.
+          </p>
+
+          <button type="button" class="btn btn-secondary" id="btn-scans-more" style="display: none; width: 100%; justify-content: center; margin-top: 12px;">
+            Ver más
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: DETALLE DE REGISTRO (historial) -->
+  <div class="modal-bg" id="modal-record-detail">
+    <div class="modal">
+      <div class="modal-title" id="modal-record-title">Detalle</div>
+      <div class="modal-body" id="modal-record-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-modal-record-photo" style="display: none;">Ver foto</button>
+        <button class="btn btn-secondary" id="btn-modal-record-qr" style="display: none;">Ver QR</button>
+        <button class="btn btn-secondary" id="btn-modal-record-share" style="display:none;">Compartir</button>
+        <button class="btn btn-secondary" id="btn-modal-record-toggle" style="display:none;">Desactivar</button>
+        <button class="btn btn-secondary" id="btn-modal-record-delete" style="display:none; color: var(--c-red); border-color: var(--c-red);">Eliminar</button>
+        <button class="btn btn-primary" id="btn-modal-record-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: RESULTADO GUARDADO -->
+  <div class="modal-bg" id="modal-resultado">
+    <div class="modal">
+      <div class="modal-title">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--c-green); vertical-align: -3px; margin-right: 6px;"><path d="M20 6L9 17l-5-5"/></svg>
+        <span id="modal-titulo">Éxito</span>
+      </div>
+      <div class="modal-body" id="modal-mensaje"></div>
+
+      <div id="qr-preview-modal" class="qr-preview" style="display: none;">
+        <div style="background: white; padding: 12px; border-radius: 8px;">
+          <canvas id="qr-canvas-modal" width="200" height="200"></canvas>
+        </div>
+        <div class="qr-info">
+          <p>Escanea este código para autorizar el dispositivo</p>
+          <button class="btn btn-secondary" id="btn-download-qr" style="margin-top: 12px;">Descargar QR</button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-modal-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VER QR (historial) -->
+  <div class="modal-bg" id="modal-qr">
+    <div class="modal">
+      <div class="modal-title">
+        <span>Código QR del dispositivo</span>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
+        <div style="background: white; padding: 16px; border-radius: 8px;">
+          <img id="modal-qr-img" src="" alt="QR del dispositivo" style="display: block; width: 220px; height: 220px;" />
+        </div>
+        <button class="btn btn-secondary" id="btn-modal-qr-download">Descargar QR</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-modal-qr-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: VER FOTO (historial) -->
+  <div class="modal-bg" id="modal-photo">
+    <div class="modal">
+      <div class="modal-title">
+        <span>Foto del dispositivo</span>
+      </div>
+      <div class="modal-body">
+        <img id="modal-photo-img" src="" alt="Foto del dispositivo" style="width: 100%; border-radius: var(--r-md);" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-modal-photo-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CATÁLOGO BPP -->
+  <div class="modal-bg" id="modal-bpp">
+    <div class="modal">
+      <div class="modal-title">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent); vertical-align: -3px; margin-right: 6px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Catálogo BPP</span>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-sub); margin-bottom: 14px;">
+          IMEIs de dispositivos implicados en casos de generación BPP. Un
+          smartphone cuyo IMEI esté en este catálogo <strong>no podrá
+          registrarse</strong>.
+        </p>
+
+        <div id="bpp-status" style="font-size: 13px; padding: 12px; border-radius: var(--r-md); background: var(--surface-2); border: 1px solid var(--border); margin-bottom: 12px;">
+          Cargando…
+        </div>
+
+        <div id="bpp-stale-warn" class="alert warn" style="display: none;">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          El catálogo tiene más de 7 días. Se recomienda actualizarlo semanalmente.
+        </div>
+
+        <div class="form-group" style="margin-top: 6px;">
+          <label for="bpp-csv-input">Actualizar desde CSV</label>
+          <input type="file" id="bpp-csv-input" accept=".csv,text/csv" />
+          <p style="font-size: 12px; color: var(--text-mut); margin-top: 6px;">
+            Encabezados esperados: <code>IMEI_VALUE, SHIPMENT_ID</code>.
+          </p>
+        </div>
+
+        <div id="bpp-upload-result" style="display: none; margin-top: 8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-bpp-upload">Reemplazar catálogo</button>
+        <button class="btn btn-secondary" id="btn-modal-bpp-close">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADER DE CARGA INICIAL -->
+  <div id="init-overlay" style="position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;transition:opacity 0.4s;">
+    <div style="width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:morph-spin 0.9s linear infinite;"></div>
+  </div>
+
+  <!-- CANVAS TEMPORAL PARA QR -->
+  <canvas id="qr-canvas" style="display: none;"></canvas>
+
+  <!-- MORPH OVERLAY: animación de carga al guardar -->
+  <div id="morph-overlay" class="morph-overlay hidden">
+    <button id="morph-btn" class="morph-btn" disabled>Guardando...</button>
+  </div>
+
+  <!-- DEBUG CONSOLE (oculta por defecto) -->
+  <div id="debug-console-panel" style="position: fixed; bottom: 20px; right: 20px; width: 320px; max-width: calc(100vw - 40px); max-height: 420px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); display: flex; flex-direction: column; z-index: 1000; transform: translateY(470px); transition: transform 0.3s ease; box-shadow: var(--shadow);">
+    <div style="padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-weight: 600; font-size: 13px; color: var(--text-sub);">Debug</span>
+      <button onclick="DebugConsole.toggle()" style="background: none; border: none; color: var(--text-sub); cursor: pointer; padding: 4px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="debug-console-body" style="flex: 1; overflow-y: auto; font-size: 11px; font-family: monospace; padding: 10px; line-height: 1.4; color: var(--text-sub);"></div>
+    <div style="padding: 8px; border-top: 1px solid var(--border); display: flex; gap: 6px;">
+      <button onclick="DebugConsole.copyToClipboard()" style="flex: 1; padding: 7px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-sub); border-radius: var(--r-sm); cursor: pointer; font-size: 12px;">Copiar</button>
+      <button onclick="DebugConsole.toggle()" style="flex: 1; padding: 7px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-sub); border-radius: var(--r-sm); cursor: pointer; font-size: 12px;">Cerrar</button>
+    </div>
+  </div>
+
+  <div id="debug-console-badge" style="position: fixed; bottom: 20px; right: 20px; width: 34px; height: 34px; background: var(--c-red); border-radius: 50%; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 12px; cursor: pointer; z-index: 999; display: none;" onclick="DebugConsole.toggle()"></div>
+
+  <!-- ──────────────────────────────────────────────────────────────────────────── -->
+  <!-- SCRIPT -->
+  <!-- ──────────────────────────────────────────────────────────────────────────── -->
+  <script>
+    /* qrcode.js real (davidshimjs/qrcodejs) vendorizado inline */
+    /* Copyright (c) Kazuhiko Arase — MIT License */
+    /* Wrapper: soporta new QRCode(textString, options) → qr.canvas */
+/**
+ * @fileoverview
+ * - Using the 'QRCode for Javascript library'
+ * - Fixed dataset of 'QRCode for Javascript library' for support full-spec.
+ * - this library has no dependencies.
+ * 
+ * @author davidshimjs
+ * @see <a href="http://www.d-project.com/" target="_blank">http://www.d-project.com/</a>
+ * @see <a href="http://jeromeetienne.github.com/jquery-qrcode/" target="_blank">http://jeromeetienne.github.com/jquery-qrcode/</a>
+ */
+var QRCode;
+
+(function () {
+	//---------------------------------------------------------------------
+	// QRCode for JavaScript
+	//
+	// Copyright (c) 2009 Kazuhiko Arase
+	//
+	// URL: http://www.d-project.com/
+	//
+	// Licensed under the MIT license:
+	//   http://www.opensource.org/licenses/mit-license.php
+	//
+	// The word "QR Code" is registered trademark of 
+	// DENSO WAVE INCORPORATED
+	//   http://www.denso-wave.com/qrcode/faqpatent-e.html
+	//
+	//---------------------------------------------------------------------
+	function QR8bitByte(data) {
+		this.mode = QRMode.MODE_8BIT_BYTE;
+		this.data = data;
+		this.parsedData = [];
+
+		// Added to support UTF-8 Characters
+		for (var i = 0, l = this.data.length; i < l; i++) {
+			var byteArray = [];
+			var code = this.data.charCodeAt(i);
+
+			if (code > 0x10000) {
+				byteArray[0] = 0xF0 | ((code & 0x1C0000) >>> 18);
+				byteArray[1] = 0x80 | ((code & 0x3F000) >>> 12);
+				byteArray[2] = 0x80 | ((code & 0xFC0) >>> 6);
+				byteArray[3] = 0x80 | (code & 0x3F);
+			} else if (code > 0x800) {
+				byteArray[0] = 0xE0 | ((code & 0xF000) >>> 12);
+				byteArray[1] = 0x80 | ((code & 0xFC0) >>> 6);
+				byteArray[2] = 0x80 | (code & 0x3F);
+			} else if (code > 0x80) {
+				byteArray[0] = 0xC0 | ((code & 0x7C0) >>> 6);
+				byteArray[1] = 0x80 | (code & 0x3F);
+			} else {
+				byteArray[0] = code;
+			}
+
+			this.parsedData.push(byteArray);
+		}
+
+		this.parsedData = Array.prototype.concat.apply([], this.parsedData);
+
+		if (this.parsedData.length != this.data.length) {
+			this.parsedData.unshift(191);
+			this.parsedData.unshift(187);
+			this.parsedData.unshift(239);
+		}
+	}
+
+	QR8bitByte.prototype = {
+		getLength: function (buffer) {
+			return this.parsedData.length;
+		},
+		write: function (buffer) {
+			for (var i = 0, l = this.parsedData.length; i < l; i++) {
+				buffer.put(this.parsedData[i], 8);
+			}
+		}
+	};
+
+	function QRCodeModel(typeNumber, errorCorrectLevel) {
+		this.typeNumber = typeNumber;
+		this.errorCorrectLevel = errorCorrectLevel;
+		this.modules = null;
+		this.moduleCount = 0;
+		this.dataCache = null;
+		this.dataList = [];
+	}
+
+	QRCodeModel.prototype={addData:function(data){var newData=new QR8bitByte(data);this.dataList.push(newData);this.dataCache=null;},isDark:function(row,col){if(row<0||this.moduleCount<=row||col<0||this.moduleCount<=col){throw new Error(row+","+col);}
+	return this.modules[row][col];},getModuleCount:function(){return this.moduleCount;},make:function(){this.makeImpl(false,this.getBestMaskPattern());},makeImpl:function(test,maskPattern){this.moduleCount=this.typeNumber*4+17;this.modules=new Array(this.moduleCount);for(var row=0;row<this.moduleCount;row++){this.modules[row]=new Array(this.moduleCount);for(var col=0;col<this.moduleCount;col++){this.modules[row][col]=null;}}
+	this.setupPositionProbePattern(0,0);this.setupPositionProbePattern(this.moduleCount-7,0);this.setupPositionProbePattern(0,this.moduleCount-7);this.setupPositionAdjustPattern();this.setupTimingPattern();this.setupTypeInfo(test,maskPattern);if(this.typeNumber>=7){this.setupTypeNumber(test);}
+	if(this.dataCache==null){this.dataCache=QRCodeModel.createData(this.typeNumber,this.errorCorrectLevel,this.dataList);}
+	this.mapData(this.dataCache,maskPattern);},setupPositionProbePattern:function(row,col){for(var r=-1;r<=7;r++){if(row+r<=-1||this.moduleCount<=row+r)continue;for(var c=-1;c<=7;c++){if(col+c<=-1||this.moduleCount<=col+c)continue;if((0<=r&&r<=6&&(c==0||c==6))||(0<=c&&c<=6&&(r==0||r==6))||(2<=r&&r<=4&&2<=c&&c<=4)){this.modules[row+r][col+c]=true;}else{this.modules[row+r][col+c]=false;}}}},getBestMaskPattern:function(){var minLostPoint=0;var pattern=0;for(var i=0;i<8;i++){this.makeImpl(true,i);var lostPoint=QRUtil.getLostPoint(this);if(i==0||minLostPoint>lostPoint){minLostPoint=lostPoint;pattern=i;}}
+	return pattern;},createMovieClip:function(target_mc,instance_name,depth){var qr_mc=target_mc.createEmptyMovieClip(instance_name,depth);var cs=1;this.make();for(var row=0;row<this.modules.length;row++){var y=row*cs;for(var col=0;col<this.modules[row].length;col++){var x=col*cs;var dark=this.modules[row][col];if(dark){qr_mc.beginFill(0,100);qr_mc.moveTo(x,y);qr_mc.lineTo(x+cs,y);qr_mc.lineTo(x+cs,y+cs);qr_mc.lineTo(x,y+cs);qr_mc.endFill();}}}
+	return qr_mc;},setupTimingPattern:function(){for(var r=8;r<this.moduleCount-8;r++){if(this.modules[r][6]!=null){continue;}
+	this.modules[r][6]=(r%2==0);}
+	for(var c=8;c<this.moduleCount-8;c++){if(this.modules[6][c]!=null){continue;}
+	this.modules[6][c]=(c%2==0);}},setupPositionAdjustPattern:function(){var pos=QRUtil.getPatternPosition(this.typeNumber);for(var i=0;i<pos.length;i++){for(var j=0;j<pos.length;j++){var row=pos[i];var col=pos[j];if(this.modules[row][col]!=null){continue;}
+	for(var r=-2;r<=2;r++){for(var c=-2;c<=2;c++){if(r==-2||r==2||c==-2||c==2||(r==0&&c==0)){this.modules[row+r][col+c]=true;}else{this.modules[row+r][col+c]=false;}}}}}},setupTypeNumber:function(test){var bits=QRUtil.getBCHTypeNumber(this.typeNumber);for(var i=0;i<18;i++){var mod=(!test&&((bits>>i)&1)==1);this.modules[Math.floor(i/3)][i%3+this.moduleCount-8-3]=mod;}
+	for(var i=0;i<18;i++){var mod=(!test&&((bits>>i)&1)==1);this.modules[i%3+this.moduleCount-8-3][Math.floor(i/3)]=mod;}},setupTypeInfo:function(test,maskPattern){var data=(this.errorCorrectLevel<<3)|maskPattern;var bits=QRUtil.getBCHTypeInfo(data);for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)==1);if(i<6){this.modules[i][8]=mod;}else if(i<8){this.modules[i+1][8]=mod;}else{this.modules[this.moduleCount-15+i][8]=mod;}}
+	for(var i=0;i<15;i++){var mod=(!test&&((bits>>i)&1)==1);if(i<8){this.modules[8][this.moduleCount-i-1]=mod;}else if(i<9){this.modules[8][15-i-1+1]=mod;}else{this.modules[8][15-i-1]=mod;}}
+	this.modules[this.moduleCount-8][8]=(!test);},mapData:function(data,maskPattern){var inc=-1;var row=this.moduleCount-1;var bitIndex=7;var byteIndex=0;for(var col=this.moduleCount-1;col>0;col-=2){if(col==6)col--;while(true){for(var c=0;c<2;c++){if(this.modules[row][col-c]==null){var dark=false;if(byteIndex<data.length){dark=(((data[byteIndex]>>>bitIndex)&1)==1);}
+	var mask=QRUtil.getMask(maskPattern,row,col-c);if(mask){dark=!dark;}
+	this.modules[row][col-c]=dark;bitIndex--;if(bitIndex==-1){byteIndex++;bitIndex=7;}}}
+	row+=inc;if(row<0||this.moduleCount<=row){row-=inc;inc=-inc;break;}}}}};QRCodeModel.PAD0=0xEC;QRCodeModel.PAD1=0x11;QRCodeModel.createData=function(typeNumber,errorCorrectLevel,dataList){var rsBlocks=QRRSBlock.getRSBlocks(typeNumber,errorCorrectLevel);var buffer=new QRBitBuffer();for(var i=0;i<dataList.length;i++){var data=dataList[i];buffer.put(data.mode,4);buffer.put(data.getLength(),QRUtil.getLengthInBits(data.mode,typeNumber));data.write(buffer);}
+	var totalDataCount=0;for(var i=0;i<rsBlocks.length;i++){totalDataCount+=rsBlocks[i].dataCount;}
+	if(buffer.getLengthInBits()>totalDataCount*8){throw new Error("code length overflow. ("
+	+buffer.getLengthInBits()
+	+">"
+	+totalDataCount*8
+	+")");}
+	if(buffer.getLengthInBits()+4<=totalDataCount*8){buffer.put(0,4);}
+	while(buffer.getLengthInBits()%8!=0){buffer.putBit(false);}
+	while(true){if(buffer.getLengthInBits()>=totalDataCount*8){break;}
+	buffer.put(QRCodeModel.PAD0,8);if(buffer.getLengthInBits()>=totalDataCount*8){break;}
+	buffer.put(QRCodeModel.PAD1,8);}
+	return QRCodeModel.createBytes(buffer,rsBlocks);};QRCodeModel.createBytes=function(buffer,rsBlocks){var offset=0;var maxDcCount=0;var maxEcCount=0;var dcdata=new Array(rsBlocks.length);var ecdata=new Array(rsBlocks.length);for(var r=0;r<rsBlocks.length;r++){var dcCount=rsBlocks[r].dataCount;var ecCount=rsBlocks[r].totalCount-dcCount;maxDcCount=Math.max(maxDcCount,dcCount);maxEcCount=Math.max(maxEcCount,ecCount);dcdata[r]=new Array(dcCount);for(var i=0;i<dcdata[r].length;i++){dcdata[r][i]=0xff&buffer.buffer[i+offset];}
+	offset+=dcCount;var rsPoly=QRUtil.getErrorCorrectPolynomial(ecCount);var rawPoly=new QRPolynomial(dcdata[r],rsPoly.getLength()-1);var modPoly=rawPoly.mod(rsPoly);ecdata[r]=new Array(rsPoly.getLength()-1);for(var i=0;i<ecdata[r].length;i++){var modIndex=i+modPoly.getLength()-ecdata[r].length;ecdata[r][i]=(modIndex>=0)?modPoly.get(modIndex):0;}}
+	var totalCodeCount=0;for(var i=0;i<rsBlocks.length;i++){totalCodeCount+=rsBlocks[i].totalCount;}
+	var data=new Array(totalCodeCount);var index=0;for(var i=0;i<maxDcCount;i++){for(var r=0;r<rsBlocks.length;r++){if(i<dcdata[r].length){data[index++]=dcdata[r][i];}}}
+	for(var i=0;i<maxEcCount;i++){for(var r=0;r<rsBlocks.length;r++){if(i<ecdata[r].length){data[index++]=ecdata[r][i];}}}
+	return data;};var QRMode={MODE_NUMBER:1<<0,MODE_ALPHA_NUM:1<<1,MODE_8BIT_BYTE:1<<2,MODE_KANJI:1<<3};var QRErrorCorrectLevel={L:1,M:0,Q:3,H:2};var QRMaskPattern={PATTERN000:0,PATTERN001:1,PATTERN010:2,PATTERN011:3,PATTERN100:4,PATTERN101:5,PATTERN110:6,PATTERN111:7};var QRUtil={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70],[6,26,50,74],[6,30,54,78],[6,30,56,82],[6,30,58,86],[6,34,62,90],[6,28,50,72,94],[6,26,50,74,98],[6,30,54,78,102],[6,28,54,80,106],[6,32,58,84,110],[6,30,58,86,114],[6,34,62,90,118],[6,26,50,74,98,122],[6,30,54,78,102,126],[6,26,52,78,104,130],[6,30,56,82,108,134],[6,34,60,86,112,138],[6,30,58,86,114,142],[6,34,62,90,118,146],[6,30,54,78,102,126,150],[6,24,50,76,102,128,154],[6,28,54,80,106,132,158],[6,32,58,84,110,136,162],[6,26,54,82,110,138,166],[6,30,58,86,114,142,170]],G15:(1<<10)|(1<<8)|(1<<5)|(1<<4)|(1<<2)|(1<<1)|(1<<0),G18:(1<<12)|(1<<11)|(1<<10)|(1<<9)|(1<<8)|(1<<5)|(1<<2)|(1<<0),G15_MASK:(1<<14)|(1<<12)|(1<<10)|(1<<4)|(1<<1),getBCHTypeInfo:function(data){var d=data<<10;while(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G15)>=0){d^=(QRUtil.G15<<(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G15)));}
+	return((data<<10)|d)^QRUtil.G15_MASK;},getBCHTypeNumber:function(data){var d=data<<12;while(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G18)>=0){d^=(QRUtil.G18<<(QRUtil.getBCHDigit(d)-QRUtil.getBCHDigit(QRUtil.G18)));}
+	return(data<<12)|d;},getBCHDigit:function(data){var digit=0;while(data!=0){digit++;data>>>=1;}
+	return digit;},getPatternPosition:function(typeNumber){return QRUtil.PATTERN_POSITION_TABLE[typeNumber-1];},getMask:function(maskPattern,i,j){switch(maskPattern){case QRMaskPattern.PATTERN000:return(i+j)%2==0;case QRMaskPattern.PATTERN001:return i%2==0;case QRMaskPattern.PATTERN010:return j%3==0;case QRMaskPattern.PATTERN011:return(i+j)%3==0;case QRMaskPattern.PATTERN100:return(Math.floor(i/2)+Math.floor(j/3))%2==0;case QRMaskPattern.PATTERN101:return(i*j)%2+(i*j)%3==0;case QRMaskPattern.PATTERN110:return((i*j)%2+(i*j)%3)%2==0;case QRMaskPattern.PATTERN111:return((i*j)%3+(i+j)%2)%2==0;default:throw new Error("bad maskPattern:"+maskPattern);}},getErrorCorrectPolynomial:function(errorCorrectLength){var a=new QRPolynomial([1],0);for(var i=0;i<errorCorrectLength;i++){a=a.multiply(new QRPolynomial([1,QRMath.gexp(i)],0));}
+	return a;},getLengthInBits:function(mode,type){if(1<=type&&type<10){switch(mode){case QRMode.MODE_NUMBER:return 10;case QRMode.MODE_ALPHA_NUM:return 9;case QRMode.MODE_8BIT_BYTE:return 8;case QRMode.MODE_KANJI:return 8;default:throw new Error("mode:"+mode);}}else if(type<27){switch(mode){case QRMode.MODE_NUMBER:return 12;case QRMode.MODE_ALPHA_NUM:return 11;case QRMode.MODE_8BIT_BYTE:return 16;case QRMode.MODE_KANJI:return 10;default:throw new Error("mode:"+mode);}}else if(type<41){switch(mode){case QRMode.MODE_NUMBER:return 14;case QRMode.MODE_ALPHA_NUM:return 13;case QRMode.MODE_8BIT_BYTE:return 16;case QRMode.MODE_KANJI:return 12;default:throw new Error("mode:"+mode);}}else{throw new Error("type:"+type);}},getLostPoint:function(qrCode){var moduleCount=qrCode.getModuleCount();var lostPoint=0;for(var row=0;row<moduleCount;row++){for(var col=0;col<moduleCount;col++){var sameCount=0;var dark=qrCode.isDark(row,col);for(var r=-1;r<=1;r++){if(row+r<0||moduleCount<=row+r){continue;}
+	for(var c=-1;c<=1;c++){if(col+c<0||moduleCount<=col+c){continue;}
+	if(r==0&&c==0){continue;}
+	if(dark==qrCode.isDark(row+r,col+c)){sameCount++;}}}
+	if(sameCount>5){lostPoint+=(3+sameCount-5);}}}
+	for(var row=0;row<moduleCount-1;row++){for(var col=0;col<moduleCount-1;col++){var count=0;if(qrCode.isDark(row,col))count++;if(qrCode.isDark(row+1,col))count++;if(qrCode.isDark(row,col+1))count++;if(qrCode.isDark(row+1,col+1))count++;if(count==0||count==4){lostPoint+=3;}}}
+	for(var row=0;row<moduleCount;row++){for(var col=0;col<moduleCount-6;col++){if(qrCode.isDark(row,col)&&!qrCode.isDark(row,col+1)&&qrCode.isDark(row,col+2)&&qrCode.isDark(row,col+3)&&qrCode.isDark(row,col+4)&&!qrCode.isDark(row,col+5)&&qrCode.isDark(row,col+6)){lostPoint+=40;}}}
+	for(var col=0;col<moduleCount;col++){for(var row=0;row<moduleCount-6;row++){if(qrCode.isDark(row,col)&&!qrCode.isDark(row+1,col)&&qrCode.isDark(row+2,col)&&qrCode.isDark(row+3,col)&&qrCode.isDark(row+4,col)&&!qrCode.isDark(row+5,col)&&qrCode.isDark(row+6,col)){lostPoint+=40;}}}
+	var darkCount=0;for(var col=0;col<moduleCount;col++){for(var row=0;row<moduleCount;row++){if(qrCode.isDark(row,col)){darkCount++;}}}
+	var ratio=Math.abs(100*darkCount/moduleCount/moduleCount-50)/5;lostPoint+=ratio*10;return lostPoint;}};var QRMath={glog:function(n){if(n<1){throw new Error("glog("+n+")");}
+	return QRMath.LOG_TABLE[n];},gexp:function(n){while(n<0){n+=255;}
+	while(n>=256){n-=255;}
+	return QRMath.EXP_TABLE[n];},EXP_TABLE:new Array(256),LOG_TABLE:new Array(256)};for(var i=0;i<8;i++){QRMath.EXP_TABLE[i]=1<<i;}
+	for(var i=8;i<256;i++){QRMath.EXP_TABLE[i]=QRMath.EXP_TABLE[i-4]^QRMath.EXP_TABLE[i-5]^QRMath.EXP_TABLE[i-6]^QRMath.EXP_TABLE[i-8];}
+	for(var i=0;i<255;i++){QRMath.LOG_TABLE[QRMath.EXP_TABLE[i]]=i;}
+	function QRPolynomial(num,shift){if(num.length==undefined){throw new Error(num.length+"/"+shift);}
+	var offset=0;while(offset<num.length&&num[offset]==0){offset++;}
+	this.num=new Array(num.length-offset+shift);for(var i=0;i<num.length-offset;i++){this.num[i]=num[i+offset];}}
+	QRPolynomial.prototype={get:function(index){return this.num[index];},getLength:function(){return this.num.length;},multiply:function(e){var num=new Array(this.getLength()+e.getLength()-1);for(var i=0;i<this.getLength();i++){for(var j=0;j<e.getLength();j++){num[i+j]^=QRMath.gexp(QRMath.glog(this.get(i))+QRMath.glog(e.get(j)));}}
+	return new QRPolynomial(num,0);},mod:function(e){if(this.getLength()-e.getLength()<0){return this;}
+	var ratio=QRMath.glog(this.get(0))-QRMath.glog(e.get(0));var num=new Array(this.getLength());for(var i=0;i<this.getLength();i++){num[i]=this.get(i);}
+	for(var i=0;i<e.getLength();i++){num[i]^=QRMath.gexp(QRMath.glog(e.get(i))+ratio);}
+	return new QRPolynomial(num,0).mod(e);}};function QRRSBlock(totalCount,dataCount){this.totalCount=totalCount;this.dataCount=dataCount;}
+	QRRSBlock.RS_BLOCK_TABLE=[[1,26,19],[1,26,16],[1,26,13],[1,26,9],[1,44,34],[1,44,28],[1,44,22],[1,44,16],[1,70,55],[1,70,44],[2,35,17],[2,35,13],[1,100,80],[2,50,32],[2,50,24],[4,25,9],[1,134,108],[2,67,43],[2,33,15,2,34,16],[2,33,11,2,34,12],[2,86,68],[4,43,27],[4,43,19],[4,43,15],[2,98,78],[4,49,31],[2,32,14,4,33,15],[4,39,13,1,40,14],[2,121,97],[2,60,38,2,61,39],[4,40,18,2,41,19],[4,40,14,2,41,15],[2,146,116],[3,58,36,2,59,37],[4,36,16,4,37,17],[4,36,12,4,37,13],[2,86,68,2,87,69],[4,69,43,1,70,44],[6,43,19,2,44,20],[6,43,15,2,44,16],[4,101,81],[1,80,50,4,81,51],[4,50,22,4,51,23],[3,36,12,8,37,13],[2,116,92,2,117,93],[6,58,36,2,59,37],[4,46,20,6,47,21],[7,42,14,4,43,15],[4,133,107],[8,59,37,1,60,38],[8,44,20,4,45,21],[12,33,11,4,34,12],[3,145,115,1,146,116],[4,64,40,5,65,41],[11,36,16,5,37,17],[11,36,12,5,37,13],[5,109,87,1,110,88],[5,65,41,5,66,42],[5,54,24,7,55,25],[11,36,12],[5,122,98,1,123,99],[7,73,45,3,74,46],[15,43,19,2,44,20],[3,45,15,13,46,16],[1,135,107,5,136,108],[10,74,46,1,75,47],[1,50,22,15,51,23],[2,42,14,17,43,15],[5,150,120,1,151,121],[9,69,43,4,70,44],[17,50,22,1,51,23],[2,42,14,19,43,15],[3,141,113,4,142,114],[3,70,44,11,71,45],[17,47,21,4,48,22],[9,39,13,16,40,14],[3,135,107,5,136,108],[3,67,41,13,68,42],[15,54,24,5,55,25],[15,43,15,10,44,16],[4,144,116,4,145,117],[17,68,42],[17,50,22,6,51,23],[19,46,16,6,47,17],[2,139,111,7,140,112],[17,74,46],[7,54,24,16,55,25],[34,37,13],[4,151,121,5,152,122],[4,75,47,14,76,48],[11,54,24,14,55,25],[16,45,15,14,46,16],[6,147,117,4,148,118],[6,73,45,14,74,46],[11,54,24,16,55,25],[30,46,16,2,47,17],[8,132,106,4,133,107],[8,75,47,13,76,48],[7,54,24,22,55,25],[22,45,15,13,46,16],[10,142,114,2,143,115],[19,74,46,4,75,47],[28,50,22,6,51,23],[33,46,16,4,47,17],[8,152,122,4,153,123],[22,73,45,3,74,46],[8,53,23,26,54,24],[12,45,15,28,46,16],[3,147,117,10,148,118],[3,73,45,23,74,46],[4,54,24,31,55,25],[11,45,15,31,46,16],[7,146,116,7,147,117],[21,73,45,7,74,46],[1,53,23,37,54,24],[19,45,15,26,46,16],[5,145,115,10,146,116],[19,75,47,10,76,48],[15,54,24,25,55,25],[23,45,15,25,46,16],[13,145,115,3,146,116],[2,74,46,29,75,47],[42,54,24,1,55,25],[23,45,15,28,46,16],[17,145,115],[10,74,46,23,75,47],[10,54,24,35,55,25],[19,45,15,35,46,16],[17,145,115,1,146,116],[14,74,46,21,75,47],[29,54,24,19,55,25],[11,45,15,46,46,16],[13,145,115,6,146,116],[14,74,46,23,75,47],[44,54,24,7,55,25],[59,46,16,1,47,17],[12,151,121,7,152,122],[12,75,47,26,76,48],[39,54,24,14,55,25],[22,45,15,41,46,16],[6,151,121,14,152,122],[6,75,47,34,76,48],[46,54,24,10,55,25],[2,45,15,64,46,16],[17,152,122,4,153,123],[29,74,46,14,75,47],[49,54,24,10,55,25],[24,45,15,46,46,16],[4,152,122,18,153,123],[13,74,46,32,75,47],[48,54,24,14,55,25],[42,45,15,32,46,16],[20,147,117,4,148,118],[40,75,47,7,76,48],[43,54,24,22,55,25],[10,45,15,67,46,16],[19,148,118,6,149,119],[18,75,47,31,76,48],[34,54,24,34,55,25],[20,45,15,61,46,16]];QRRSBlock.getRSBlocks=function(typeNumber,errorCorrectLevel){var rsBlock=QRRSBlock.getRsBlockTable(typeNumber,errorCorrectLevel);if(rsBlock==undefined){throw new Error("bad rs block @ typeNumber:"+typeNumber+"/errorCorrectLevel:"+errorCorrectLevel);}
+	var length=rsBlock.length/3;var list=[];for(var i=0;i<length;i++){var count=rsBlock[i*3+0];var totalCount=rsBlock[i*3+1];var dataCount=rsBlock[i*3+2];for(var j=0;j<count;j++){list.push(new QRRSBlock(totalCount,dataCount));}}
+	return list;};QRRSBlock.getRsBlockTable=function(typeNumber,errorCorrectLevel){switch(errorCorrectLevel){case QRErrorCorrectLevel.L:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+0];case QRErrorCorrectLevel.M:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+1];case QRErrorCorrectLevel.Q:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+2];case QRErrorCorrectLevel.H:return QRRSBlock.RS_BLOCK_TABLE[(typeNumber-1)*4+3];default:return undefined;}};function QRBitBuffer(){this.buffer=[];this.length=0;}
+	QRBitBuffer.prototype={get:function(index){var bufIndex=Math.floor(index/8);return((this.buffer[bufIndex]>>>(7-index%8))&1)==1;},put:function(num,length){for(var i=0;i<length;i++){this.putBit(((num>>>(length-i-1))&1)==1);}},getLengthInBits:function(){return this.length;},putBit:function(bit){var bufIndex=Math.floor(this.length/8);if(this.buffer.length<=bufIndex){this.buffer.push(0);}
+	if(bit){this.buffer[bufIndex]|=(0x80>>>(this.length%8));}
+	this.length++;}};var QRCodeLimitLength=[[17,14,11,7],[32,26,20,14],[53,42,32,24],[78,62,46,34],[106,84,60,44],[134,106,74,58],[154,122,86,64],[192,152,108,84],[230,180,130,98],[271,213,151,119],[321,251,177,137],[367,287,203,155],[425,331,241,177],[458,362,258,194],[520,412,292,220],[586,450,322,250],[644,504,364,280],[718,560,394,310],[792,624,442,338],[858,666,482,382],[929,711,509,403],[1003,779,565,439],[1091,857,611,461],[1171,911,661,511],[1273,997,715,535],[1367,1059,751,593],[1465,1125,805,625],[1528,1190,868,658],[1628,1264,908,698],[1732,1370,982,742],[1840,1452,1030,790],[1952,1538,1112,842],[2068,1628,1168,898],[2188,1722,1228,958],[2303,1809,1283,983],[2431,1911,1351,1051],[2563,1989,1423,1093],[2699,2099,1499,1139],[2809,2213,1579,1219],[2953,2331,1663,1273]];
+	
+	function _isSupportCanvas() {
+		return typeof CanvasRenderingContext2D != "undefined";
+	}
+	
+	// android 2.x doesn't support Data-URI spec
+	function _getAndroid() {
+		var android = false;
+		var sAgent = navigator.userAgent;
+		
+		if (/android/i.test(sAgent)) { // android
+			android = true;
+			var aMat = sAgent.toString().match(/android ([0-9]\.[0-9])/i);
+			
+			if (aMat && aMat[1]) {
+				android = parseFloat(aMat[1]);
+			}
+		}
+		
+		return android;
+	}
+	
+	var svgDrawer = (function() {
+
+		var Drawing = function (el, htOption) {
+			this._el = el;
+			this._htOption = htOption;
+		};
+
+		Drawing.prototype.draw = function (oQRCode) {
+			var _htOption = this._htOption;
+			var _el = this._el;
+			var nCount = oQRCode.getModuleCount();
+			var nWidth = Math.floor(_htOption.width / nCount);
+			var nHeight = Math.floor(_htOption.height / nCount);
+
+			this.clear();
+
+			function makeSVG(tag, attrs) {
+				var el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+				for (var k in attrs)
+					if (attrs.hasOwnProperty(k)) el.setAttribute(k, attrs[k]);
+				return el;
+			}
+
+			var svg = makeSVG("svg" , {'viewBox': '0 0 ' + String(nCount) + " " + String(nCount), 'width': '100%', 'height': '100%', 'fill': _htOption.colorLight});
+			svg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", "http://www.w3.org/1999/xlink");
+			_el.appendChild(svg);
+
+			svg.appendChild(makeSVG("rect", {"fill": _htOption.colorLight, "width": "100%", "height": "100%"}));
+			svg.appendChild(makeSVG("rect", {"fill": _htOption.colorDark, "width": "1", "height": "1", "id": "template"}));
+
+			for (var row = 0; row < nCount; row++) {
+				for (var col = 0; col < nCount; col++) {
+					if (oQRCode.isDark(row, col)) {
+						var child = makeSVG("use", {"x": String(col), "y": String(row)});
+						child.setAttributeNS("http://www.w3.org/1999/xlink", "href", "#template")
+						svg.appendChild(child);
+					}
+				}
+			}
+		};
+		Drawing.prototype.clear = function () {
+			while (this._el.hasChildNodes())
+				this._el.removeChild(this._el.lastChild);
+		};
+		return Drawing;
+	})();
+
+	var useSVG = document.documentElement.tagName.toLowerCase() === "svg";
+
+	// Drawing in DOM by using Table tag
+	var Drawing = useSVG ? svgDrawer : !_isSupportCanvas() ? (function () {
+		var Drawing = function (el, htOption) {
+			this._el = el;
+			this._htOption = htOption;
+		};
+			
+		/**
+		 * Draw the QRCode
+		 * 
+		 * @param {QRCode} oQRCode
+		 */
+		Drawing.prototype.draw = function (oQRCode) {
+            var _htOption = this._htOption;
+            var _el = this._el;
+			var nCount = oQRCode.getModuleCount();
+			var nWidth = Math.floor(_htOption.width / nCount);
+			var nHeight = Math.floor(_htOption.height / nCount);
+			var aHTML = ['<table style="border:0;border-collapse:collapse;">'];
+			
+			for (var row = 0; row < nCount; row++) {
+				aHTML.push('<tr>');
+				
+				for (var col = 0; col < nCount; col++) {
+					aHTML.push('<td style="border:0;border-collapse:collapse;padding:0;margin:0;width:' + nWidth + 'px;height:' + nHeight + 'px;background-color:' + (oQRCode.isDark(row, col) ? _htOption.colorDark : _htOption.colorLight) + ';"></td>');
+				}
+				
+				aHTML.push('</tr>');
+			}
+			
+			aHTML.push('</table>');
+			_el.innerHTML = aHTML.join('');
+			
+			// Fix the margin values as real size.
+			var elTable = _el.childNodes[0];
+			var nLeftMarginTable = (_htOption.width - elTable.offsetWidth) / 2;
+			var nTopMarginTable = (_htOption.height - elTable.offsetHeight) / 2;
+			
+			if (nLeftMarginTable > 0 && nTopMarginTable > 0) {
+				elTable.style.margin = nTopMarginTable + "px " + nLeftMarginTable + "px";	
+			}
+		};
+		
+		/**
+		 * Clear the QRCode
+		 */
+		Drawing.prototype.clear = function () {
+			this._el.innerHTML = '';
+		};
+		
+		return Drawing;
+	})() : (function () { // Drawing in Canvas
+		function _onMakeImage() {
+			this._elImage.src = this._elCanvas.toDataURL("image/png");
+			this._elImage.style.display = "block";
+			this._elCanvas.style.display = "none";			
+		}
+		
+		// Android 2.1 bug workaround
+		// http://code.google.com/p/android/issues/detail?id=5141
+		if (this._android && this._android <= 2.1) {
+	    	var factor = 1 / window.devicePixelRatio;
+	        var drawImage = CanvasRenderingContext2D.prototype.drawImage; 
+	    	CanvasRenderingContext2D.prototype.drawImage = function (image, sx, sy, sw, sh, dx, dy, dw, dh) {
+	    		if (("nodeName" in image) && /img/i.test(image.nodeName)) {
+		        	for (var i = arguments.length - 1; i >= 1; i--) {
+		            	arguments[i] = arguments[i] * factor;
+		        	}
+	    		} else if (typeof dw == "undefined") {
+	    			arguments[1] *= factor;
+	    			arguments[2] *= factor;
+	    			arguments[3] *= factor;
+	    			arguments[4] *= factor;
+	    		}
+	    		
+	        	drawImage.apply(this, arguments); 
+	    	};
+		}
+		
+		/**
+		 * Check whether the user's browser supports Data URI or not
+		 * 
+		 * @private
+		 * @param {Function} fSuccess Occurs if it supports Data URI
+		 * @param {Function} fFail Occurs if it doesn't support Data URI
+		 */
+		function _safeSetDataURI(fSuccess, fFail) {
+            var self = this;
+            self._fFail = fFail;
+            self._fSuccess = fSuccess;
+
+            // Check it just once
+            if (self._bSupportDataURI === null) {
+                var el = document.createElement("img");
+                var fOnError = function() {
+                    self._bSupportDataURI = false;
+
+                    if (self._fFail) {
+                        self._fFail.call(self);
+                    }
+                };
+                var fOnSuccess = function() {
+                    self._bSupportDataURI = true;
+
+                    if (self._fSuccess) {
+                        self._fSuccess.call(self);
+                    }
+                };
+
+                el.onabort = fOnError;
+                el.onerror = fOnError;
+                el.onload = fOnSuccess;
+                el.src = "data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="; // the Image contains 1px data.
+                return;
+            } else if (self._bSupportDataURI === true && self._fSuccess) {
+                self._fSuccess.call(self);
+            } else if (self._bSupportDataURI === false && self._fFail) {
+                self._fFail.call(self);
+            }
+		};
+		
+		/**
+		 * Drawing QRCode by using canvas
+		 * 
+		 * @constructor
+		 * @param {HTMLElement} el
+		 * @param {Object} htOption QRCode Options 
+		 */
+		var Drawing = function (el, htOption) {
+    		this._bIsPainted = false;
+    		this._android = _getAndroid();
+		
+			this._htOption = htOption;
+			this._elCanvas = document.createElement("canvas");
+			this._elCanvas.width = htOption.width;
+			this._elCanvas.height = htOption.height;
+			el.appendChild(this._elCanvas);
+			this._el = el;
+			this._oContext = this._elCanvas.getContext("2d");
+			this._bIsPainted = false;
+			this._elImage = document.createElement("img");
+			this._elImage.alt = "Scan me!";
+			this._elImage.style.display = "none";
+			this._el.appendChild(this._elImage);
+			this._bSupportDataURI = null;
+		};
+			
+		/**
+		 * Draw the QRCode
+		 * 
+		 * @param {QRCode} oQRCode 
+		 */
+		Drawing.prototype.draw = function (oQRCode) {
+            var _elImage = this._elImage;
+            var _oContext = this._oContext;
+            var _htOption = this._htOption;
+            
+			var nCount = oQRCode.getModuleCount();
+			var nWidth = _htOption.width / nCount;
+			var nHeight = _htOption.height / nCount;
+			var nRoundedWidth = Math.round(nWidth);
+			var nRoundedHeight = Math.round(nHeight);
+
+			_elImage.style.display = "none";
+			this.clear();
+			
+			for (var row = 0; row < nCount; row++) {
+				for (var col = 0; col < nCount; col++) {
+					var bIsDark = oQRCode.isDark(row, col);
+					var nLeft = col * nWidth;
+					var nTop = row * nHeight;
+					_oContext.strokeStyle = bIsDark ? _htOption.colorDark : _htOption.colorLight;
+					_oContext.lineWidth = 1;
+					_oContext.fillStyle = bIsDark ? _htOption.colorDark : _htOption.colorLight;					
+					_oContext.fillRect(nLeft, nTop, nWidth, nHeight);
+					
+					// 안티 앨리어싱 방지 처리
+					_oContext.strokeRect(
+						Math.floor(nLeft) + 0.5,
+						Math.floor(nTop) + 0.5,
+						nRoundedWidth,
+						nRoundedHeight
+					);
+					
+					_oContext.strokeRect(
+						Math.ceil(nLeft) - 0.5,
+						Math.ceil(nTop) - 0.5,
+						nRoundedWidth,
+						nRoundedHeight
+					);
+				}
+			}
+			
+			this._bIsPainted = true;
+		};
+			
+		/**
+		 * Make the image from Canvas if the browser supports Data URI.
+		 */
+		Drawing.prototype.makeImage = function () {
+			if (this._bIsPainted) {
+				_safeSetDataURI.call(this, _onMakeImage);
+			}
+		};
+			
+		/**
+		 * Return whether the QRCode is painted or not
+		 * 
+		 * @return {Boolean}
+		 */
+		Drawing.prototype.isPainted = function () {
+			return this._bIsPainted;
+		};
+		
+		/**
+		 * Clear the QRCode
+		 */
+		Drawing.prototype.clear = function () {
+			this._oContext.clearRect(0, 0, this._elCanvas.width, this._elCanvas.height);
+			this._bIsPainted = false;
+		};
+		
+		/**
+		 * @private
+		 * @param {Number} nNumber
+		 */
+		Drawing.prototype.round = function (nNumber) {
+			if (!nNumber) {
+				return nNumber;
+			}
+			
+			return Math.floor(nNumber * 1000) / 1000;
+		};
+		
+		return Drawing;
+	})();
+	
+	/**
+	 * Get the type by string length
+	 * 
+	 * @private
+	 * @param {String} sText
+	 * @param {Number} nCorrectLevel
+	 * @return {Number} type
+	 */
+	function _getTypeNumber(sText, nCorrectLevel) {			
+		var nType = 1;
+		var length = _getUTF8Length(sText);
+		
+		for (var i = 0, len = QRCodeLimitLength.length; i <= len; i++) {
+			var nLimit = 0;
+			
+			switch (nCorrectLevel) {
+				case QRErrorCorrectLevel.L :
+					nLimit = QRCodeLimitLength[i][0];
+					break;
+				case QRErrorCorrectLevel.M :
+					nLimit = QRCodeLimitLength[i][1];
+					break;
+				case QRErrorCorrectLevel.Q :
+					nLimit = QRCodeLimitLength[i][2];
+					break;
+				case QRErrorCorrectLevel.H :
+					nLimit = QRCodeLimitLength[i][3];
+					break;
+			}
+			
+			if (length <= nLimit) {
+				break;
+			} else {
+				nType++;
+			}
+		}
+		
+		if (nType > QRCodeLimitLength.length) {
+			throw new Error("Too long data");
+		}
+		
+		return nType;
+	}
+
+	function _getUTF8Length(sText) {
+		var replacedText = encodeURI(sText).toString().replace(/\%[0-9a-fA-F]{2}/g, 'a');
+		return replacedText.length + (replacedText.length != sText ? 3 : 0);
+	}
+	
+	/**
+	 * @class QRCode
+	 * @constructor
+	 * @example 
+	 * new QRCode(document.getElementById("test"), "http://jindo.dev.naver.com/collie");
+	 *
+	 * @example
+	 * var oQRCode = new QRCode("test", {
+	 *    text : "http://naver.com",
+	 *    width : 128,
+	 *    height : 128
+	 * });
+	 * 
+	 * oQRCode.clear(); // Clear the QRCode.
+	 * oQRCode.makeCode("http://map.naver.com"); // Re-create the QRCode.
+	 *
+	 * @param {HTMLElement|String} el target element or 'id' attribute of element.
+	 * @param {Object|String} vOption
+	 * @param {String} vOption.text QRCode link data
+	 * @param {Number} [vOption.width=256]
+	 * @param {Number} [vOption.height=256]
+	 * @param {String} [vOption.colorDark="#000000"]
+	 * @param {String} [vOption.colorLight="#ffffff"]
+	 * @param {QRCode.CorrectLevel} [vOption.correctLevel=QRCode.CorrectLevel.H] [L|M|Q|H] 
+	 */
+	QRCode = function (el, vOption) {
+		this._htOption = {
+			width : 256, 
+			height : 256,
+			typeNumber : 4,
+			colorDark : "#000000",
+			colorLight : "#ffffff",
+			correctLevel : QRErrorCorrectLevel.H
+		};
+		
+		if (typeof vOption === 'string') {
+			vOption	= {
+				text : vOption
+			};
+		}
+		
+		// Overwrites options
+		if (vOption) {
+			for (var i in vOption) {
+				this._htOption[i] = vOption[i];
+			}
+		}
+		
+		if (typeof el == "string") {
+			el = document.getElementById(el);
+		}
+
+		if (this._htOption.useSVG) {
+			Drawing = svgDrawer;
+		}
+		
+		this._android = _getAndroid();
+		this._el = el;
+		this._oQRCode = null;
+		this._oDrawing = new Drawing(this._el, this._htOption);
+		
+		if (this._htOption.text) {
+			this.makeCode(this._htOption.text);	
+		}
+	};
+	
+	/**
+	 * Make the QRCode
+	 * 
+	 * @param {String} sText link data
+	 */
+	QRCode.prototype.makeCode = function (sText) {
+		this._oQRCode = new QRCodeModel(_getTypeNumber(sText, this._htOption.correctLevel), this._htOption.correctLevel);
+		this._oQRCode.addData(sText);
+		this._oQRCode.make();
+		this._el.title = sText;
+		this._oDrawing.draw(this._oQRCode);			
+		this.makeImage();
+	};
+	
+	/**
+	 * Make the Image from Canvas element
+	 * - It occurs automatically
+	 * - Android below 3 doesn't support Data-URI spec.
+	 * 
+	 * @private
+	 */
+	QRCode.prototype.makeImage = function () {
+		if (typeof this._oDrawing.makeImage == "function" && (!this._android || this._android >= 3)) {
+			this._oDrawing.makeImage();
+		}
+	};
+	
+	/**
+	 * Clear the QRCode
+	 */
+	QRCode.prototype.clear = function () {
+		this._oDrawing.clear();
+	};
+	
+	/**
+	 * @name QRCode.CorrectLevel
+	 */
+	QRCode.CorrectLevel = QRErrorCorrectLevel;
+})();
+
+
+    /* Adaptador: permite llamar new QRCode(payload_string, opts) y acceder a qr.canvas */
+    (function () {
+      var _RealQRCode = QRCode;
+      var _RealPrototype = _RealQRCode.prototype;
+      var _CorrectLevel = _RealQRCode.CorrectLevel;
+
+      QRCode = function (textOrEl, options) {
+        options = options || {};
+        var el;
+        // Si el primer arg es string y NO es un ID de elemento existente, trátalo como texto
+        if (typeof textOrEl === 'string' && !document.getElementById(textOrEl)) {
+          options = Object.assign({}, options, { text: textOrEl });
+          el = document.createElement('div');
+          el.style.cssText = 'position:absolute;visibility:hidden;width:1px;height:1px;overflow:hidden;';
+          document.body.appendChild(el);
+        } else {
+          el = typeof textOrEl === 'string' ? document.getElementById(textOrEl) : textOrEl;
+        }
+        _RealQRCode.call(this, el, options);
+        // Exponer el canvas generado como this.canvas
+        this.canvas = el.querySelector('canvas') || (el.getElementsByTagName('canvas')[0]) || null;
+        // Limpiar el elemento temporal si fue creado aquí
+        if (el && el.parentNode === document.body && el.style.position === 'absolute') {
+          document.body.removeChild(el);
+        }
+      };
+      QRCode.prototype = _RealPrototype;
+      QRCode.CorrectLevel = _CorrectLevel;
+    })();
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* DEBUG CONSOLE — igual que las otras apps de Grid */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class DebugConsole {
+      static entries = [];
+      static maxEntries = 300;
+
+      static log(message, level = "info") {
+        const ts = new Date().toISOString().split("T")[1].slice(0, 8);
+        this.entries.push({ ts, level, message: String(message) });
+        if (this.entries.length > this.maxEntries) this.entries.shift();
+        this.render();
+        if (level === "error") console.error(message);
+        else if (level === "warn") console.warn(message);
+        else console.log(message);
+      }
+
+      static escapeHtml(s) {
+        const div = document.createElement("div");
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      static render() {
+        const el = document.getElementById("debug-console-body");
+        if (!el) return;
+        const colors = { error: "#FF5C6C", warn: "#FFD100", info: "#6B757D" };
+        el.innerHTML = this.entries
+          .map(
+            (e) =>
+              `<div style="color:${colors[e.level] || colors.info};">[${e.ts}] ${this.escapeHtml(e.message)}</div>`
+          )
+          .join("");
+        el.scrollTop = el.scrollHeight;
+        const errorCount = this.entries.filter((e) => e.level === "error").length;
+        const badge = document.getElementById("debug-console-badge");
+        if (badge) {
+          badge.style.display = errorCount > 0 ? "flex" : "none";
+          badge.textContent = errorCount > 9 ? "9+" : String(errorCount);
+        }
+        const inlineBadge = document.getElementById("debug-console-inline-badge");
+        if (inlineBadge) {
+          inlineBadge.style.display = errorCount > 0 ? "flex" : "none";
+          inlineBadge.textContent = errorCount > 9 ? "9+" : String(errorCount);
+        }
+      }
+
+      static toggle() {
+        const panel = document.getElementById("debug-console-panel");
+        panel.classList.toggle("open");
+        const isOpen = panel.classList.contains("open");
+        panel.style.transform = isOpen ? "translateY(0)" : "translateY(470px)";
+      }
+
+      static copyToClipboard() {
+        const text = this.entries
+          .map((e) => `[${e.ts}] [${e.level}] ${e.message}`)
+          .join("\n");
+        navigator.clipboard
+          .writeText(text)
+          .then(() => this.log("Log copiado al portapapeles", "info"))
+          .catch(() =>
+            this.log("No se pudo copiar — selecciona el texto manualmente", "warn")
+          );
+      }
+
+      static setup() {
+        window.addEventListener("error", (e) => {
+          this.log(`Error no capturado: ${e.message} (${e.filename}:${e.lineno})`, "error");
+        });
+        window.addEventListener("unhandledrejection", (e) => {
+          const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+          this.log(`Promesa rechazada sin capturar: ${reason}`, "error");
+        });
+        this.log("Consola de depuración iniciada", "info");
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* GRID CLIENT — State Buckets */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class GridClient {
+      constructor(docId) {
+        this.docId = docId;
+        this.baseUrl = location.origin;
+        this._updatedAtByName = {};
+      }
+
+      async _fetchWithTimeout(url, options = {}, timeout = 30000) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeout);
+        try {
+          const res = await fetch(url, {
+            ...options,
+            signal: controller.signal,
+          });
+          return res;
+        } finally {
+          clearTimeout(id);
+        }
+      }
+
+      async getStateBucket(name) {
+        const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+        const res = await this._fetchWithTimeout(url, {
+          credentials: "include",
+        });
+        if (res.status === 404) {
+          DebugConsole.log(`GET ${name}: 404 (bucket no existe todavía)`, "info");
+          return null;
+        }
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          DebugConsole.log(`GET ${name}: HTTP ${res.status} — ${body}`, "error");
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const body = await res.json();
+        this._updatedAtByName[name] = body.updated_at || "";
+        const count = Array.isArray(body.state?.records)
+          ? body.state.records.length
+          : "n/a";
+        DebugConsole.log(`GET ${name}: OK, records=${count}`, "info");
+        return body.state ?? null;
+      }
+
+      async setStateBucket(name, data) {
+        const ifUpdatedAt = this._updatedAtByName[name] || "";
+        const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+        DebugConsole.log(
+          `PUT ${name}: if_updated_at="${ifUpdatedAt}", records=${data.records?.length ?? "n/a"}`,
+          "info"
+        );
+        const res = await this._fetchWithTimeout(
+          url,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ state: data, if_updated_at: ifUpdatedAt }),
+            credentials: "include",
+          },
+          30000
+        );
+
+        if (res.status === 409) {
+          const conflictBody = await res.json().catch(() => ({}));
+          if (conflictBody.current_updated_at) {
+            this._updatedAtByName[name] = conflictBody.current_updated_at;
+          }
+          DebugConsole.log(`PUT ${name}: 409 conflicto, reintentando`, "warn");
+          return { conflict: true };
+        }
+
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          DebugConsole.log(`PUT ${name}: HTTP ${res.status} — ${body}`, "error");
+          throw new Error(`HTTP ${res.status}`);
+        }
+
+        const body = await res.json();
+        this._updatedAtByName[name] = body.updated_at || "";
+        DebugConsole.log(`PUT ${name}: OK`, "info");
+        return { ok: true };
+      }
+
+      async uploadPublicDocument(blob, filename) {
+        const fd = new FormData();
+        fd.append("file", blob, filename);
+        fd.append("title", filename);
+        fd.append("description", "Autorización de dispositivos");
+        fd.append("visibility", "public");
+        let res;
+        try {
+          res = await this._fetchWithTimeout(
+            `${this.baseUrl}/api/v1/documents`,
+            {
+              method: "POST",
+              credentials: "include",
+              body: fd,
+            },
+            30000
+          );
+        } catch (e) {
+          DebugConsole.log(
+            `Upload ${filename}: fetch de red falló (${e.name}: ${e.message}) — blob=${(blob.size / 1024).toFixed(0)} KB`,
+            "error"
+          );
+          throw new Error(`No se pudo subir ${filename}: fallo de red (${e.message})`);
+        }
+        if (!res.ok) {
+          const err = await res.text().catch(() => "");
+          DebugConsole.log(`Upload ${filename}: HTTP ${res.status} — ${err}`, "error");
+          throw new Error(`Upload falló: HTTP ${res.status}`);
+        }
+        const body = await res.json();
+        const docId = body.id || body.doc_id || (body.document && body.document.id);
+        DebugConsole.log(`Upload ${filename}: OK, doc_id=${docId}`, "info");
+        return docId;
+      }
+
+      async getCurrentUser() {
+        const res = await this._fetchWithTimeout(
+          `${this.baseUrl}/api/v1/me`,
+          { credentials: "include" }
+        );
+        if (!res.ok) {
+          return null;
+        }
+        return await res.json();
+      }
+
+      async getDownloadUrl(docId) {
+        const res = await this._fetchWithTimeout(
+          `${this.baseUrl}/api/v1/documents/${docId}/download`,
+          { credentials: "include" }
+        );
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const meta = await res.json();
+        return meta.download_url || meta.agent_download_url;
+      }
+
+      async mutateBucket(name, mutateFn, maxRetries = 4) {
+        let retries = 0;
+        while (retries < maxRetries) {
+          try {
+            let bucket = await this.getStateBucket(name);
+            if (!bucket || typeof bucket !== 'object') {
+              bucket = { records: [] };
+            }
+            if (!Array.isArray(bucket.records)) {
+              bucket = { ...bucket, records: [] };
+            }
+
+            bucket = await mutateFn(bucket);
+
+            const result = await this.setStateBucket(name, bucket);
+            if (result.conflict) {
+              retries++;
+              const delay = Math.pow(2, retries - 1) * 100;
+              DebugConsole.log(`mutateBucket ${name}: conflicto, reintentando en ${delay}ms (intento ${retries}/${maxRetries})`, "warn");
+              await new Promise((r) => setTimeout(r, delay));
+              continue;
+            }
+
+            DebugConsole.log(`mutateBucket ${name}: éxito después de ${retries} reintentos`, "info");
+            return bucket;
+          } catch (e) {
+            DebugConsole.log(`mutateBucket ${name} error: ${e.message}`, "error");
+            throw e;
+          }
+        }
+        throw new Error(`mutateBucket ${name}: máximos reintentos (${maxRetries}) alcanzados`);
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* SCANNER ENGINE */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class ScannerEngine {
+      constructor() {
+        this.stream = null;
+        this.detector = null;
+      }
+
+      async start(videoEl, onDetect) {
+        this.stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false,
+        });
+
+        videoEl.srcObject = this.stream;
+        await new Promise((r) => (videoEl.onloadedmetadata = r));
+        videoEl.play();
+
+        this.detector =
+          "BarcodeDetector" in window
+            ? new BarcodeDetector({ formats: ["qr_code"] })
+            : null;
+
+        const loop = async () => {
+          if (!this.stream) return;
+          try {
+            if (this.detector) {
+              const barcodes = await this.detector.detect(videoEl);
+              for (const barcode of barcodes) {
+                onDetect(barcode.rawValue, barcode.format);
+              }
+            }
+          } catch (e) {}
+          requestAnimationFrame(loop);
+        };
+        loop();
+      }
+
+      stop() {
+        if (this.stream) {
+          this.stream.getTracks().forEach((t) => t.stop());
+          this.stream = null;
+        }
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* SCAN PARSER — extrae driver_id de JSON */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    function parseScannedQR(text) {
+      try {
+        const json = JSON.parse(text);
+        if (json.driver_id) {
+          return { type: "driver", driverId: json.driver_id, raw: json };
+        }
+        return { type: "unknown", raw: json };
+      } catch (e) {
+        return { type: "text", value: text };
+      }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* LOGOS — doc_ids independientes: título del navbar vs. logo del QR */
+    /* ─────────────────────────────────────────────────────────────────────── */
+    const NAVBAR_LOGO_DOC_ID = "01KYGCGRZHJT8JP7Q1WRZKRX6C";
+    const QR_LOGO_DOC_ID = "01KYGC20BZ3Q47PTQH41Z38SNV";
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* MORPH CONTROLLER — animación de carga bloqueante al guardar */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    const MorphController = {
+      overlay: document.getElementById("morph-overlay"),
+      btn: document.getElementById("morph-btn"),
+
+      start() {
+        this.overlay.classList.remove("hidden");
+        this.btn.classList.remove("is-saved", "is-error");
+        this.btn.classList.add("is-saving");
+        this.btn.textContent = "Guardando...";
+      },
+
+      success(label) {
+        this.btn.classList.remove("is-saving");
+        this.btn.classList.add("is-saved");
+        this.btn.textContent = label || "Guardado";
+      },
+
+      error(label) {
+        this.btn.classList.remove("is-saving");
+        this.btn.classList.add("is-error");
+        this.btn.textContent = label || "Error";
+      },
+
+      close() {
+        this.overlay.classList.add("hidden");
+        this.btn.classList.remove("is-saving", "is-saved", "is-error");
+      },
+    };
+
+    /* ─────────────────────────────────────────────────────────────────────── */
+    /* MAIN APP */
+    /* ─────────────────────────────────────────────────────────────────────── */
+
+    class AutorizacionApp {
+      constructor() {
+        this.docId =
+          new URLSearchParams(location.search).get("data_doc_id") ||
+          "01KYBPWY7AYSXC0MGZVH1JT2TV";
+        this.gridClient = new GridClient(this.docId);
+        this.logoImage = null;
+        this.currentUser = null;
+        this.scanner = null;
+        this.otroScanner = null;
+        this.fotoData = null;
+        this.outboxRecords = [];
+
+        // Estado del flujo guiado: ¿ya se identificó a la persona y puede
+        // avanzar a los pasos de tipo/foto/descripción del dispositivo?
+        this.otroMode = null; // "nuevo" | "existente"
+        this.readyForDevice = false;
+        this.existingCorreo = null;
+        this._existingContext = null;
+        this._existingOwnerKey = null;
+        this._existingQrDocId = null;
+
+        // Catálogo BPP: IMEIs implicados en casos de generación BPP.
+        // Índice en memoria para lookup instantáneo al guardar.
+        this.bppIndex = new Map(); // imei(normalizado) -> shipment_id
+        this.bppMeta = null; // { updated_at, uploaded_by, filename, count }
+
+        // Historial en memoria para búsqueda/filtrado
+        this.devicesRecords = [];
+        this.scansRecords = [];
+        this._devicesFiltered = [];
+        this._scansFiltered = [];
+        this.devicesVisibleCount = 25;
+        this.scansVisibleCount = 25;
+        this.showInactive = false;
+        this.photoFolderId = null;
+
+        DebugConsole.setup();
+        DebugConsole.log(`Documento de datos: ${this.docId}`, "info");
+
+        this.init();
+      }
+
+      static getInitials(email) {
+        if (!email) return "?";
+        const local = email.split("@")[0] || "";
+        const parts = local.split(/[._-]+/).filter(Boolean);
+        if (parts.length >= 2) {
+          return (parts[0][0] + parts[1][0]).toUpperCase();
+        }
+        return local.slice(0, 2).toUpperCase() || "?";
+      }
+
+      async init() {
+        this.bindTabs();
+        this.bindForm();
+        this.bindModal();
+        this.bindBppConfig();
+        this.loadUser();
+        this.loadHistorial();
+        this.loadBppCatalog();
+        this.loadLogo();
+        // Ocultar loader inicial una vez que la app ha iniciado
+        const initOverlay = document.getElementById("init-overlay");
+        if (initOverlay) { initOverlay.style.opacity = "0"; setTimeout(() => initOverlay.remove(), 400); }
+      }
+
+      loadLogo() {
+        // Logo del título (navbar)
+        const navImg = document.getElementById("navbar-logo-img");
+        if (navImg) {
+          navImg.src = "https://grid.adminml.com/d/" + NAVBAR_LOGO_DOC_ID + "?dl=1";
+          navImg.style.display = "block";
+        }
+
+        // Logo central del QR (independiente del logo del navbar)
+        const qrUrl = "https://grid.adminml.com/d/" + QR_LOGO_DOC_ID + "?dl=1";
+        const img = new Image();
+        img.onload = () => {
+          this.logoImage = img;
+        };
+        img.onerror = () => {
+          console.error("No se pudo cargar el logo del QR");
+        };
+        img.src = qrUrl;
+      }
+
+      bindTabs() {
+        document.querySelectorAll(".menubar-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const tab = btn.dataset.tab;
+            document.querySelectorAll(".tab-content").forEach((el) => {
+              el.classList.remove("active");
+            });
+            document
+              .getElementById(`tab-${tab}`)
+              ?.classList.add("active");
+
+            document.querySelectorAll(".menubar-btn").forEach((b) => {
+              b.classList.remove("active");
+            });
+            btn.classList.add("active");
+          });
+        });
+      }
+
+      async findDevicesByOwner(ownerKey) {
+        // Buscar en el bucket si ya existen dispositivos de esta persona
+        const devices = (await this.gridClient.getStateBucket("devices_master")) || {};
+        return (devices.records || []).filter((d) => d.owner_key === ownerKey);
+      }
+
+      bindForm() {
+        const puestoEl = document.getElementById("puesto");
+        const tipoDispEl = document.getElementById("tipo-dispositivo");
+        const btnGuardar = document.getElementById("btn-guardar");
+        const btnReset = document.getElementById("btn-reset");
+        const inputFoto = document.getElementById("input-foto");
+
+        puestoEl.addEventListener("change", () => {
+          this.resetFlowState();
+          this.updateFormSteps();
+        });
+
+        tipoDispEl.addEventListener("change", () => this.updateFormSteps());
+
+        document
+          .getElementById("btn-upload-foto")
+          .addEventListener("click", () => inputFoto.click());
+
+        inputFoto.addEventListener("change", (e) => {
+          if (e.target.files[0]) {
+            this.loadFoto(e.target.files[0]);
+          }
+        });
+
+        document
+          .getElementById("btn-open-camera")
+          .addEventListener("click", () => this.openCamera());
+        document
+          .getElementById("btn-capture-foto")
+          .addEventListener("click", () => this.captureFoto());
+        document
+          .getElementById("btn-cancel-camera")
+          .addEventListener("click", () => this.closeCamera());
+
+        btnGuardar.addEventListener("click", () => this.guardar());
+        btnReset.addEventListener("click", () => this.reset());
+
+        this.setupDriverScanner();
+        this.setupOtroScanner();
+
+        document
+          .getElementById("btn-debug-console")
+          .addEventListener("click", () => DebugConsole.toggle());
+
+        // "Otro": ¿ya tiene un registro previo?
+        document.getElementById("btn-otro-existente").addEventListener("click", () => {
+          this.otroMode = "existente";
+          this.updateFormSteps();
+        });
+
+        document.getElementById("btn-otro-nuevo").addEventListener("click", () => {
+          this.otroMode = "nuevo";
+          this.readyForDevice = true;
+          this.updateFormSteps();
+        });
+
+        // Confirmación compartida: "esta persona ya tiene N dispositivo(s)"
+        document.getElementById("btn-add-another-device").addEventListener("click", () => {
+          this.readyForDevice = true;
+          document.getElementById("existing-devices-card").style.display = "none";
+          DebugConsole.log(`Agregando nuevo dispositivo a ${this._existingOwnerKey}`, "info");
+          this.updateFormSteps();
+        });
+
+        document.getElementById("btn-cancel-existing").addEventListener("click", () => {
+          const context = this._existingContext;
+          document.getElementById("existing-devices-card").style.display = "none";
+          this.readyForDevice = false;
+
+          if (context === "driver") {
+            document.getElementById("driver-id").value = "";
+            document.getElementById("driver-scan-confirm").style.display = "none";
+          } else if (context === "otro") {
+            document.getElementById("correo").value = "";
+            document.getElementById("correo").removeAttribute("readonly");
+            this.existingCorreo = null;
+            this.otroMode = null;
+          }
+
+          this.updateFormSteps();
+        });
+      }
+
+      resetFlowState() {
+        this.otroMode = null;
+        this.readyForDevice = false;
+        this.existingCorreo = null;
+        this._existingContext = null;
+        this._existingOwnerKey = null;
+        this._existingQrDocId = null;
+
+        this.stopScanner();
+        this.stopOtroScanner();
+
+        document.getElementById("driver-id").value = "";
+        document.getElementById("driver-scan-confirm").style.display = "none";
+        document.getElementById("correo").value = "";
+        document.getElementById("correo").removeAttribute("readonly");
+        document.getElementById("otro-scan-result").style.display = "none";
+        document.getElementById("existing-devices-card").style.display = "none";
+      }
+
+      promptExistingDevices(ownerKey, existing, context) {
+        const list = existing
+          .map((d) => `• ${d.descripcion || d.id.slice(0, 20)}`)
+          .join("<br/>");
+        document.getElementById("existing-devices-info").innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><path d="M20 6L9 17l-5-5"/></svg>
+          Esta persona ya tiene ${existing.length} dispositivo(s) registrado(s):<br/>${list}
+        `;
+        document.getElementById("existing-devices-card").style.display = "block";
+        this._existingContext = context;
+        this._existingOwnerKey = ownerKey;
+        this._existingQrDocId = existing.find(d => d.qr_doc_id)?.qr_doc_id || null;
+      }
+
+      setupOtroScanner() {
+        this._otroScanMode = "camera";
+        this._otroScannerActive = false;
+
+        document.getElementById("btn-otro-scanmode-camera").addEventListener("click", () =>
+          this.setOtroScanMode("camera")
+        );
+        document.getElementById("btn-otro-scanmode-handheld").addEventListener("click", () =>
+          this.setOtroScanMode("handheld")
+        );
+      }
+
+      setOtroScanMode(mode) {
+        if (mode !== "camera" && mode !== "handheld") return;
+        this._otroScanMode = mode;
+        document.getElementById("btn-otro-scanmode-camera").classList.toggle("active", mode === "camera");
+        document.getElementById("btn-otro-scanmode-handheld").classList.toggle("active", mode === "handheld");
+
+        if (this.otroScanner) {
+          this.otroScanner.stop();
+          this.otroScanner = null;
+        }
+
+        if (mode === "camera") {
+          const body = document.getElementById("otro-scanner-body");
+          body.innerHTML = `<div class="scanner-container"><video id="otro-scanner-video"></video></div>`;
+          this.startOtroScanner();
+        } else {
+          const body = document.getElementById("otro-scanner-body");
+          body.innerHTML = `<input type="text" class="search-input" id="otro-handheld-input" placeholder="Escanea con el lector HID..." style="width:100%;margin-top:8px;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="none" />`;
+          const input = document.getElementById("otro-handheld-input");
+          input.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const val = input.value.trim();
+            if (!val) return;
+            input.value = "";
+            this.handleOtroDeviceScanned(val);
+          });
+          setTimeout(() => input.focus(), 50);
+        }
+      }
+
+      startOtroScanner() {
+        if (!this.otroScanner) {
+          this.otroScanner = new ScannerEngine();
+        }
+
+        const videoEl = document.getElementById("otro-scanner-video");
+        this.otroScanner.start(videoEl, (text) => this.handleOtroDeviceScanned(text));
+      }
+
+      stopOtroScanner() {
+        if (this.otroScanner) {
+          this.otroScanner.stop();
+        }
+      }
+
+      async handleOtroDeviceScanned(text) {
+        const deviceId = String(text).trim();
+        if (!deviceId.startsWith("dev_")) return;
+
+        this.stopOtroScanner();
+
+        const bucket = (await this.gridClient.getStateBucket("devices_master")) || {};
+        const found = (bucket.records || []).find((d) => d.id === deviceId);
+
+        if (!found) {
+          document.getElementById("otro-scan-result").style.display = "block";
+          document.getElementById("otro-scan-result").innerHTML =
+            '<div class="alert error">No se encontró ningún registro con este código. Intenta de nuevo.</div>';
+          DebugConsole.log(`QR escaneado (${deviceId}) no encontrado en devices_master`, "warn");
+          return;
+        }
+
+        document.getElementById("otro-scan-result").style.display = "none";
+
+        const ownerKey = found.owner_key || `user:${(found.correo || "").toLowerCase()}`;
+        const allExisting = (bucket.records || []).filter((d) => d.owner_key === ownerKey);
+        const inactivos = allExisting.filter(d => d.status === "inactivo");
+        const activos = allExisting.filter(d => d.status !== "inactivo");
+        this.existingCorreo = found.correo || "";
+
+        document.getElementById("correo").value = this.existingCorreo;
+        document.getElementById("correo").setAttribute("readonly", "readonly");
+
+        DebugConsole.log(`Dispositivo existente encontrado, correo=${this.existingCorreo}`, "info");
+        if (inactivos.length > 0 && activos.length === 0) {
+          this.mostrarAlertaReactivar(ownerKey, inactivos);
+        } else {
+          this.promptExistingDevices(ownerKey, activos.length > 0 ? activos : allExisting, "otro");
+        }
+        this.updateFormSteps();
+      }
+
+      bindModal() {
+        document.getElementById("btn-modal-close").addEventListener("click", () => {
+          document.getElementById("modal-resultado").classList.remove("active");
+          this.reset();
+        });
+
+        document
+          .getElementById("btn-download-qr")
+          ?.addEventListener("click", () => {
+            const link = document.createElement("a");
+            link.download = "device-authorization.png";
+            link.href = document
+              .getElementById("qr-canvas-modal")
+              .toDataURL("image/png");
+            link.click();
+          });
+
+        document.getElementById("btn-modal-photo-close").addEventListener("click", () => {
+          document.getElementById("modal-photo").classList.remove("active");
+        });
+
+        document.getElementById("btn-modal-qr-close").addEventListener("click", () => {
+          document.getElementById("modal-qr").classList.remove("active");
+        });
+
+        document.getElementById("btn-modal-qr-download").addEventListener("click", () => {
+          const img = document.getElementById("modal-qr-img");
+          if (!img.src) return;
+          const link = document.createElement("a");
+          link.href = img.src;
+          link.download = "device-authorization-qr.png";
+          link.click();
+        });
+      }
+
+      viewPhoto(docId, deviceId) {
+        const url = "https://grid.adminml.com/d/" + docId + "?dl=1";
+        document.getElementById("modal-photo-img").src = url;
+        document.getElementById("modal-photo").classList.add("active");
+        DebugConsole.log(`Abriendo foto: ${deviceId}`, "info");
+      }
+
+      viewQR(docId, deviceId) {
+        const url = "https://grid.adminml.com/d/" + docId + "?dl=1";
+        document.getElementById("modal-qr-img").src = url;
+        document.getElementById("modal-qr").classList.add("active");
+        DebugConsole.log(`Abriendo QR: ${deviceId}`, "info");
+      }
+
+      /* ─── CATÁLOGO BPP ─────────────────────────────────────────────── */
+
+      // Normaliza un IMEI a solo dígitos para comparaciones consistentes.
+      static normalizeImei(v) {
+        return String(v ?? "").replace(/\D/g, "");
+      }
+
+      bindBppConfig() {
+        document.getElementById("btn-bpp-config").addEventListener("click", () => {
+          this.renderBppModal();
+          document.getElementById("modal-bpp").classList.add("active");
+        });
+        document.getElementById("btn-modal-bpp-close").addEventListener("click", () => {
+          document.getElementById("modal-bpp").classList.remove("active");
+        });
+        document.getElementById("btn-bpp-upload").addEventListener("click", () =>
+          this.handleBppUpload()
+        );
+      }
+
+      async loadBppCatalog() {
+        try {
+          const bucket = await this.gridClient.getStateBucket("bpp_catalog");
+          this.bppIndex = new Map();
+          if (bucket && Array.isArray(bucket.records)) {
+            for (const r of bucket.records) {
+              const imei = AutorizacionApp.normalizeImei(r.imei);
+              if (imei) this.bppIndex.set(imei, r.shipment_id || "");
+            }
+            this.bppMeta = {
+              updated_at: bucket.updated_at || null,
+              uploaded_by: bucket.uploaded_by || "",
+              filename: bucket.filename || "",
+              count: this.bppIndex.size,
+            };
+          } else {
+            this.bppMeta = null;
+          }
+          DebugConsole.log(`Catálogo BPP cargado: ${this.bppIndex.size} IMEI(s)`, "info");
+        } catch (e) {
+          DebugConsole.log(`Error cargando catálogo BPP: ${e.message}`, "error");
+        }
+        this.updateBppBadge();
+      }
+
+      // El catálogo se considera "vencido" si no existe o tiene más de 7 días.
+      isBppStale() {
+        if (!this.bppMeta || !this.bppMeta.updated_at) return true;
+        const ageMs = Date.now() - new Date(this.bppMeta.updated_at).getTime();
+        return ageMs > 7 * 24 * 60 * 60 * 1000;
+      }
+
+      updateBppBadge() {
+        const badge = document.getElementById("bpp-stale-badge");
+        if (badge) badge.style.display = this.isBppStale() ? "block" : "none";
+      }
+
+      renderBppModal() {
+        const status = document.getElementById("bpp-status");
+        const staleWarn = document.getElementById("bpp-stale-warn");
+        document.getElementById("bpp-upload-result").style.display = "none";
+        document.getElementById("bpp-csv-input").value = "";
+
+        if (this.bppMeta && this.bppMeta.count > 0) {
+          let fecha = "—";
+          try {
+            fecha = new Date(this.bppMeta.updated_at).toLocaleString("es-MX", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            });
+          } catch (e) {}
+          status.innerHTML = `
+            <strong>${this.bppMeta.count}</strong> IMEI(s) en catálogo<br/>
+            Última actualización: <strong>${fecha}</strong><br/>
+            Subido por: ${this.bppMeta.uploaded_by || "—"}
+          `;
+        } else {
+          status.innerHTML =
+            "No hay catálogo cargado todavía. Sube un CSV para activar el bloqueo BPP.";
+        }
+        staleWarn.style.display = this.isBppStale() ? "flex" : "none";
+      }
+
+      // Parser tolerante: detecta delimitador (, o ;), ignora encabezado y
+      // mapea a { imei, shipment_id }. Columna 0 = IMEI_VALUE, 1 = SHIPMENT_ID.
+      parseBppCsv(text) {
+        const clean = text.replace(/^﻿/, ""); // quita BOM
+        const lines = clean.split(/\r?\n/).filter((l) => l.trim() !== "");
+        if (lines.length === 0) return [];
+
+        const delimiter = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
+        const records = [];
+
+        lines.forEach((line, idx) => {
+          const cols = line.split(delimiter).map((c) => c.trim().replace(/^"|"$/g, ""));
+          // Saltar encabezado (primera fila si contiene "IMEI").
+          if (idx === 0 && /imei/i.test(line)) return;
+          const imei = AutorizacionApp.normalizeImei(cols[0]);
+          if (!imei) return;
+          records.push({ imei, shipment_id: cols[1] || "" });
+        });
+
+        return records;
+      }
+
+      async handleBppUpload() {
+        const input = document.getElementById("bpp-csv-input");
+        const result = document.getElementById("bpp-upload-result");
+        const file = input.files && input.files[0];
+
+        if (!file) {
+          result.style.display = "block";
+          result.innerHTML =
+            '<div class="alert error">Selecciona un archivo CSV primero.</div>';
+          return;
+        }
+
+        try {
+          const text = await file.text();
+          const records = this.parseBppCsv(text);
+
+          if (records.length === 0) {
+            result.style.display = "block";
+            result.innerHTML =
+              '<div class="alert error">No se encontraron IMEIs válidos en el CSV. Revisa el formato (IMEI_VALUE, SHIPMENT_ID).</div>';
+            return;
+          }
+
+          const bucket = {
+            updated_at: new Date().toISOString(),
+            uploaded_by: this.currentUser?.email || this.currentUser?.ldap || "",
+            filename: file.name,
+            records,
+          };
+
+          const saveResult = await this.gridClient.setStateBucket("bpp_catalog", bucket);
+          if (saveResult.conflict) {
+            // Otro usuario actualizó en paralelo: releer y reintentar una vez.
+            await this.gridClient.getStateBucket("bpp_catalog");
+            const retry = await this.gridClient.setStateBucket("bpp_catalog", bucket);
+            if (retry.conflict) {
+              throw new Error("Conflicto de escritura, intenta de nuevo");
+            }
+          }
+
+          DebugConsole.log(`Catálogo BPP actualizado: ${records.length} IMEI(s)`, "info");
+          await this.loadBppCatalog();
+          this.renderBppModal();
+
+          result.style.display = "block";
+          result.innerHTML = `<div class="alert success">Catálogo actualizado: ${records.length} IMEI(s) cargados.</div>`;
+        } catch (e) {
+          DebugConsole.log(`Error subiendo catálogo BPP: ${e.message}`, "error");
+          result.style.display = "block";
+          result.innerHTML = `<div class="alert error">Error: ${e.message}</div>`;
+        }
+      }
+
+      // Devuelve { blocked, shipmentId } consultando el índice en memoria.
+      checkBpp(imei) {
+        const norm = AutorizacionApp.normalizeImei(imei);
+        if (norm && this.bppIndex.has(norm)) {
+          return { blocked: true, shipmentId: this.bppIndex.get(norm) };
+        }
+        return { blocked: false, shipmentId: null };
+      }
+
+      updateFormSteps() {
+        const puesto = document.getElementById("puesto").value;
+        const tipoDisp = document.getElementById("tipo-dispositivo").value;
+
+        // Mostrar/ocultar secciones del flujo guiado:
+        // Driver -> escanear QR -> (si ya existe, confirmar) -> datos del dispositivo.
+        // Otro -> ¿ya tiene registro? -> escanear QR existente o correo nuevo
+        //         -> (si ya existe, confirmar) -> datos del dispositivo.
+        const driverScanVisible = puesto === "driver";
+        document.getElementById("driver-scan-section").style.display =
+          driverScanVisible ? "block" : "none";
+        if (driverScanVisible && !this._driverScannerActive) {
+          this._driverScannerActive = true;
+          this.setDriverScanMode(this._driverScanMode);
+        } else if (!driverScanVisible && this._driverScannerActive) {
+          this._driverScannerActive = false;
+          if (this.scanner) { this.scanner.stop(); this.scanner = null; }
+        }
+
+        document.getElementById("otro-check-section").style.display =
+          puesto === "otro" && !this.otroMode ? "block" : "none";
+
+        const otroScanVisible = puesto === "otro" && this.otroMode === "existente";
+        document.getElementById("otro-scan-section").style.display =
+          otroScanVisible ? "block" : "none";
+        if (otroScanVisible && !this._otroScannerActive) {
+          this._otroScannerActive = true;
+          this.setOtroScanMode(this._otroScanMode);
+        } else if (!otroScanVisible && this._otroScannerActive) {
+          this._otroScannerActive = false;
+          if (this.otroScanner) { this.otroScanner.stop(); this.otroScanner = null; }
+        }
+
+        document.getElementById("email-section").style.display =
+          puesto === "otro" && this.otroMode === "nuevo" ? "block" : "none";
+
+        const showDeviceSteps = this.readyForDevice;
+        document.getElementById("tipo-dispositivo-section").style.display =
+          showDeviceSteps ? "block" : "none";
+        document.getElementById("imei-section").style.display =
+          showDeviceSteps && tipoDisp === "smartphone" ? "block" : "none";
+        document.getElementById("descripcion-section").style.display =
+          showDeviceSteps && tipoDisp ? "block" : "none";
+        document.getElementById("empresa-section").style.display =
+          showDeviceSteps && tipoDisp ? "block" : "none";
+        document.getElementById("foto-section").style.display =
+          showDeviceSteps && tipoDisp ? "block" : "none";
+
+        document.getElementById("btn-guardar").style.display =
+          showDeviceSteps && tipoDisp ? "block" : "none";
+
+        // Validaciones condicionales
+        if (puesto === "driver") {
+          document.getElementById("correo").removeAttribute("required");
+        } else {
+          document.getElementById("correo").setAttribute("required", "required");
+        }
+
+        if (tipoDisp === "smartphone") {
+          document.getElementById("imei").setAttribute("required", "required");
+        } else {
+          document.getElementById("imei").removeAttribute("required");
+        }
+      }
+
+      loadFoto(file) {
+        this.compressImage(file, { maxDim: 1280, quality: 0.6 }).then((dataUrl) =>
+          this.setFotoPreview(dataUrl)
+        );
+      }
+
+      // Misma compresión que captura_auditoria.html: máx. 1280px, WebP
+      // calidad 0.6 con fallback a JPEG si el navegador no soporta WebP.
+      compressImage(file, { maxDim = 1280, quality = 0.6 } = {}) {
+        return new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            let { width, height } = img;
+            if (width > maxDim || height > maxDim) {
+              const scale = maxDim / Math.max(width, height);
+              width = Math.round(width * scale);
+              height = Math.round(height * scale);
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, width, height);
+            try {
+              const webp = canvas.toDataURL("image/webp", quality);
+              resolve(
+                webp.startsWith("data:image/webp")
+                  ? webp
+                  : canvas.toDataURL("image/jpeg", quality)
+              );
+            } catch (e) {
+              reject(e);
+            }
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error("No se pudo cargar la imagen"));
+          };
+          img.src = url;
+        });
+      }
+
+      setFotoPreview(dataUrl) {
+        this.fotoData = dataUrl;
+        const preview = document.getElementById("photo-preview");
+        preview.innerHTML = `
+          <div class="photo-preview-item">
+            <img src="${this.fotoData}" alt="preview" />
+            <button class="photo-remove" onclick="app.removeFoto()" aria-label="Quitar foto">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        `;
+      }
+
+      async openCamera() {
+        try {
+          this.cameraStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false,
+          });
+          const videoEl = document.getElementById("camera-video");
+          videoEl.srcObject = this.cameraStream;
+          await videoEl.play();
+          document.getElementById("camera-container").style.display = "block";
+          DebugConsole.log("Cámara abierta para foto de dispositivo", "info");
+        } catch (e) {
+          DebugConsole.log(`No se pudo abrir la cámara: ${e.message}`, "error");
+          alert("No se pudo acceder a la cámara. Puedes subir un archivo en su lugar.");
+        }
+      }
+
+      closeCamera() {
+        if (this.cameraStream) {
+          this.cameraStream.getTracks().forEach((t) => t.stop());
+          this.cameraStream = null;
+        }
+        document.getElementById("camera-container").style.display = "none";
+      }
+
+      async captureFoto() {
+        const videoEl = document.getElementById("camera-video");
+        const canvas = document.getElementById("camera-canvas");
+        canvas.width = videoEl.videoWidth;
+        canvas.height = videoEl.videoHeight;
+        canvas.getContext("2d").drawImage(videoEl, 0, 0);
+        const rawBlob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.92)
+        );
+        this.closeCamera();
+        const compressed = await this.compressImage(rawBlob, {
+          maxDim: 1280,
+          quality: 0.6,
+        });
+        this.setFotoPreview(compressed);
+        DebugConsole.log("Foto capturada desde la cámara", "info");
+      }
+
+      removeFoto() {
+        this.fotoData = null;
+        document.getElementById("photo-preview").innerHTML = "";
+        document.getElementById("input-foto").value = "";
+      }
+
+      setupDriverScanner() {
+        this._driverScanMode = "camera";
+        this._driverScannerActive = false;
+
+        document.getElementById("btn-driver-scanmode-camera").addEventListener("click", () =>
+          this.setDriverScanMode("camera")
+        );
+        document.getElementById("btn-driver-scanmode-handheld").addEventListener("click", () =>
+          this.setDriverScanMode("handheld")
+        );
+      }
+
+      setDriverScanMode(mode) {
+        if (mode !== "camera" && mode !== "handheld") return;
+        this._driverScanMode = mode;
+        document.getElementById("btn-driver-scanmode-camera").classList.toggle("active", mode === "camera");
+        document.getElementById("btn-driver-scanmode-handheld").classList.toggle("active", mode === "handheld");
+
+        if (this.scanner) {
+          this.scanner.stop();
+          this.scanner = null;
+        }
+
+        if (mode === "camera") {
+          const body = document.getElementById("driver-scanner-body");
+          body.innerHTML = `<div class="scanner-container"><video id="scanner-video"></video></div>`;
+          this.startScanner();
+        } else {
+          const body = document.getElementById("driver-scanner-body");
+          body.innerHTML = `<input type="text" class="search-input" id="driver-handheld-input" placeholder="Escanea con el lector HID..." style="width:100%;margin-top:8px;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="none" />`;
+          const input = document.getElementById("driver-handheld-input");
+          input.addEventListener("keydown", (e) => {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            const val = input.value.trim();
+            if (!val) return;
+            input.value = "";
+            const parsed = parseScannedQR(val);
+            if (parsed.type === "driver") {
+              this.handleDriverDetected(parsed.driverId);
+            }
+          });
+          setTimeout(() => input.focus(), 50);
+        }
+      }
+
+      startScanner() {
+        if (!this.scanner) {
+          this.scanner = new ScannerEngine();
+        }
+
+        const videoEl = document.getElementById("scanner-video");
+        this.scanner.start(videoEl, (text) => {
+          const parsed = parseScannedQR(text);
+          if (parsed.type === "driver") {
+            this.stopScanner();
+            this.handleDriverDetected(parsed.driverId);
+          }
+        });
+      }
+
+      stopScanner() {
+        if (this.scanner) {
+          this.scanner.stop();
+        }
+      }
+
+      async handleDriverDetected(driverId) {
+        document.getElementById("driver-id").value = driverId;
+        document.getElementById("detected-driver-id").textContent = driverId;
+        document.getElementById("driver-scan-confirm").style.display = "block";
+
+        const ownerKey = `driver:${driverId}`;
+        const bucket = (await this.gridClient.getStateBucket("devices_master")) || {};
+        const allOwner = (bucket.records || []).filter(d => d.owner_key === ownerKey);
+        const inactivos = allOwner.filter(d => d.status === "inactivo");
+        const activos = allOwner.filter(d => d.status !== "inactivo");
+        DebugConsole.log(
+          `Driver ${driverId}: ${allOwner.length} dispositivo(s) existente(s)`,
+          "info"
+        );
+
+        if (inactivos.length > 0 && activos.length === 0) {
+          this.mostrarAlertaReactivar(ownerKey, inactivos);
+        } else if (activos.length > 0) {
+          this.promptExistingDevices(ownerKey, activos, "driver");
+        } else {
+          this.readyForDevice = true;
+        }
+        this.updateFormSteps();
+      }
+
+      async loadUser() {
+        try {
+          this.currentUser = await this.gridClient.getCurrentUser();
+          document.getElementById("usuario").value = this.currentUser?.ldap || "unknown";
+          this.renderUserAvatar();
+          DebugConsole.log(
+            `Usuario: ${this.currentUser?.ldap || "?"} <${this.currentUser?.email || "?"}>`,
+            "info"
+          );
+        } catch (e) {
+          DebugConsole.log(`Error cargando usuario: ${e.message}`, "error");
+        }
+      }
+
+      renderUserAvatar() {
+        const el = document.getElementById("user-avatar");
+        if (!el) return;
+        const email = this.currentUser?.email || this.currentUser?.ldap || "";
+        el.textContent = AutorizacionApp.getInitials(email);
+        el.title = email;
+        el.addEventListener("click", () => {
+          this.showAlert("registro", `Sesión: ${email || "desconocido"}`, "info");
+        });
+      }
+
+      async loadHistorial() {
+        // El segmentador y los botones "Ver más" no dependen de que las
+        // llamadas de red funcionen, así que se enlazan siempre. Cada
+        // bucket se carga por separado: si uno falla (red, 404), el otro
+        // sigue funcionando en vez de dejar todo el historial inerte.
+        this.bindHistorialUI();
+
+        this.renderSkeletonRows("list-devices", 5);
+        this.renderSkeletonRows("list-scans", 3);
+
+        try {
+          const devicesState = await this.gridClient.getStateBucket("devices_master");
+          if (devicesState?.records) {
+            this.devicesRecords = devicesState.records;
+            this.applyDevicesFilter();
+            this.bindDevicesSearch();
+          }
+        } catch (e) {
+          console.error("Error cargando devices_master:", e);
+        }
+
+        try {
+          const scansState = await this.gridClient.getStateBucket("scan_master");
+          if (scansState?.records) {
+            this.scansRecords = scansState.records;
+            this.applyScansFilter();
+            this.bindScansFilter();
+          }
+        } catch (e) {
+          console.error("Error cargando scan_master:", e);
+        }
+      }
+
+      static normalizeForSearch(str) {
+        return String(str || "").toLowerCase().trim().replace(/\s+/g, " ");
+      }
+
+      static formatShortDate(iso) {
+        if (!iso) return "-";
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return "-";
+        return d.toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) +
+          " " + d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+      }
+
+      bindHistorialUI() {
+        // Segmentador Dispositivos/Escaneos: una sola vista a la vez.
+        document.querySelectorAll(".subtab-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const view = btn.dataset.historialView;
+            document.querySelectorAll(".subtab-btn").forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+            document.getElementById("historial-view-devices").classList.toggle("active", view === "devices");
+            document.getElementById("historial-view-scans").classList.toggle("active", view === "scans");
+          });
+        });
+
+        document.getElementById("btn-devices-more").addEventListener("click", () => {
+          this.devicesVisibleCount += 25;
+          this.renderDevicesList(this._devicesFiltered || this.devicesRecords);
+        });
+
+        document.getElementById("btn-scans-more").addEventListener("click", () => {
+          this.scansVisibleCount += 25;
+          this.renderScansList(this._scansFiltered || this.scansRecords);
+        });
+
+        document.getElementById("list-devices").addEventListener("click", (e) => {
+          const row = e.target.closest(".record-row");
+          if (!row) return;
+          const rec = this._devicesFiltered?.[Number(row.dataset.idx)];
+          if (rec) this.showDeviceDetail(rec);
+        });
+
+        document.getElementById("list-scans").addEventListener("click", (e) => {
+          const row = e.target.closest(".record-row");
+          if (!row) return;
+          const rec = this._scansFiltered?.[Number(row.dataset.idx)];
+          if (rec) this.showScanDetail(rec);
+        });
+
+        document.getElementById("btn-modal-record-close").addEventListener("click", () => {
+          document.getElementById("modal-record-detail").classList.remove("active");
+        });
+      }
+
+      bindDevicesSearch() {
+        const searchInput = document.getElementById("search-devices");
+        const filterSelect = document.getElementById("filter-devices-puesto");
+
+        if (!searchInput || !filterSelect) return;
+
+        const handleChange = () => {
+          this.devicesVisibleCount = 25;
+          this.applyDevicesFilter();
+        };
+
+        searchInput.addEventListener("input", handleChange);
+        filterSelect.addEventListener("change", handleChange);
+
+        const fromDate = document.getElementById("filter-devices-from");
+        const toDate = document.getElementById("filter-devices-to");
+        if (fromDate) fromDate.addEventListener("change", handleChange);
+        if (toDate) toDate.addEventListener("change", handleChange);
+
+        const inactiveBtn = document.getElementById("btn-show-inactive");
+        if (inactiveBtn) {
+          inactiveBtn.addEventListener("click", () => {
+            this.showInactive = !this.showInactive;
+            inactiveBtn.textContent = this.showInactive ? "Ocultar inactivos" : "Ver inactivos";
+            inactiveBtn.style.color = this.showInactive ? "var(--accent)" : "";
+            this.devicesVisibleCount = 25;
+            this.applyDevicesFilter();
+          });
+        }
+      }
+
+      bindScansFilter() {
+        const filterSelect = document.getElementById("filter-scans-resultado");
+
+        if (!filterSelect) return;
+
+        const handleChange = () => {
+          this.scansVisibleCount = 25;
+          this.applyScansFilter();
+        };
+
+        filterSelect.addEventListener("change", handleChange);
+
+        const fromDate = document.getElementById("filter-scans-from");
+        const toDate = document.getElementById("filter-scans-to");
+        if (fromDate) fromDate.addEventListener("change", handleChange);
+        if (toDate) toDate.addEventListener("change", handleChange);
+      }
+
+      applyDevicesFilter() {
+        const searchInput = document.getElementById("search-devices");
+        const filterSelect = document.getElementById("filter-devices-puesto");
+        const searchTerm = this.constructor.normalizeForSearch(searchInput?.value);
+        const filterPuesto = filterSelect?.value || "";
+        const fromDate = document.getElementById("filter-devices-from")?.value;
+        const toDate = document.getElementById("filter-devices-to")?.value;
+
+        const filtered = this.devicesRecords
+          .filter((rec) => {
+            if (rec.status === "inactivo" && !this.showInactive) return false;
+
+            const matchesSearch = !searchTerm ||
+              this.constructor.normalizeForSearch(rec.imei || "").includes(searchTerm) ||
+              this.constructor.normalizeForSearch(rec.driver_id || "").includes(searchTerm) ||
+              this.constructor.normalizeForSearch(rec.correo || "").includes(searchTerm) ||
+              this.constructor.normalizeForSearch(rec.descripcion || "").includes(searchTerm) ||
+              this.constructor.normalizeForSearch(rec.empresa || "").includes(searchTerm);
+
+            const matchesFilter = !filterPuesto || rec.puesto === filterPuesto;
+
+            if (fromDate && rec.timestamp && rec.timestamp < fromDate) return false;
+            if (toDate && rec.timestamp && rec.timestamp > toDate + "T23:59:59") return false;
+
+            return matchesSearch && matchesFilter;
+          })
+          .slice()
+          .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+        this._devicesFiltered = filtered;
+        this.renderDevicesList(filtered);
+      }
+
+      applyScansFilter() {
+        const filterSelect = document.getElementById("filter-scans-resultado");
+        const filterResultado = filterSelect?.value || "";
+        const fromDate = document.getElementById("filter-scans-from")?.value;
+        const toDate = document.getElementById("filter-scans-to")?.value;
+
+        const filtered = this.scansRecords
+          .filter((rec) => {
+            if (filterResultado && rec.resultado !== filterResultado) return false;
+            if (fromDate && rec.timestamp && rec.timestamp < fromDate) return false;
+            if (toDate && rec.timestamp && rec.timestamp > toDate + "T23:59:59") return false;
+            return true;
+          })
+          .slice()
+          .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+
+        this._scansFiltered = filtered;
+        this.renderScansList(filtered);
+      }
+
+      renderDevicesList(records) {
+        const list = document.getElementById("list-devices");
+        const moreBtn = document.getElementById("btn-devices-more");
+        list.innerHTML = "";
+
+        if (records.length === 0) {
+          document.getElementById("devices-empty").style.display = "block";
+          moreBtn.style.display = "none";
+          return;
+        }
+
+        document.getElementById("devices-empty").style.display = "none";
+
+        const visible = records.slice(0, this.devicesVisibleCount);
+
+        list.innerHTML = visible
+          .map((rec, idx) => {
+            const title = rec.descripcion || rec.driver_id || rec.imei || "Sin descripción";
+            const badgeClass = rec.puesto === "driver" ? "green" : "blue";
+            const statusBadge = rec.status === "inactivo"
+              ? `<span class="badge" style="background:rgba(255,92,108,0.12);color:var(--c-red);font-size:10px;margin-left:4px;">inactivo</span>`
+              : "";
+            return `
+              <div class="record-row" data-idx="${idx}">
+                <div class="record-row-main">
+                  <span class="badge ${badgeClass}">${rec.puesto || "-"}</span>
+                  <span class="record-row-title">${title}</span>${statusBadge}
+                </div>
+                <div class="record-row-meta">
+                  <span class="record-row-date">${this.constructor.formatShortDate(rec.timestamp)}</span>
+                  <svg class="record-row-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        moreBtn.style.display = records.length > this.devicesVisibleCount ? "flex" : "none";
+      }
+
+      showDeviceDetail(rec) {
+        const esSmartphone = rec.tipo_dispositivo === "smartphone";
+        const rows = [
+          ["Timestamp", rec.timestamp ? new Date(rec.timestamp).toLocaleString() : "-"],
+          ["Puesto", rec.puesto || "-"],
+          ["Estado", rec.status || "activo"],
+          ["Driver ID", rec.driver_id || "-"],
+          ["IMEI", esSmartphone ? (rec.imei || "-") : "-"],
+          ["Descripción", rec.descripcion || "-"],
+          ["Empresa", rec.empresa || "-"],
+          ["Correo", rec.correo || "-"],
+          ["Usuario", rec.usuario || "-"],
+          ["QR generado", rec.qr_doc_id ? "Sí" : "-"],
+        ];
+
+        document.getElementById("modal-record-title").textContent = rec.descripcion || rec.driver_id || "Detalle del dispositivo";
+        document.getElementById("modal-record-body").innerHTML = rows
+          .map(([k, v]) => `<div class="detail-row"><span class="k">${k}</span><span class="v">${v}</span></div>`)
+          .join("");
+
+        const photoBtn = document.getElementById("btn-modal-record-photo");
+        if (rec.foto_doc_id) {
+          photoBtn.style.display = "inline-flex";
+          photoBtn.onclick = () => {
+            document.getElementById("modal-record-detail").classList.remove("active");
+            this.viewPhoto(rec.foto_doc_id, rec.id);
+          };
+        } else {
+          photoBtn.style.display = "none";
+          photoBtn.onclick = null;
+        }
+
+        const qrBtn = document.getElementById("btn-modal-record-qr");
+        if (rec.qr_doc_id) {
+          qrBtn.style.display = "inline-flex";
+          qrBtn.onclick = () => {
+            document.getElementById("modal-record-detail").classList.remove("active");
+            this.viewQR(rec.qr_doc_id, rec.id);
+          };
+        } else {
+          qrBtn.style.display = "none";
+          qrBtn.onclick = null;
+        }
+
+        const shareBtn = document.getElementById("btn-modal-record-share");
+        if (rec.correo && rec.qr_doc_id) {
+          shareBtn.style.display = "inline-flex";
+          shareBtn.disabled = false;
+          shareBtn.onclick = () => this.compartirDispositivo(rec);
+        } else {
+          shareBtn.style.display = "none";
+          shareBtn.onclick = null;
+        }
+
+        // Botón desactivar/activar
+        const toggleBtn = document.getElementById("btn-modal-record-toggle");
+        toggleBtn.style.display = "inline-flex";
+        toggleBtn.disabled = false;
+        toggleBtn.textContent = rec.status === "inactivo" ? "Activar" : "Desactivar";
+        toggleBtn.style.color = rec.status === "inactivo" ? "var(--c-green)" : "";
+        toggleBtn.style.borderColor = rec.status === "inactivo" ? "var(--c-green)" : "";
+        toggleBtn._confirmPending = false;
+        clearTimeout(toggleBtn._confirmTimer);
+        toggleBtn.onclick = () => this.toggleDispositivo(rec.id, rec.status);
+
+        // Botón eliminar
+        const deleteBtn = document.getElementById("btn-modal-record-delete");
+        deleteBtn.style.display = "inline-flex";
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = "Eliminar";
+        deleteBtn.style.background = "";
+        deleteBtn._confirmPending = false;
+        clearTimeout(deleteBtn._confirmTimer);
+        deleteBtn.onclick = () => this.eliminarDispositivo(rec.id);
+
+        document.getElementById("modal-record-detail").classList.add("active");
+      }
+
+      async toggleDispositivo(deviceId, currentStatus) {
+        const btn = document.getElementById("btn-modal-record-toggle");
+        const newStatus = currentStatus === "inactivo" ? "activo" : "inactivo";
+        const label = newStatus === "inactivo" ? "Desactivar" : "Activar";
+        btn.disabled = true;
+        btn.textContent = newStatus === "inactivo" ? "Desactivando..." : "Activando...";
+        try {
+          const updatedBucket = await this.gridClient.mutateBucket("devices_master", async (bucket) => {
+            const rec = bucket.records.find(r => r.id === deviceId);
+            if (rec) rec.status = newStatus;
+            return bucket;
+          });
+          if (updatedBucket?.records) this.devicesRecords = updatedBucket.records;
+          document.getElementById("modal-record-detail").classList.remove("active");
+          this.applyDevicesFilter();
+          DebugConsole.log(`Dispositivo ${deviceId} → ${newStatus}`, "info");
+        } catch(e) {
+          btn.disabled = false;
+          btn.textContent = label;
+          DebugConsole.log(`Error toggle: ${e.message}`, "error");
+        }
+      }
+
+      async eliminarDispositivo(deviceId) {
+        const btn = document.getElementById("btn-modal-record-delete");
+        if (!btn._confirmPending) {
+          btn._confirmPending = true;
+          btn.textContent = "¿Eliminar?";
+          btn.style.background = "rgba(255,92,108,0.15)";
+          btn._confirmTimer = setTimeout(() => {
+            btn._confirmPending = false;
+            btn.textContent = "Eliminar";
+            btn.style.background = "";
+          }, 3000);
+          return;
+        }
+        clearTimeout(btn._confirmTimer);
+        btn._confirmPending = false;
+        btn.disabled = true;
+        btn.textContent = "Eliminando...";
+        btn.style.background = "";
+        try {
+          const updatedBucket = await this.gridClient.mutateBucket("devices_master", async (bucket) => {
+            bucket.records = bucket.records.filter(r => r.id !== deviceId);
+            return bucket;
+          });
+          if (updatedBucket?.records) this.devicesRecords = updatedBucket.records;
+          document.getElementById("modal-record-detail").classList.remove("active");
+          this.applyDevicesFilter();
+          DebugConsole.log(`Dispositivo ${deviceId} eliminado`, "info");
+        } catch(e) {
+          btn.disabled = false;
+          btn.textContent = "Eliminar";
+          btn.style.background = "";
+          DebugConsole.log(`Error eliminar: ${e.message}`, "error");
+        }
+      }
+
+      renderScansList(records) {
+        const list = document.getElementById("list-scans");
+        const moreBtn = document.getElementById("btn-scans-more");
+        list.innerHTML = "";
+
+        if (records.length === 0) {
+          document.getElementById("scans-empty").style.display = "block";
+          moreBtn.style.display = "none";
+          return;
+        }
+
+        document.getElementById("scans-empty").style.display = "none";
+
+        const visible = records.slice(0, this.scansVisibleCount);
+
+        list.innerHTML = visible
+          .map((rec, idx) => {
+            const deviceIds = Array.isArray(rec.device_ids) ? rec.device_ids.join(", ") : (rec.device_ids || "-");
+            const title = rec.driver_id ? `Driver: ${rec.driver_id}` : `Dev: ${deviceIds}`;
+            const isValid = rec.resultado === "valido";
+            const badgeClass = isValid ? "green" : "red";
+            const badgeLabel = isValid ? "Válido" : "Denegado";
+            return `
+              <div class="record-row" data-idx="${idx}">
+                <div class="record-row-main">
+                  <span class="badge ${badgeClass}">${badgeLabel}</span>
+                  <span class="record-row-title">${title}</span>
+                </div>
+                <div class="record-row-meta">
+                  <span class="record-row-date">${this.constructor.formatShortDate(rec.timestamp)}</span>
+                  <svg class="record-row-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        moreBtn.style.display = records.length > this.scansVisibleCount ? "flex" : "none";
+      }
+
+      showScanDetail(rec) {
+        const deviceIds = Array.isArray(rec.device_ids) ? rec.device_ids.join(", ") : (rec.device_ids || "-");
+        const rows = [
+          ["Fecha", rec.timestamp ? new Date(rec.timestamp).toLocaleString() : "-"],
+          ["Resultado", rec.resultado || "-"],
+          ["Tipo movimiento", rec.tipo_movimiento || "-"],
+          ["Modo", rec.modo || "-"],
+          ["Dispositivo(s)", deviceIds],
+          ["Driver ID", rec.driver_id || "-"],
+          ["Owner key", rec.owner_key || "-"],
+          ["Validado por", rec.validado_por || "-"],
+          ["Email validador", rec.email_validador || "-"],
+        ];
+
+        document.getElementById("modal-record-title").textContent = "Detalle del escaneo";
+        document.getElementById("modal-record-body").innerHTML = rows
+          .map(([k, v]) => `<div class="detail-row"><span class="k">${k}</span><span class="v">${v}</span></div>`)
+          .join("");
+
+        document.getElementById("btn-modal-record-photo").style.display = "none";
+        document.getElementById("btn-modal-record-qr").style.display = "none";
+        document.getElementById("btn-modal-record-share").style.display = "none";
+        document.getElementById("btn-modal-record-toggle").style.display = "none";
+        document.getElementById("btn-modal-record-delete").style.display = "none";
+        document.getElementById("modal-record-detail").classList.add("active");
+      }
+
+      async guardar() {
+        const puesto = document.getElementById("puesto").value;
+        const tipoDisp = document.getElementById("tipo-dispositivo").value;
+        const descripcion = document.getElementById("descripcion").value.toUpperCase();
+        const driverId = document.getElementById("driver-id").value;
+
+        DebugConsole.log(
+          `Guardar -> puesto=${puesto || "?"}, tipo=${tipoDisp || "?"}, desc="${descripcion}", foto=${this.fotoData ? "sí" : "no"}, driver_id=${driverId || "-"}`,
+          "info"
+        );
+
+        if (!puesto || !tipoDisp || !descripcion || !this.fotoData) {
+          DebugConsole.log("Validación: faltan campos obligatorios", "warn");
+          this.showAlert("registro", "Completa todos los campos requeridos", "error");
+          return;
+        }
+
+        if (puesto === "driver" && !driverId) {
+          DebugConsole.log("Validación: falta escanear el QR del driver", "warn");
+          this.showAlert("registro", "Escanea el QR del driver primero", "error");
+          return;
+        }
+
+        if (puesto === "otro" && !document.getElementById("correo").value) {
+          DebugConsole.log("Validación: falta correo de autorización", "warn");
+          this.showAlert("registro", "Ingresa el correo de autorización", "error");
+          return;
+        }
+
+        if (!document.getElementById("empresa").value.trim()) {
+          DebugConsole.log("Validación: falta empresa", "warn");
+          this.showAlert("registro", "Ingresa el nombre de la empresa", "error");
+          return;
+        }
+
+        if (
+          tipoDisp === "smartphone" &&
+          (!document.getElementById("imei").value ||
+            document.getElementById("imei").value.length !== 15)
+        ) {
+          DebugConsole.log("Validación: IMEI inválido", "warn");
+          this.showAlert("registro", "IMEI inválido (15 dígitos)", "error");
+          return;
+        }
+
+        // Bloqueo BPP: si el IMEI del smartphone está en el catálogo de casos
+        // BPP, no se permite el registro bajo ninguna circunstancia.
+        if (tipoDisp === "smartphone") {
+          const imeiVal = document.getElementById("imei").value;
+          const { blocked, shipmentId } = this.checkBpp(imeiVal);
+          if (blocked) {
+            DebugConsole.log(
+              `Bloqueo BPP: IMEI ${imeiVal} implicado (shipment=${shipmentId || "?"})`,
+              "warn"
+            );
+            this.showBppBlockAlert(shipmentId);
+            return;
+          }
+        }
+
+        // Bloquear UI con la animación de carga mientras se procesa
+        // (foto, QR, guardado en bucket pueden tardar varios segundos).
+        MorphController.start();
+
+        let record = null;
+        let qrDataUrl = null;
+        let saveError = null;
+
+        try {
+          // 1. Generar ID único para el dispositivo
+          const deviceId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+          // 2. Subir foto
+          const blob = await this.dataUrlToBlob(this.fotoData);
+          DebugConsole.log(`Foto a subir: ${(blob.size / 1024).toFixed(0)} KB`, "info");
+          const fotoDocId = await this.gridClient.uploadPublicDocument(
+            blob,
+            `dispositivo_${deviceId}.jpg`
+          );
+
+          // Asociar foto a la carpeta compartida
+          const folderId = await this.getOrCreatePhotoFolder();
+          if (folderId && fotoDocId) {
+            await this.gridClient._fetchWithTimeout(
+              `${location.origin}/api/v1/folders/${folderId}/documents`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ doc_id: fotoDocId }),
+              },
+              10000
+            ).catch(e => DebugConsole.log(`Asociar foto a carpeta: ${e.message}`, "warn"));
+          }
+
+          // 3. Construir registro
+          const now = new Date().toISOString();
+          record = {
+            id: deviceId,
+            timestamp: now,
+            puesto,
+            tipo_dispositivo: tipoDisp,
+            descripcion,
+            empresa: document.getElementById("empresa").value.trim().toUpperCase(),
+            foto_doc_id: fotoDocId,
+            usuario: this.currentUser?.ldap || "unknown",
+            email: this.currentUser?.email || "",
+            status: "activo",
+            ultimo_escaneo: now,
+          };
+
+          if (tipoDisp === "smartphone") {
+            record.imei = document.getElementById("imei").value;
+          }
+
+          if (puesto === "driver") {
+            record.driver_id = document.getElementById("driver-id").value;
+            record.owner_key = `driver:${record.driver_id}`;
+            record.owner_tipo = "driver";
+            // SIN QR para Driver
+          } else {
+            // Si es adición a owner existente, el correo viene del ownerKey almacenado
+            const correoInput = document.getElementById("correo").value;
+            const correoFromOwner = this._existingOwnerKey?.startsWith("user:")
+              ? this._existingOwnerKey.replace("user:", "")
+              : "";
+            record.correo = correoInput || correoFromOwner;
+            record.owner_key = `user:${record.correo.toLowerCase()}`;
+            record.owner_tipo = "otro";
+
+            if (this._existingQrDocId) {
+              // Reusar QR existente del owner — mismo QR para todos sus dispositivos
+              record.qr_doc_id = this._existingQrDocId;
+              qrDataUrl = null; // no se abre modal de QR, ya lo tienen
+              DebugConsole.log(`Reutilizando QR existente: ${record.qr_doc_id}`, "info");
+            } else {
+              // Primer dispositivo de este owner — generar QR nuevo
+              qrDataUrl = await this.generarQR(deviceId);
+              const qrBlob = await this.dataUrlToBlob(qrDataUrl);
+              record.qr_doc_id = await this.gridClient.uploadPublicDocument(
+                qrBlob,
+                `qr_${deviceId}.png`
+              );
+            }
+          }
+
+          // 4. Guardar en bucket
+          await this.guardarEnBucket(record);
+
+          DebugConsole.log(`Registro guardado (ID: ${record.id})`, "info");
+          MorphController.success();
+        } catch (e) {
+          DebugConsole.log(`Error al guardar: ${e.message}`, "error");
+          saveError = e;
+          MorphController.error();
+        } finally {
+          // Dejar ver el estado final del botón (éxito/error) antes de
+          // desbloquear la UI y recién ahí abrir el modal correspondiente.
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          MorphController.close();
+
+          if (saveError) {
+            this.showAlert("registro", `Error: ${saveError.message}`, "error");
+          } else {
+            this.showAlert(
+              "registro",
+              `Dispositivo registrado (ID: ${record.id})`,
+              "success"
+            );
+
+            if (record.puesto === "driver") {
+              document.getElementById("modal-resultado").classList.add("active");
+              document.getElementById("modal-titulo").textContent = "Driver registrado";
+              document.getElementById("modal-mensaje").textContent =
+                `Driver ID ${record.driver_id} autorizado correctamente.`;
+              document.getElementById("qr-preview-modal").style.display = "none";
+            } else {
+              if (qrDataUrl) {
+                this.mostrarQRModal(qrDataUrl, record);
+              } else {
+                // Dispositivo adicional — modal simple sin QR nuevo
+                document.getElementById("modal-resultado").classList.add("active");
+                document.getElementById("modal-titulo").textContent = "Dispositivo registrado";
+                document.getElementById("modal-mensaje").textContent =
+                  `Dispositivo autorizado. Usa el QR existente del titular. ID: ${record.id}`;
+                document.getElementById("qr-preview-modal").style.display = "none";
+              }
+            }
+          }
+        }
+      }
+
+      async generarQR(payload) {
+        const canvas = document.getElementById("qr-canvas");
+        const qr = new QRCode(payload, {
+          width: 280,
+          height: 280,
+          colorDark: "#000000",
+          colorLight: "#FFFFFF",
+        });
+
+        // Copiar el canvas generado
+        canvas.width = qr.canvas.width;
+        canvas.height = qr.canvas.height;
+        const dstCtx = canvas.getContext("2d");
+        dstCtx.drawImage(qr.canvas, 0, 0);
+
+        // Logo central (mismo doc_id que el logo del título)
+        if (this.logoImage) {
+          const logoSize = canvas.width * 0.26;
+          const x = (canvas.width - logoSize) / 2;
+          const y = (canvas.height - logoSize) / 2;
+          const pad = 6;
+          dstCtx.fillStyle = "#FFFFFF";
+          dstCtx.fillRect(x - pad, y - pad, logoSize + pad * 2, logoSize + pad * 2);
+          dstCtx.drawImage(this.logoImage, x, y, logoSize, logoSize);
+        }
+
+        return canvas.toDataURL("image/png");
+      }
+
+      mostrarQRModal(qrDataUrl, record) {
+        document.getElementById("modal-resultado").classList.add("active");
+        document.getElementById("modal-titulo").textContent = "QR generado";
+        document.getElementById("modal-mensaje").textContent =
+          `Dispositivo autorizado. ID: ${record.id}`;
+
+        const canvas = document.getElementById("qr-canvas-modal");
+        const ctx = canvas.getContext("2d");
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        };
+        img.src = qrDataUrl;
+
+        document.getElementById("qr-preview-modal").style.display = "flex";
+      }
+
+      async guardarEnBucket(record) {
+        let bucket = await this.gridClient.getStateBucket("devices_master");
+        if (!bucket || !Array.isArray(bucket.records)) {
+          bucket = { ...bucket, records: [] };
+        }
+
+        // Migración perezosa: agregar campos nuevos a registros viejos si no los tienen
+        bucket.records = bucket.records.map((r) => {
+          if (!r.owner_key) {
+            if (r.driver_id) {
+              r.owner_key = `driver:${r.driver_id}`;
+              r.owner_tipo = "driver";
+            } else if (r.correo) {
+              r.owner_key = `user:${r.correo.toLowerCase()}`;
+              r.owner_tipo = "otro";
+            }
+          }
+          if (r.status === undefined) r.status = "activo";
+          if (r.ultimo_escaneo === undefined) r.ultimo_escaneo = r.timestamp;
+          return r;
+        });
+
+        bucket.records.push(record);
+
+        const result = await this.gridClient.setStateBucket(
+          "devices_master",
+          bucket
+        );
+        if (result.conflict) {
+          // Reintentar con backoff
+          await new Promise((r) => setTimeout(r, 500));
+          return this.guardarEnBucket(record);
+        }
+      }
+
+      // Convierte una data: URL a Blob sin usar fetch(). fetch(dataUrl) no
+      // toca la red (el navegador la resuelve localmente), pero el CSP/sandbox
+      // del iframe donde Grid monta el documento bloquea igual esa llamada y
+      // revienta con el mismo "TypeError: Failed to fetch" que un fallo de red
+      // real — decodificar el base64 a mano evita el fetch por completo.
+      dataUrlToBlob(dataUrl) {
+        const commaIdx = dataUrl.indexOf(",");
+        const header = dataUrl.slice(5, commaIdx); // quita "data:"
+        const data = dataUrl.slice(commaIdx + 1);
+        const mime = header.split(";")[0] || "application/octet-stream";
+        const isBase64 = header.includes("base64");
+
+        if (isBase64) {
+          const binary = atob(data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          return new Blob([bytes], { type: mime });
+        }
+        return new Blob([decodeURIComponent(data)], { type: mime });
+      }
+
+      showAlert(tabId, message, type) {
+        const icons = {
+          success:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+          error:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>',
+          warn:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>',
+          info:
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-5M12 8h.01"/></svg>',
+        };
+        const alertEl = document.getElementById(`alert-${tabId}`);
+        alertEl.innerHTML = `${icons[type] || icons.info}<span>${message}</span>`;
+        alertEl.className = `alert ${type}`;
+        alertEl.style.display = "flex";
+      }
+
+      renderSkeletonRows(containerId, count = 5) {
+        const el = document.getElementById(containerId);
+        if (!el) return;
+        el.innerHTML = Array.from({ length: count }, () => `
+          <div class="skeleton-row">
+            <div class="skeleton skeleton-badge"></div>
+            <div class="skeleton skeleton-text" style="width:${50 + Math.random() * 120 | 0}px;flex:1;"></div>
+            <div class="skeleton skeleton-date"></div>
+          </div>`).join("");
+      }
+
+      mostrarAlertaReactivar(ownerKey, inactivos) {
+        const list = inactivos.map(d => `• ${d.descripcion || d.id}`).join("<br/>");
+        document.getElementById("existing-devices-info").innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;color:var(--accent);"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Esta persona tiene ${inactivos.length} dispositivo(s) <strong>inactivo(s)</strong>:<br/>${list}
+          <br/><br/>¿Desea reactivarlos en lugar de registrar uno nuevo?
+        `;
+
+        document.getElementById("btn-add-another-device").style.display = "none";
+        document.getElementById("btn-cancel-existing").style.display = "inline-flex";
+
+        const reactivateBtn = document.getElementById("btn-reactivate-all") ||
+          (() => {
+            const b = document.createElement("button");
+            b.id = "btn-reactivate-all";
+            b.type = "button";
+            b.className = "btn btn-primary";
+            b.textContent = "Reactivar dispositivos";
+            document.getElementById("existing-devices-card")
+              .querySelector("div[style*='flex']").prepend(b);
+            return b;
+          })();
+
+        reactivateBtn.style.display = "inline-flex";
+        reactivateBtn.onclick = () => this.reactivarDispositivos(ownerKey, inactivos);
+
+        document.getElementById("existing-devices-card").style.display = "block";
+        this._existingOwnerKey = ownerKey;
+      }
+
+      async reactivarDispositivos(ownerKey, inactivos) {
+        const btn = document.getElementById("btn-reactivate-all");
+        btn.disabled = true;
+        btn.textContent = "Reactivando...";
+        try {
+          const updatedBucket = await this.gridClient.mutateBucket("devices_master", async (bucket) => {
+            for (const rec of bucket.records) {
+              if (inactivos.some(d => d.id === rec.id)) rec.status = "activo";
+            }
+            return bucket;
+          });
+          if (updatedBucket?.records) this.devicesRecords = updatedBucket.records;
+          document.getElementById("existing-devices-card").style.display = "none";
+          document.getElementById("btn-add-another-device").style.display = "inline-flex";
+          btn.style.display = "none";
+          this.showAlert("registro", `${inactivos.length} dispositivo(s) reactivados correctamente.`, "success");
+          this.applyDevicesFilter();
+          DebugConsole.log(`${inactivos.length} dispositivos reactivados para ${ownerKey}`, "info");
+        } catch(e) {
+          btn.disabled = false;
+          btn.textContent = "Reactivar dispositivos";
+          DebugConsole.log(`Error reactivar: ${e.message}`, "error");
+        }
+      }
+
+      async getOrCreatePhotoFolder() {
+        if (this.photoFolderId) return this.photoFolderId;
+
+        const foldersBucket = await this.gridClient.getStateBucket("photo_folders").catch(() => null);
+        if (foldersBucket?.devices_folder_id) {
+          this.photoFolderId = foldersBucket.devices_folder_id;
+          return this.photoFolderId;
+        }
+
+        try {
+          const res = await this.gridClient._fetchWithTimeout(
+            `${location.origin}/api/v1/folders`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({ name: "Dispositivos - Fotos", visibility: "private" }),
+            },
+            15000
+          );
+          if (res.ok) {
+            const data = await res.json();
+            this.photoFolderId = data.folder_id || data.id;
+            await this.gridClient.mutateBucket("photo_folders", async (bucket) => {
+              bucket.devices_folder_id = this.photoFolderId;
+              return bucket;
+            }).catch(() => {});
+          }
+        } catch(e) {
+          DebugConsole.log(`getOrCreatePhotoFolder error: ${e.message}`, "warn");
+        }
+
+        return this.photoFolderId;
+      }
+
+      async compartirDispositivo(rec) {
+        const to = encodeURIComponent(rec.correo);
+        const subject = encodeURIComponent("QR de acceso");
+        const bodyText = "Adjunto encontrarás tu QR de acceso.\n\nPreséntalo al guardia para ingresar o salir.\n\n(Adjunta el archivo qr_acceso.png que se descarga ahora)";
+
+        // Abrir Gmail ANTES de cualquier await para no ser bloqueado por el popup blocker
+        window.open(
+          `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${subject}&body=${encodeURIComponent(bodyText)}`,
+          "_blank"
+        );
+
+        // Regenerar QR en canvas local (sin fetch de red, sin problemas de CSP)
+        try {
+          const dataUrl = await this.generarQR(rec.id);
+          const a = document.createElement("a");
+          a.href = dataUrl;
+          a.download = "qr_acceso.png";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch (e) {
+          DebugConsole.log(`QR download: ${e.message}`, "warn");
+        }
+      }
+
+      // Alerta destacada de bloqueo BPP (más prominente que showAlert).
+      showBppBlockAlert(shipmentId) {
+        const alertEl = document.getElementById("alert-registro");
+        const shipTxt = shipmentId
+          ? ` Shipment: <strong>${shipmentId}</strong>.`
+          : "";
+        alertEl.innerHTML = `
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+          <span><strong>Dispositivo implicado en un caso de generación BPP.</strong><br/>
+          Este IMEI no puede registrarse.${shipTxt}</span>
+        `;
+        alertEl.className = "alert error";
+        alertEl.style.display = "flex";
+        alertEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+
+      reset() {
+        document.getElementById("puesto").value = "";
+        document.getElementById("correo").value = "";
+        document.getElementById("correo").removeAttribute("readonly");
+        document.getElementById("tipo-dispositivo").value = "";
+        document.getElementById("imei").value = "";
+        document.getElementById("descripcion").value = "";
+        document.getElementById("empresa").value = "";
+        document.getElementById("driver-id").value = "";
+        this.fotoData = null;
+        document.getElementById("photo-preview").innerHTML = "";
+        document.getElementById("input-foto").value = "";
+        document.getElementById("driver-scan-confirm").style.display = "none";
+        document.getElementById("otro-scan-result").style.display = "none";
+        document.getElementById("existing-devices-card").style.display = "none";
+        document.getElementById("btn-add-another-device").style.display = "inline-flex";
+        const reactivateBtn = document.getElementById("btn-reactivate-all");
+        if (reactivateBtn) reactivateBtn.style.display = "none";
+        this.resetFlowState();
+        this.updateFormSteps();
+      }
+    }
+
+    // Inicializar app
+    const app = new AutorizacionApp();
+  </script>
+<script>
+/* Grid: only allow approved Grid domains to open unsandboxed tabs */
+(function(){
+  var allowedHosts = ["figma.com", "www.figma.com", "furydocs.io", "zeroheight.com", "google.com", "docs.google.com", "meet.google.com", "grid.adminml.com", "grid-artifacts.adminml.com", "mercadolibre.atlassian.net", "mercadolibre-opsgenie.atlassian.net", "app.datadoghq.com", "grafana-service.furycloud.io", "web.furycloud.io", "nasdaq-meli.app.opsgenie.com", "meli.enterprise.slack.com"];
+  var allowedSuffixes = [".adminml.com", ".atlassian.net", ".google.com", ".furycloud.io", ".melioffice.com", ".melisystems.com"];
+  var allowedPathPrefixes = {"github.com": ["/melisource/"], "www.github.com": ["/melisource/"]};
+  function normalizeUrl(rawUrl){
+    try {
+      return new URL(String(rawUrl || ""), window.location.href);
+    } catch (_err) {
+      return null;
+    }
+  }
+  function isAllowedUrl(rawUrl){
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed) return false;
+    if(parsed.protocol === "slack:") return true;
+    if(parsed.protocol !== "https:") return false;
+    var h = (parsed.hostname || "").toLowerCase();
+    if(!h) return false;
+    if(allowedHosts.indexOf(h) !== -1) return true;
+    for(var i = 0; i < allowedSuffixes.length; i++){
+      var s = allowedSuffixes[i];
+      if(h === s.slice(1) || (h.length > s.length && h.slice(-s.length) === s)) return true;
+    }
+    var pathPrefixes = allowedPathPrefixes[h];
+    if(pathPrefixes){
+      var p = parsed.pathname || "/";
+      for(var j = 0; j < pathPrefixes.length; j++){
+        if(p.slice(0, pathPrefixes[j].length) === pathPrefixes[j]) return true;
+      }
+    }
+    return false;
+  }
+  function requestParentPopup(rawUrl){
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed || !window.parent || window.parent === window) return false;
+    try {
+      window.parent.postMessage({type: "grid-open-safe-popup", url: parsed.href}, window.location.origin);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  document.addEventListener("click", function(event){
+    var target = event.target;
+    var anchor = target && target.closest ? target.closest("a[href]") : null;
+    if(!anchor) return;
+    var href = anchor.getAttribute("href") || "";
+    if(!href || href.charAt(0) === "#") return;
+    var opensNewTab = anchor.target === "_blank" || event.ctrlKey || event.metaKey || event.button === 1;
+    if(!opensNewTab) return;
+    if(!isAllowedUrl(href)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if(requestParentPopup(href)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+
+  var nativeOpen = window.open;
+  window.open = function(rawUrl, target, features){
+    if(!isAllowedUrl(rawUrl)) return null;
+    if(requestParentPopup(rawUrl)) return null;
+    return nativeOpen ? nativeOpen.call(window, normalizeUrl(rawUrl).href, target, features) : null;
+  };
+})();
+</script>
+<script>
+/* Grid: video/audio embed diagnostics & proxy fallback */
+(function(){
+  var TAG='[Grid:media-diag]';
+  function patchMedia(el){
+    if(el._gridPatched) return;
+    el._gridPatched=true;
+    el.addEventListener('error',function handler(ev){
+      var src=el.currentSrc||el.src||'';
+      var code=el.error?el.error.code:'?';
+      var msg=el.error?el.error.message:'unknown';
+      console.warn(TAG,'load failed',{tag:el.tagName,src:src,code:code,message:msg});
+      var origSrc=el.getAttribute('src')||'';
+      if(origSrc && origSrc.indexOf('proxy=1')===-1 && origSrc.indexOf('://')===-1){
+        var proxySrc=origSrc+(origSrc.indexOf('?')!==-1?'&':'?')+'proxy=1';
+        console.info(TAG,'retrying via proxy',proxySrc);
+        el.removeEventListener('error',handler);
+        el.src=proxySrc;
+        el.load();
+      }
+    },true);
+  }
+  document.querySelectorAll('video,audio,video source,audio source').forEach(patchMedia);
+  var obs=new MutationObserver(function(muts){
+    muts.forEach(function(m){
+      m.addedNodes.forEach(function(n){
+        if(n.nodeType!==1)return;
+        if(/^(VIDEO|AUDIO|SOURCE)$/.test(n.tagName))patchMedia(n);
+        if(n.querySelectorAll){
+          n.querySelectorAll('video,audio,video source,audio source').forEach(patchMedia);
+        }
+      });
+    });
+  });
+  obs.observe(document.body,{childList:true,subtree:true});
+})();
+</script>
+<script>
+/* Grid: sync iframe URL mutations to parent address bar */
+(function(){
+  function notifyParent(search, hash){
+    if(!window.parent || window.parent === window) return;
+    try{
+      window.parent.postMessage(
+        {type:"grid-url-sync", search:search, hash:hash},
+        window.location.origin
+      );
+    }catch(_){}
+  }
+  function parseAndNotify(url){
+    try{
+      var p = new URL(String(url), window.location.href);
+      notifyParent(p.search, p.hash);
+    }catch(_){}
+  }
+  var _push = history.pushState.bind(history);
+  var _replace = history.replaceState.bind(history);
+  history.pushState = function(state, title, url){
+    _push(state, title, url);
+    if(url != null) parseAndNotify(url);
+  };
+  history.replaceState = function(state, title, url){
+    _replace(state, title, url);
+    if(url != null) parseAndNotify(url);
+  };
+  window.addEventListener("hashchange", function(){
+    notifyParent(window.location.search, window.location.hash);
+  });
+})();
+</script>
+</body>
+</html>
