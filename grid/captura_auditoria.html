@@ -362,6 +362,13 @@ body {
   font-weight: 400;
 }
 
+/* Placeholder emulado para el input "falso" (div, no <input>) del modo
+   handheld — ver ScanUI.buildHandheldInput. */
+.step-input-placeholder {
+  color: var(--color-text-muted);
+  font-weight: 400;
+}
+
 .step-input:focus {
   outline: none;
   caret-color: var(--color-text-primary);
@@ -2296,15 +2303,6 @@ class PhotoCamera {
  * mismo control y la misma entrada handheld.
  */
 const ScanUI = (() => {
-  // iOS Safari renderiza inputmode="none" ocultando solo las teclas y
-  // dejando la fila de sugerencias/portapapeles — ahí no interfiere con
-  // lectores Bluetooth (se comportan como teclado físico real, canal
-  // distinto al del teclado en pantalla). En Android, en cambio, varias
-  // versiones de WebView/Chrome bloquean con este atributo la conexión de
-  // entrada completa, incluyendo lectores que inyectan el código como
-  // teclado emulado — por eso solo se aplica en iOS.
-  const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
   function mode() {
     return (window.app && window.app.scanMode) || 'handheld';
   }
@@ -2338,43 +2336,72 @@ const ScanUI = (() => {
     return wrap;
   }
 
-  // Entrada handheld: input enfocado y auto-reenfocado (el lector HID solo
-  // escribe donde está el foco) que normaliza a mayúsculas y procesa en
-  // Enter. isActive() evita reenfocar si la pantalla cambió de modo.
+  // Entrada handheld: NO es un <input> real, sino un <div> enfocable
+  // (tabindex) con una propiedad "value" emulada. Se hizo así porque
+  // ningún navegador abre teclado en pantalla para un elemento sin
+  // capacidad de edición nativa — sin depender de inputmode="none", que en
+  // varias versiones de Android WebView bloquea también la entrada de
+  // lectores que inyectan el código como teclado emulado, no solo el
+  // teclado visual (ver commit anterior). El lector sigue funcionando
+  // porque el evento "keydown" se dispara igual sobre cualquier elemento
+  // con foco, sea o no editable — el div solo necesita estar enfocado.
+  // isActive() evita reenfocar si la pantalla cambió de modo.
   function buildHandheldInput({ placeholder, onSubmit, isActive, uppercase = true }) {
     const wrap = document.createElement('div');
     wrap.className = 'step-input-wrap';
-    const input = document.createElement('input');
-    input.type = 'text';
+    const input = document.createElement('div');
     input.className = 'step-input';
-    input.placeholder = placeholder || 'Escanea con el lector';
-    input.setAttribute('autocomplete', 'off');
-    input.setAttribute('autocorrect', 'off');
-    input.setAttribute('autocapitalize', uppercase ? 'characters' : 'off');
-    // Solo en iOS: oculta las teclas del teclado virtual (deja la fila de
-    // sugerencias/portapapeles) sin afectar al lector. En Android se deja
-    // el teclado normal a propósito — ver nota de IS_IOS más arriba.
-    if (IS_IOS) input.setAttribute('inputmode', 'none');
-    input.spellcheck = false;
+    input.tabIndex = 0;
+    input.setAttribute('role', 'textbox');
+    input.setAttribute('aria-label', placeholder || 'Escanea con el lector');
+
+    const placeholderText = placeholder || 'Escanea con el lector';
+    let _value = '';
+    function renderValue() {
+      if (_value) {
+        input.textContent = _value;
+        input.classList.remove('step-input-placeholder');
+      } else {
+        input.textContent = placeholderText;
+        input.classList.add('step-input-placeholder');
+      }
+    }
+    // input.value se comporta como el de un <input> real (get/set de
+    // texto) para que el resto del código (que hace input.value = '',
+    // input.value.trim(), etc. en los 5 loops de escaneo) siga funcionando
+    // sin cambios.
+    Object.defineProperty(input, 'value', {
+      get() { return _value; },
+      set(v) {
+        _value = String(v == null ? '' : v);
+        renderValue();
+      },
+    });
+    renderValue();
     wrap.appendChild(input);
 
-    // Los códigos de barras son dígitos → mayúsculas es inocuo y evita
-    // duplicados por caja. Pero un QR (JSON con claves/valores/base64) NO
-    // debe pasar a mayúsculas: rompería el JSON.parse. Por eso es opcional.
-    if (uppercase) {
-      input.addEventListener('input', () => {
-        const start = input.selectionStart;
-        const end = input.selectionEnd;
-        input.value = input.value.toUpperCase();
-        input.setSelectionRange(start, end);
-      });
-    }
     input.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const val = input.value.trim();
+        if (!val) return;
+        onSubmit(val, input);
+        return;
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        input.value = input.value.slice(0, -1);
+        return;
+      }
+      // Solo caracteres imprimibles de una tecla — ignora Shift, Tab,
+      // flechas, y combinaciones con modificador (Ctrl+V, etc.).
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
-      const val = input.value.trim();
-      if (!val) return;
-      onSubmit(val, input);
+      // Los códigos de barras son dígitos → mayúsculas es inocuo y evita
+      // duplicados por caja. Pero un QR (JSON con claves/valores/base64)
+      // NO debe pasar a mayúsculas: rompería el JSON.parse. Por eso es
+      // opcional.
+      input.value = input.value + (uppercase ? e.key.toUpperCase() : e.key);
     });
     input.addEventListener('blur', () => {
       setTimeout(() => {
@@ -3739,7 +3766,7 @@ class DestinoDocaSession {
 
     this.container.querySelector('.scanner-body').innerHTML = `
       <div class="step-input-wrap">
-        <input type="text" class="step-input session-manual-input" placeholder="Escribe el HU" inputMode="none" />
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el HU" />
       </div>
     `;
     const input = this.container.querySelector('.session-manual-input');
@@ -4064,7 +4091,7 @@ class InboundDriversSession {
         </div>
         <h1 class="step-question">¿Cuál es el ID de ruta?</h1>
         <div class="step-input-wrap">
-          <input type="text" class="step-input route-manual-input" placeholder="Ej. 100897405" inputMode="none" />
+          <input type="text" class="step-input route-manual-input" placeholder="Ej. 100897405" />
         </div>
         <div class="step-support ${message ? 'error' : ''}">${message || 'Escribe el ID de ruta y presiona Enter.'}</div>
       </div>
@@ -4309,7 +4336,7 @@ class InboundDriversSession {
 
     this.container.querySelector('.scanner-body').innerHTML = `
       <div class="step-input-wrap">
-        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" inputMode="none" />
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
       </div>
     `;
     const input = this.container.querySelector('.session-manual-input');
@@ -4729,7 +4756,7 @@ class BarreduraSession {
         </div>
         <h1 class="step-question">Describe la zona</h1>
         <div class="step-input-wrap">
-          <input type="text" class="step-input barredura-lugar-input" placeholder="Ej. PATIO 3" inputMode="none" />
+          <input type="text" class="step-input barredura-lugar-input" placeholder="Ej. PATIO 3" />
         </div>
         <div class="step-support">Solo mayúsculas. Presiona Enter para continuar.</div>
       </div>
@@ -4890,7 +4917,7 @@ class BarreduraSession {
 
     this.container.querySelector('.scanner-body').innerHTML = `
       <div class="step-input-wrap">
-        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" inputMode="none" />
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
       </div>
     `;
     const input = this.container.querySelector('.session-manual-input');
@@ -5110,7 +5137,7 @@ class BarreduraSession {
         </div>
         <h1 class="step-question">Escribe el accionable (${id})</h1>
         <div class="step-input-wrap">
-          <input type="text" class="step-input barredura-accionable-input" placeholder="ACCIONABLE" inputMode="none" />
+          <input type="text" class="step-input barredura-accionable-input" placeholder="ACCIONABLE" />
         </div>
         <div class="step-support">Solo mayúsculas. Presiona Enter para guardar.</div>
       </div>
