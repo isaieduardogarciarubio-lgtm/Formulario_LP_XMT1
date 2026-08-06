@@ -244,44 +244,6 @@
 
     .log-clear-btn:hover { color: var(--error); background: rgba(255,69,58,.1); }
 
-    /* Test input */
-    .log-test {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
-    }
-
-    .log-test-input {
-      flex: 1;
-      background: #1c1c1e;
-      border: 1px solid #2c2c2e;
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
-      padding: 10px 14px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-
-    .log-test-input::placeholder { color: #3a3a3c; }
-    .log-test-input:focus { border-color: #48484a; }
-
-    .log-test-btn {
-      background: #1c1c1e;
-      border: 1px solid #2c2c2e;
-      border-radius: 10px;
-      color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
-      padding: 10px 16px;
-      cursor: pointer;
-      transition: background 0.15s;
-      white-space: nowrap;
-    }
-
-    .log-test-btn:hover { background: #2c2c2e; }
-
     /* Log entries */
     .log-list {
       list-style: none;
@@ -421,19 +383,6 @@
       <button class="log-clear-btn" onclick="clearLog()">Limpiar</button>
     </header>
 
-    <!-- Input manual para pruebas en el navegador -->
-    <div class="log-test">
-      <input
-        id="testInput"
-        class="log-test-input"
-        type="text"
-        placeholder="Escribe o pega un código para probar…"
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <button class="log-test-btn" onclick="submitTest()">Escanear ↵</button>
-    </div>
-
     <ul class="log-list" id="logList">
       <li class="log-empty" id="logEmpty">Sin escaneos aún</li>
     </ul>
@@ -449,7 +398,6 @@
     const logList        = document.getElementById('logList');
     const logEmpty       = document.getElementById('logEmpty');
     const logBadge       = document.getElementById('logBadge');
-    const testInput      = document.getElementById('testInput');
 
     const ICON_CHECK = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,10 8,14 16,6"/></svg>`;
     const ICON_X     = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>`;
@@ -542,12 +490,9 @@
     }
 
     hidInput.addEventListener('focus', () => setArmed(true));
-    hidInput.addEventListener('blur',  () => {
+    hidInput.addEventListener('blur', () => {
       setArmed(false);
-      // Re-enfocar salvo que el usuario esté en el input de prueba
-      requestAnimationFrame(() => {
-        if (document.activeElement !== testInput) armScanner();
-      });
+      requestAnimationFrame(armScanner);
     });
 
     // Clic en cualquier parte de la pantalla vuelve a enfocar
@@ -562,18 +507,6 @@
       if (code) handleCode(code);
     });
 
-    // ── Input de prueba manual ────────────────────────────────────────────
-    async function submitTest() {
-      const code = testInput.value.trim();
-      if (!code) return;
-      testInput.value = '';
-      testInput.blur(); // devuelve el foco al hidInput vía el blur handler
-      await handleCode(code);
-    }
-
-    testInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); submitTest(); }
-    });
 
     // ─────────────────────────────────────────────────────────────────────
     // procesarCodigo — integrar aquí la lógica de negocio.
