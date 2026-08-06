@@ -312,6 +312,18 @@ body {
   padding-bottom: 120px;
 }
 
+/* Pantallas de las sesiones de escaneo continuo (Pre-Missort, Inbound
+   Drivers, Barredura) y sus pasos intermedios (pickers, "no encontrado",
+   entrada manual, etc.): no tienen la barra de acciones fija de abajo que
+   sí usa el wizard genérico (FormEngine), así que no necesitan reservarle
+   espacio — sin este ajuste, en pantallas chicas (el escáner portátil) el
+   contenido queda más alto que el viewport y hay que hacer scroll para
+   ver el contador de la sesión. */
+.step-screen.step-screen-compact {
+  min-height: auto;
+  padding-bottom: var(--spacing-lg);
+}
+
 .step-progress-row {
   display: flex;
   align-items: center;
@@ -376,6 +388,54 @@ body {
 
 .step-input-wrap.error .step-input {
   border-bottom-color: var(--color-error);
+}
+
+/* Entrada handheld (ScanUI.buildHandheldInput): se ve como una zona de
+   escaneo, no como un campo de formulario — sigue siendo un <input> real
+   por debajo (el lector portátil necesita un campo editable enfocado),
+   pero visualmente es una tarjeta con ícono + "Escanea ahora" en vez de
+   una caja de texto subrayada. */
+.scan-target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.scan-target-icon {
+  color: var(--color-text-muted);
+  opacity: 0.7;
+}
+
+.scan-target-input {
+  width: 100%;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-align: center;
+  padding: var(--spacing-lg) var(--spacing-md);
+  transition: border-color 0.15s ease, border-style 0.15s ease;
+}
+
+.scan-target-input::placeholder {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.scan-target-input:focus {
+  outline: none;
+  border-color: var(--color-text-primary);
+  border-style: solid;
+  caret-color: var(--color-text-primary);
+}
+
+.step-input-wrap.error .scan-target-input {
+  border-color: var(--color-error);
+  border-style: solid;
 }
 
 textarea.step-input {
@@ -2345,11 +2405,22 @@ const ScanUI = (() => {
   // reenfocar si la pantalla cambió de modo.
   function buildHandheldInput({ placeholder, onSubmit, isActive, uppercase = true }) {
     const wrap = document.createElement('div');
-    wrap.className = 'step-input-wrap';
+    wrap.className = 'step-input-wrap scan-target';
+
+    const icon = document.createElement('div');
+    icon.className = 'scan-target-icon';
+    icon.innerHTML = Icons.svg('scan', { size: 36 });
+    wrap.appendChild(icon);
+
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'step-input';
-    input.placeholder = placeholder || 'Escanea con el lector';
+    input.className = 'step-input scan-target-input';
+    // El texto del placeholder pasado por cada pantalla (Shipment ID, HU,
+    // etc.) queda como nombre accesible — visualmente todas las pantallas
+    // de escaneo dicen lo mismo ("Escanea ahora"), el contexto específico
+    // ya está en el título (h1) de cada pantalla.
+    input.placeholder = 'Escanea ahora';
+    input.setAttribute('aria-label', placeholder || 'Escanea con el lector');
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('autocapitalize', uppercase ? 'characters' : 'off');
@@ -3509,7 +3580,7 @@ class DestinoDocaSession {
   renderPicker({ title, options, placeholder, emptyMessage, onPick, onBack, allowManual }) {
     this.stopScanner();
     this.container.innerHTML = `
-      <div class="step-screen">
+      <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain dd-picker-back" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Pre-Missort</div>
@@ -3616,7 +3687,7 @@ class DestinoDocaSession {
       : 'Escanea el HU con el lector (o escribe y Enter).';
 
     this.container.innerHTML = `
-      <div class="step-screen scanner-screen">
+      <div class="step-screen scanner-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Pre-Missort</div>
@@ -3907,7 +3978,7 @@ class InboundDriversSession {
     const camera = ScanUI.mode() === 'camera';
 
     this.container.innerHTML = `
-      <div class="step-screen scanner-screen">
+      <div class="step-screen scanner-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Inbound / Drivers</div>
@@ -4055,7 +4126,7 @@ class InboundDriversSession {
     this.stopScanner();
 
     this.container.innerHTML = `
-      <div class="step-screen">
+      <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Inbound / Drivers</div>
@@ -4164,7 +4235,7 @@ class InboundDriversSession {
     const pendingCount = this.pending.size;
 
     this.container.innerHTML = `
-      <div class="step-screen scanner-screen">
+      <div class="step-screen scanner-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Inbound / Drivers</div>
@@ -4384,7 +4455,7 @@ class InboundDriversSession {
 
   renderShipmentDetail(shipment) {
     this.container.innerHTML = `
-      <div class="step-screen">
+      <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
           <div class="step-progress">Auditoría de paquete</div>
@@ -4686,7 +4757,7 @@ class BarreduraSession {
   pickLugar() {
     this.stopScanner();
     this.container.innerHTML = `
-      <div class="step-screen">
+      <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Barredura</div>
@@ -4720,7 +4791,7 @@ class BarreduraSession {
 
   pickLugarOtro() {
     this.container.innerHTML = `
-      <div class="step-screen">
+      <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Barredura — otra zona</div>
@@ -4780,7 +4851,7 @@ class BarreduraSession {
       : 'Escanea el shipment con el lector (o escribe y Enter).';
 
     this.container.innerHTML = `
-      <div class="step-screen scanner-screen">
+      <div class="step-screen scanner-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Barredura</div>
@@ -5060,7 +5131,7 @@ class BarreduraSession {
   renderNotFound(id) {
     const sauronUrl = `https://shipping-bo.adminml.com/sauron/shipments/shipment/${encodeURIComponent(id)}`;
     this.container.innerHTML = `
-      <div class="step-screen">
+      <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
           <div class="step-progress">Fuera de catálogo</div>
@@ -5101,7 +5172,7 @@ class BarreduraSession {
 
   renderNotFoundOtro(id) {
     this.container.innerHTML = `
-      <div class="step-screen">
+      <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
           <div class="step-progress">Fuera de catálogo — otro accionable</div>
