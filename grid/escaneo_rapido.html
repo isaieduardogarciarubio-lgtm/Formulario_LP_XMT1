@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Escaneo Rápido · XMT1</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23000'/><path d='M6 10 L6 8 L8 8M24 8 L26 8 L26 10M26 22 L26 24 L24 24M8 24 L6 24 L6 22' stroke='%23fff' stroke-width='2' stroke-linecap='round' fill='none'/><line x1='11' y1='16' x2='21' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/></svg>">
+
+  <style>
+    @font-face {
+      font-family: 'ProximaNova';
+      src: url('../legacy/data/proximanovaregular.otf') format('opentype');
+      font-weight: 400;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'ProximaNova';
+      src: url('../legacy/data/proximanovabold.otf') format('opentype');
+      font-weight: 700;
+      font-display: swap;
+    }
+
+    :root {
+      --bg:          #000000;
+      --surface:     #1c1c1e;
+      --text:        #ffffff;
+      --text-muted:  #8e8e93;
+      --success:     #34c759;
+      --error:       #ff453a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'ProximaNova', system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+
+    /* ── Layout principal ── */
+    .scanner-screen {
+      min-height: 100dvh;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 32px;
+      cursor: default;
+      user-select: none;
+    }
+
+    /* ── Ícono de paquete ── */
+    .package-icon {
+      margin-bottom: 40px;
+      color: var(--text);
+      transition: color 0.3s ease;
+    }
+
+    .package-icon svg {
+      width: 96px;
+      height: 96px;
+      display: block;
+    }
+
+    .package-icon.idle {
+      animation: icon-float 4s ease-in-out infinite;
+    }
+
+    .package-icon.processing {
+      color: var(--text-muted);
+      animation: icon-processing 0.8s ease-in-out infinite alternate;
+    }
+
+    @keyframes icon-float {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-8px); }
+    }
+
+    @keyframes icon-processing {
+      from { opacity: 1; }
+      to   { opacity: 0.45; }
+    }
+
+    /* ── Texto ── */
+    .screen-label {
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--text-muted);
+      line-height: 1.25;
+      margin-bottom: 2px;
+    }
+
+    .screen-label-strong {
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+    }
+
+    /* ── Área de estado ── */
+    .status {
+      margin-top: 40px;
+      min-height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-muted);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s ease, transform 0.2s ease, color 0.18s ease;
+    }
+
+    .status.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .status.success { color: var(--success); }
+    .status.error   { color: var(--error);   }
+
+    .status-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .spinner {
+      width: 15px;
+      height: 15px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Último código escaneado ── */
+    .last-code {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em;
+      opacity: 0;
+      transition: opacity 0.3s ease 0.1s;
+    }
+
+    .last-code.visible { opacity: 0.55; }
+
+    /* ── Input oculto para el lector HID ── */
+    .scanner-input {
+      position: fixed;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <main class="scanner-screen" id="scannerScreen" onclick="armScanner()">
+
+    <div class="package-icon idle" id="packageIcon">
+      <!--
+        Caja isométrica con línea de cinta central.
+        viewBox 64×64 — trazos stroke-width 1.8 (estilo Nocturne).
+
+        Cara superior (rombo): vértices  top(32,8)  right(56,22)  front(32,36)  left(8,22)
+        Cara izquierda:        left(8,22) → front(32,36) → base-front(32,56) → base-left(8,42)
+        Cara derecha:          front(32,36) → right(56,22) → base-right(56,42) → base-front(32,56)
+        Cinta de sellado:      línea vertical x=32, de y=8 a y=56
+      -->
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- Cara superior -->
+        <path d="M32 8 L56 22 L32 36 L8 22 Z"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- Cara izquierda -->
+        <path d="M8 22 L32 36 L32 56 L8 42 Z"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- Cara derecha -->
+        <path d="M32 36 L56 22 L56 42 L32 56 Z"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- Cinta de sellado — línea central vertical -->
+        <line x1="32" y1="8" x2="32" y2="56"
+              stroke="currentColor" stroke-width="1.8"
+              stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <p class="screen-label">Escanea un</p>
+    <strong class="screen-label-strong">paquete</strong>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div id="lastCode" class="last-code"></div>
+
+  </main>
+
+  <!--
+    Input oculto para capturar los keystrokes del lector de código de barras HID.
+    inputmode="none" evita que el teclado virtual aparezca en móvil.
+    El lector envía los dígitos del código seguidos de Enter (↵).
+  -->
+  <input
+    id="scannerInput"
+    class="scanner-input"
+    type="text"
+    inputmode="none"
+    autocomplete="off"
+    autocorrect="off"
+    autocapitalize="off"
+    spellcheck="false"
+    aria-label="Lectura de código de barras"
+    tabindex="-1"
+  />
+
+  <script>
+    const scannerInput = document.getElementById('scannerInput');
+    const statusEl     = document.getElementById('status');
+    const lastCodeEl   = document.getElementById('lastCode');
+    const packageIcon  = document.getElementById('packageIcon');
+
+    // ── Íconos SVG inline para el área de estado ──────────────────────────
+    const ICON_CHECK = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,10 8,14 16,6"/></svg>`;
+    const ICON_X     = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>`;
+    const ICON_SPIN  = `<div class="spinner"></div>`;
+
+    // ── Foco del escáner ──────────────────────────────────────────────────
+    function armScanner() {
+      scannerInput.value = '';
+      scannerInput.focus({ preventScroll: true });
+    }
+
+    function showStatus(type, icon, message) {
+      statusEl.className = `status ${type} visible`;
+      statusEl.innerHTML = `${icon}<span>${message}</span>`;
+    }
+
+    function clearStatus() {
+      statusEl.className = 'status';
+      statusEl.innerHTML = '';
+    }
+
+    // ── Captura del código ─────────────────────────────────────────────────
+    scannerInput.addEventListener('keydown', async (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+
+      const code = scannerInput.value.trim();
+      scannerInput.value = '';
+
+      if (!code) { armScanner(); return; }
+
+      packageIcon.className = 'package-icon processing';
+      showStatus('loading', ICON_SPIN, 'Procesando…');
+
+      try {
+        await procesarCodigo(code);
+
+        packageIcon.className = 'package-icon idle';
+        showStatus('success', ICON_CHECK, 'Paquete escaneado');
+        lastCodeEl.textContent = code;
+        lastCodeEl.className = 'last-code visible';
+
+        setTimeout(() => { clearStatus(); armScanner(); }, 2000);
+
+      } catch (err) {
+        packageIcon.className = 'package-icon idle';
+        showStatus('error', ICON_X, err?.message ?? 'No se pudo procesar el paquete');
+
+        setTimeout(() => { clearStatus(); armScanner(); }, 2800);
+      }
+    });
+
+    // ── Gestión de visibilidad / ciclo de vida ─────────────────────────────
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) armScanner();
+    });
+    window.addEventListener('pageshow', armScanner);
+    armScanner();
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // procesarCodigo — integrar aquí la lógica de negocio.
+    //
+    // Los lectores HID de MercadoLibre pueden enviar JSON en lugar de texto plano:
+    //   {"id":"12345678","t":"lm"}   → shipment
+    //   {"id":"12345678","legacy_id":"...","t":"hu"}  → HU
+    //
+    // El campo `id` ya normalizado está disponible como variable `id` abajo.
+    // ─────────────────────────────────────────────────────────────────────────
+    async function procesarCodigo(rawCode) {
+      let id = rawCode;
+      try {
+        const parsed = JSON.parse(rawCode);
+        if (parsed?.id) id = String(parsed.id);
+      } catch { /* código en texto plano — ok */ }
+
+      console.log('Código escaneado:', id);
+
+      // Ejemplo con GridClient (disponible en captura_auditoria.html):
+      // const bucket = await GridClient.getStateBucket('escaneo_rapido');
+      // bucket.data.push({ id, ts: Date.now(), user: app.userEmail });
+      // await GridClient.putStateBucket('escaneo_rapido', bucket.data);
+    }
+  </script>
+
+</body>
+</html>
