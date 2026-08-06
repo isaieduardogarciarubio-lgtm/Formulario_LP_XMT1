@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Escaneo Rápido · XMT1</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23000'/><path d='M6 10 L6 8 L8 8M24 8 L26 8 L26 10M26 22 L26 24 L24 24M8 24 L6 24 L6 22' stroke='%23fff' stroke-width='2' stroke-linecap='round' fill='none'/><line x1='11' y1='16' x2='21' y2='16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/></svg>">
+
+  <style>
+    :root {
+      --bg:          #000000;
+      --surface:     #1c1c1e;
+      --text:        #ffffff;
+      --text-muted:  #8e8e93;
+      --success:     #34c759;
+      --error:       #ff453a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: auto;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+
+    /* ── Layout principal ── */
+    .scanner-screen {
+      min-height: 60dvh;
+      min-height: 60vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 32px 28px;
+      cursor: default;
+      user-select: none;
+    }
+
+    /* ── Ícono principal ── */
+    .package-icon {
+      margin-bottom: 40px;
+      color: var(--text);
+      transition: color 0.3s ease;
+    }
+
+    .package-icon svg {
+      width: 96px;
+      height: 96px;
+      display: block;
+      transition: opacity 0.25s ease;
+    }
+
+    .package-icon.idle   { animation: icon-float 4s ease-in-out infinite; }
+    .package-icon.processing {
+      color: var(--text-muted);
+      animation: icon-processing 0.8s ease-in-out infinite alternate;
+    }
+
+    @keyframes icon-float {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-8px); }
+    }
+    @keyframes icon-processing {
+      from { opacity: 1; }
+      to   { opacity: 0.45; }
+    }
+
+    /* Type badge — aparece bajo el ícono cuando se detecta el tipo */
+    .type-badge {
+      display: inline-block;
+      margin-bottom: 20px;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0;
+      transform: scale(0.85);
+      transition: opacity 0.25s ease, transform 0.25s ease, background 0.2s, color 0.2s;
+    }
+    .type-badge.visible { opacity: 1; transform: scale(1); }
+    .type-badge.shipment { background: rgba(52,199,89,.15); color: var(--success); }
+    .type-badge.hu       { background: rgba(10,132,255,.15); color: #0a84ff; }
+
+    /* ── Texto ── */
+    .screen-label        { font-size: 28px; font-weight: 400; color: var(--text-muted); line-height: 1.25; margin-bottom: 2px; }
+    .screen-label-strong { font-size: 44px; font-weight: 700; color: var(--text); line-height: 1.1; letter-spacing: -0.01em; }
+
+    /* ── Área de estado ── */
+    .status {
+      margin-top: 40px;
+      min-height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--text-muted);
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.2s ease, transform 0.2s ease, color 0.18s ease;
+    }
+    .status.visible  { opacity: 1; transform: translateY(0); }
+    .status.success  { color: var(--success); }
+    .status.error    { color: var(--error);   }
+
+    .status-icon { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .spinner {
+      width: 15px; height: 15px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Último código escaneado ── */
+    .last-code {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.06em;
+      opacity: 0;
+      transition: opacity 0.3s ease 0.1s;
+    }
+    .last-code.visible { opacity: 0.55; }
+
+    /* ── Input HID invisible ── */
+    #hidInput {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 0;
+      overflow: hidden;
+      border: 0; outline: 0; padding: 0; margin: 0;
+      opacity: 0;
+      pointer-events: none;
+      font-size: 16px;
+    }
+
+    #focusIndicator {
+      position: fixed;
+      top: 10px; right: 10px;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #2c2c2e;
+      transition: background 0.3s;
+      z-index: 100;
+    }
+    #focusIndicator.armed { background: var(--success); }
+
+    /* ── Log panel ── */
+    .log-panel {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 0 16px 40px;
+    }
+
+    .log-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 20px 4px 12px;
+      border-top: 1px solid #1c1c1e;
+      margin-bottom: 12px;
+    }
+
+    .log-header h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      flex: 1;
+    }
+
+    .log-badge {
+      background: #1c1c1e;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      min-width: 24px;
+      text-align: center;
+      transition: background 0.2s, color 0.2s;
+    }
+    .log-badge.has-entries { background: #2c2c2e; color: var(--text); }
+
+    .log-clear-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .log-clear-btn:hover { color: var(--error); background: rgba(255,69,58,.1); }
+
+    .log-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+
+    .log-empty { text-align: center; color: #3a3a3c; font-size: 13px; padding: 24px 0; }
+
+    .log-entry {
+      background: #1c1c1e;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      animation: entry-in 0.22s ease;
+    }
+    @keyframes entry-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .log-entry.error { background: rgba(255,69,58,.1); }
+
+    .log-entry-num  { font-size: 11px; color: #3a3a3c; font-variant-numeric: tabular-nums; min-width: 22px; text-align: right; }
+    .log-entry-dot  { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+    .log-entry.error .log-entry-dot { background: var(--error); }
+
+    /* Color del punto por tipo */
+    .log-entry.shipment .log-entry-dot { background: var(--success); }
+    .log-entry.hu .log-entry-dot       { background: #0a84ff; }
+
+    .log-entry-body  { flex: 1; min-width: 0; }
+    .log-entry-code  { font-size: 14px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .log-entry-meta  { font-size: 11px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .log-entry-time  { font-size: 11px; color: #48484a; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+
+  <input id="hidInput" type="text" autofocus
+         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+         aria-label="Lector de código de barras" tabindex="0">
+
+  <div id="focusIndicator"></div>
+
+  <main class="scanner-screen" id="scannerScreen">
+
+    <div class="package-icon idle" id="packageIcon">
+      <!-- SVG inicial: caja isométrica (paquete genérico) -->
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M32 8 L56 22 L32 36 L8 22 Z"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M8 22 L32 36 L32 56 L8 42 Z"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M32 36 L56 22 L56 42 L32 56 Z"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <line x1="32" y1="8" x2="32" y2="56"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+    <span class="type-badge" id="typeBadge"></span>
+
+    <p class="screen-label" id="screenLabel">Escanea un</p>
+    <strong class="screen-label-strong" id="screenLabelStrong">paquete</strong>
+
+    <div id="status" class="status" role="status" aria-live="polite"></div>
+    <div id="lastCode" class="last-code"></div>
+
+  </main>
+
+  <section class="log-panel">
+    <header class="log-header">
+      <h2>Log de escaneos</h2>
+      <span class="log-badge" id="logBadge">0</span>
+      <button class="log-clear-btn" onclick="clearLog()">Limpiar</button>
+    </header>
+    <ul class="log-list" id="logList">
+      <li class="log-empty" id="logEmpty">Sin escaneos aún</li>
+    </ul>
+  </section>
+
+  <script>
+    const hidInput        = document.getElementById('hidInput');
+    const focusIndicator  = document.getElementById('focusIndicator');
+    const statusEl        = document.getElementById('status');
+    const lastCodeEl      = document.getElementById('lastCode');
+    const packageIcon     = document.getElementById('packageIcon');
+    const screenLabelEl   = document.getElementById('screenLabel');
+    const screenStrongEl  = document.getElementById('screenLabelStrong');
+    const typeBadgeEl     = document.getElementById('typeBadge');
+    const logList         = document.getElementById('logList');
+    const logEmpty        = document.getElementById('logEmpty');
+    const logBadge        = document.getElementById('logBadge');
+
+    const ICON_CHECK = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,10 8,14 16,6"/></svg>`;
+    const ICON_X     = `<svg class="status-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="5" x2="15" y2="15"/><line x1="15" y1="5" x2="5" y2="15"/></svg>`;
+    const ICON_SPIN  = `<div class="spinner"></div>`;
+
+    // ── SVG por tipo de código ────────────────────────────────────────────
+    const SVGS = {
+      // Caja isométrica (paquete genérico / texto plano)
+      package: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M32 8 L56 22 L32 36 L8 22 Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M8 22 L32 36 L32 56 L8 42 Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="M32 36 L56 22 L56 42 L32 56 Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <line x1="32" y1="8" x2="32" y2="56" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>`,
+
+      // Camión de envío (t:"lm" → shipment)
+      shipment: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- Cuerpo de carga -->
+        <rect x="4" y="14" width="36" height="28" rx="3"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Separación cuerpo-cabina -->
+        <line x1="40" y1="14" x2="40" y2="42"
+              stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <!-- Cabina con parabrisas inclinado -->
+        <path d="M40 42 L40 26 L50 14 L60 14 L60 42 Z"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- Chasis -->
+        <line x1="4" y1="42" x2="60" y2="42"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <!-- Rueda trasera -->
+        <circle cx="14" cy="48" r="5"
+              stroke="currentColor" stroke-width="1.8"/>
+        <!-- Rueda delantera -->
+        <circle cx="52" cy="48" r="5"
+              stroke="currentColor" stroke-width="1.8"/>
+      </svg>`,
+
+      // Tarima con cajas apiladas (t:"hu" → Handling Unit)
+      hu: `<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- Caja superior izquierda -->
+        <rect x="8" y="6" width="20" height="16" rx="2"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        <!-- Caja superior derecha -->
+        <rect x="36" y="6" width="20" height="16" rx="2"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        <!-- Caja inferior (ancho completo) -->
+        <rect x="8" y="26" width="48" height="18" rx="2"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        <!-- Línea divisoria caja inferior -->
+        <line x1="32" y1="26" x2="32" y2="44"
+              stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <!-- Tablón de tarima -->
+        <rect x="4" y="48" width="56" height="5" rx="2"
+              stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+        <!-- Patas izquierda -->
+        <rect x="8" y="53" width="12" height="8" rx="1"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <!-- Pata central -->
+        <rect x="26" y="53" width="12" height="8" rx="1"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <!-- Pata derecha -->
+        <rect x="44" y="53" width="12" height="8" rx="1"
+              stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>`,
+    };
+
+    // ── Metadatos de tipo ─────────────────────────────────────────────────
+    const TYPES = {
+      package:  { article: 'un',  noun: 'paquete', successMsg: 'Paquete escaneado',  badge: null },
+      shipment: { article: 'un',  noun: 'envío',   successMsg: 'Envío registrado',   badge: 'Shipment · LM' },
+      hu:       { article: 'una', noun: 'HU',      successMsg: 'HU registrada',      badge: 'Handling Unit' },
+    };
+
+    let currentType = 'package';
+    let scanCount   = 0;
+
+    // ── Actualizar pantalla según tipo ────────────────────────────────────
+    function updateScreenForType(type) {
+      if (type === currentType) return;
+      currentType = type;
+      const meta = TYPES[type] || TYPES.package;
+
+      // Icono
+      packageIcon.innerHTML = SVGS[type] || SVGS.package;
+
+      // Texto
+      screenLabelEl.textContent  = `Escanea ${meta.article}`;
+      screenStrongEl.textContent = meta.noun;
+
+      // Badge de tipo
+      if (meta.badge) {
+        typeBadgeEl.textContent  = meta.badge;
+        typeBadgeEl.className    = `type-badge visible ${type}`;
+      } else {
+        typeBadgeEl.className = 'type-badge';
+      }
+    }
+
+    // ── Log ───────────────────────────────────────────────────────────────
+    function addLogEntry(id, rawCode, type, isError, errorMsg) {
+      scanCount++;
+      logEmpty.style.display = 'none';
+
+      const now    = new Date();
+      const time   = now.toLocaleTimeString('es-MX', { hour12: false });
+      const isDiff = rawCode !== id;
+      const meta   = TYPES[type] || TYPES.package;
+
+      const li = document.createElement('li');
+      li.className = `log-entry${isError ? ' error' : ` ${type}`}`;
+      li.innerHTML = `
+        <span class="log-entry-num">#${scanCount}</span>
+        <span class="log-entry-dot"></span>
+        <div class="log-entry-body">
+          <div class="log-entry-code">${isError ? (errorMsg ?? 'Error') : id}</div>
+          ${!isError && meta.badge ? `<div class="log-entry-meta">${meta.badge}</div>` : ''}
+          ${isDiff && !isError ? `<div class="log-entry-meta">${rawCode}</div>` : ''}
+          ${isError ? `<div class="log-entry-meta">${id}</div>` : ''}
+        </div>
+        <span class="log-entry-time">${time}</span>
+      `;
+
+      logList.insertBefore(li, logList.firstChild);
+      if (logEmpty.parentNode === logList) logList.removeChild(logEmpty);
+
+      logBadge.textContent = scanCount;
+      logBadge.className   = 'log-badge has-entries';
+    }
+
+    function clearLog() {
+      scanCount = 0;
+      logList.innerHTML = '';
+      logEmpty.style.display = '';
+      logList.appendChild(logEmpty);
+      logBadge.textContent = '0';
+      logBadge.className   = 'log-badge';
+    }
+
+    function showStatus(type, icon, message) {
+      statusEl.className = `status ${type} visible`;
+      statusEl.innerHTML = `${icon}<span>${message}</span>`;
+    }
+
+    function clearStatus() {
+      statusEl.className = 'status';
+      statusEl.innerHTML = '';
+    }
+
+    // ── Core scan handler ─────────────────────────────────────────────────
+    async function handleCode(rawCode) {
+      packageIcon.className = 'package-icon processing';
+      showStatus('loading', ICON_SPIN, 'Procesando…');
+
+      try {
+        const { id, type } = await procesarCodigo(rawCode);
+
+        updateScreenForType(type);
+        packageIcon.className = 'package-icon idle';
+
+        const meta = TYPES[type] || TYPES.package;
+        showStatus('success', ICON_CHECK, meta.successMsg);
+        lastCodeEl.textContent = id;
+        lastCodeEl.className   = 'last-code visible';
+        addLogEntry(id, rawCode, type, false);
+
+        setTimeout(clearStatus, 2000);
+
+      } catch (err) {
+        packageIcon.className = 'package-icon idle';
+        const msg = err?.message ?? 'No se pudo procesar el código';
+        showStatus('error', ICON_X, msg);
+        addLogEntry(rawCode, rawCode, currentType, true, msg);
+        setTimeout(clearStatus, 2800);
+      }
+    }
+
+    // ── HID: autofocus + re-arm on blur ───────────────────────────────────
+    function armScanner() { hidInput.focus({ preventScroll: true }); }
+    function setArmed(v)   { focusIndicator.className = v ? 'armed' : ''; }
+
+    hidInput.addEventListener('focus', () => setArmed(true));
+    hidInput.addEventListener('blur',  () => { setArmed(false); requestAnimationFrame(armScanner); });
+    document.getElementById('scannerScreen').addEventListener('click', armScanner);
+
+    hidInput.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      const code = hidInput.value.trim();
+      hidInput.value = '';
+      if (code) handleCode(code);
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // procesarCodigo — retorna { id, type } o lanza Error.
+    //
+    // Formato JSON MeLi:
+    //   {"id":"12345678","t":"lm"}                   → shipment
+    //   {"id":"12345678","legacy_id":"...","t":"hu"} → HU
+    //   texto plano                                   → package (genérico)
+    // ─────────────────────────────────────────────────────────────────────
+    async function procesarCodigo(rawCode) {
+      let id   = rawCode;
+      let type = 'package';
+
+      try {
+        const parsed = JSON.parse(rawCode);
+        if (parsed?.id) id = String(parsed.id);
+        if (parsed?.t === 'lm') type = 'shipment';
+        else if (parsed?.t === 'hu') type = 'hu';
+      } catch { /* texto plano — ok */ }
+
+      console.log('Código escaneado:', id, '| tipo:', type, '| raw:', rawCode);
+      return { id, type };
+
+      // Ejemplo con GridClient:
+      // const bucket = await GridClient.getStateBucket('escaneo_rapido');
+      // bucket.data.push({ id, type, ts: Date.now() });
+      // await GridClient.putStateBucket('escaneo_rapido', bucket.data);
+      // return { id, type };
+    }
+  </script>
+
+</body>
+</html>
