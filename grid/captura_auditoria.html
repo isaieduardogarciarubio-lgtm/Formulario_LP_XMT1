@@ -2342,10 +2342,17 @@ const ScanUI = (() => {
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('autocapitalize', uppercase ? 'characters' : 'off');
-    // Este input es solo para el lector (HID, teclea como si fuera físico) —
-    // inputmode="none" bloquea el teclado virtual en pantallas táctiles sin
-    // afectar al lector, que sigue disparando eventos de teclado normales.
-    input.setAttribute('inputmode', 'none');
+    // NOTA: se probó inputmode="none" para bloquear el teclado virtual y
+    // dejar el campo "solo lector" — se revirtió porque en varios
+    // dispositivos/versiones de WebView bloquea TODA entrada al input, no
+    // solo el teclado en pantalla: muchos lectores Bluetooth/handheld
+    // inyectan el código a través del mismo canal de método de entrada
+    // (IME) que inputmode="none" desactiva, así que también se bloqueaba
+    // el lector. El navegador no puede distinguir de forma confiable un
+    // lector físico de un teclado humano — ambos llegan como el mismo
+    // evento de teclado — así que no hay forma 100% segura de "solo
+    // escaneo" puramente del lado del cliente sin arriesgar bloquear el
+    // lector real en algún dispositivo.
     input.spellcheck = false;
     wrap.appendChild(input);
 
