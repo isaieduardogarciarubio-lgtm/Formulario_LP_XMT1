@@ -2449,6 +2449,10 @@ class FormEngine {
   }
 
   stopScanner() {
+    if (this._hidDocHandler) {
+      document.removeEventListener('keydown', this._hidDocHandler);
+      this._hidDocHandler = null;
+    }
     if (this.scanner) {
       this.scanner.stop();
       this.scanner = null;
@@ -2766,6 +2770,21 @@ class FormEngine {
       lastCodeEl.className   = 'hh-last-code visible';
       this.confirmManual(field);
     });
+
+    hidInput.addEventListener('input', () => {
+      if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
+      hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
+      hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    this._hidDocHandler = (e) => {
+      if (!isActive() || document.activeElement === hidInput) return;
+      if (e.key === 'Enter') {
+        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        hidInput.value += e.key;
+      }
+    };
+    document.addEventListener('keydown', this._hidDocHandler);
 
     setTimeout(armHid, 80);
 
@@ -3831,6 +3850,21 @@ class ContenedorAuditSession {
       lastCodeEl.classList.toggle('duplicate', isDup);
       this.processShipment(parsed);
     });
+
+    hidInput.addEventListener('input', () => {
+      if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
+      hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
+      hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    const _docHid = (e) => {
+      if (!isActive() || document.activeElement === hidInput) return;
+      if (e.key === 'Enter') {
+        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        hidInput.value += e.key;
+      }
+    };
+    document.addEventListener('keydown', _docHid);
 
     setTimeout(armHid, 80);
 

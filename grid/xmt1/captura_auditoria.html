@@ -2799,6 +2799,10 @@ class FormEngine {
   }
 
   stopScanner() {
+    if (this._hidDocHandler) {
+      document.removeEventListener('keydown', this._hidDocHandler);
+      this._hidDocHandler = null;
+    }
     if (this.scanner) {
       this.scanner.stop();
       this.scanner = null;
@@ -3130,6 +3134,21 @@ class FormEngine {
       lastCodeEl.className   = 'hh-last-code visible';
       this.confirmManual(field);
     });
+
+    hidInput.addEventListener('input', () => {
+      if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
+      hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
+      hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    this._hidDocHandler = (e) => {
+      if (!isActive() || document.activeElement === hidInput) return;
+      if (e.key === 'Enter') {
+        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        hidInput.value += e.key;
+      }
+    };
+    document.addEventListener('keydown', this._hidDocHandler);
 
     setTimeout(armHid, 80);
 
@@ -4156,6 +4175,21 @@ class DestinoDocaSession {
         this.handleHuScanned(hu);
       });
 
+      hidInput.addEventListener('input', () => {
+        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
+        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
+        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+      const _docHid0 = (e) => {
+        if (!isActive() || document.activeElement === hidInput) return;
+        if (e.key === 'Enter') {
+          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          hidInput.value += e.key;
+        }
+      };
+      document.addEventListener('keydown', _docHid0);
+
       setTimeout(armHid, 80);
 
       // Floating manual button
@@ -4505,6 +4539,21 @@ class InboundDriversSession {
         lastCodeEl.className = 'hh-last-code visible';
         this.submitRouteValue(raw);
       });
+
+      hidInput.addEventListener('input', () => {
+        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
+        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
+        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+      const _docHid1 = (e) => {
+        if (!isActive() || document.activeElement === hidInput) return;
+        if (e.key === 'Enter') {
+          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          hidInput.value += e.key;
+        }
+      };
+      document.addEventListener('keydown', _docHid1);
 
       setTimeout(armHid, 80);
 
@@ -4860,6 +4909,21 @@ class InboundDriversSession {
         lastCodeEl.classList.toggle('duplicate', isDup);
         this.submitShipmentValue(raw, hidInput);
       });
+
+      hidInput.addEventListener('input', () => {
+        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
+        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
+        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+      const _docHid2 = (e) => {
+        if (!isActive() || document.activeElement === hidInput) return;
+        if (e.key === 'Enter') {
+          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          hidInput.value += e.key;
+        }
+      };
+      document.addEventListener('keydown', _docHid2);
 
       setTimeout(armHid, 80);
 
@@ -5534,6 +5598,21 @@ class BarreduraSession {
         lastCodeEl.classList.toggle('duplicate', isDup);
         this.submitScanValue(raw, hidInput);
       });
+
+      hidInput.addEventListener('input', () => {
+        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
+        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
+        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+      const _docHid3 = (e) => {
+        if (!isActive() || document.activeElement === hidInput) return;
+        if (e.key === 'Enter') {
+          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          hidInput.value += e.key;
+        }
+      };
+      document.addEventListener('keydown', _docHid3);
 
       setTimeout(armHid, 80);
 
