@@ -101,7 +101,7 @@ body {
 .navbar {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 200;
   background: var(--color-bg);
 }
 
@@ -3125,7 +3125,7 @@ class FormEngine {
     hidInput.addEventListener('blur',  () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
 
     hidInput.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
+      if (e.key !== 'Enter' && e.keyCode !== 13) return;
       e.preventDefault();
       const raw = hidInput.value.trim();
       if (!raw) return;
@@ -3142,7 +3142,7 @@ class FormEngine {
     });
     this._hidDocHandler = (e) => {
       if (!isActive() || document.activeElement === hidInput) return;
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' || e.keyCode === 13) {
         hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
       } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
         hidInput.value += e.key;
@@ -4154,7 +4154,7 @@ class DestinoDocaSession {
       hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
         e.preventDefault();
         const raw = hidInput.value.trim();
         if (!raw || this.locked) return;
@@ -4182,7 +4182,7 @@ class DestinoDocaSession {
       });
       const _docHid0 = (e) => {
         if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.keyCode === 13) {
           hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           hidInput.value += e.key;
@@ -4530,7 +4530,7 @@ class InboundDriversSession {
       hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
         e.preventDefault();
         const raw = hidInput.value.trim();
         if (!raw || this.locked) return;
@@ -4547,7 +4547,7 @@ class InboundDriversSession {
       });
       const _docHid1 = (e) => {
         if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.keyCode === 13) {
           hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           hidInput.value += e.key;
@@ -4898,7 +4898,7 @@ class InboundDriversSession {
       hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
         e.preventDefault();
         const raw = hidInput.value.trim();
         if (!raw || this.locked) return;
@@ -4917,7 +4917,7 @@ class InboundDriversSession {
       });
       const _docHid2 = (e) => {
         if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.keyCode === 13) {
           hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           hidInput.value += e.key;
@@ -5587,7 +5587,7 @@ class BarreduraSession {
       hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter') return;
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
         e.preventDefault();
         const raw = hidInput.value.trim();
         if (!raw || this.locked) return;
@@ -5606,7 +5606,7 @@ class BarreduraSession {
       });
       const _docHid3 = (e) => {
         if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter') {
+        if (e.key === 'Enter' || e.keyCode === 13) {
           hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
           hidInput.value += e.key;
