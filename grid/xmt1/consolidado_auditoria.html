@@ -1424,9 +1424,9 @@
         const enCatalogo = records.filter(r => r.estado === 'En catálogo').length;
         this.addKpiCard(container, enCatalogo.toString(), 'En catálogo');
         this.addKpiCard(container, (total - enCatalogo).toString(), 'Fuera de catálogo');
-        const conAccionable = records.filter(r => (r.accionable || '').trim()).length;
-        if (conAccionable > 0) {
-          this.addKpiCard(container, conAccionable.toString(), 'Con accionable');
+        const conCaso = records.filter(r => (r.caso || '').trim()).length;
+        if (conCaso > 0) {
+          this.addKpiCard(container, conCaso.toString(), 'Con caso');
         }
       }
     }
@@ -2270,7 +2270,7 @@
         { field: 'ultimo_nodo', header: 'Último Nodo' },
         { field: 'estatus', header: 'Estatus' },
         { field: 'subestatus', header: 'Subestatus' },
-        { field: 'accionable', header: 'Accionable' },
+        { field: 'caso', header: 'Caso' },
       ],
       fields: [],
     },
