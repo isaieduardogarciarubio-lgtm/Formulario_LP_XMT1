@@ -2799,10 +2799,6 @@ class FormEngine {
   }
 
   stopScanner() {
-    if (this._hidDocHandler) {
-      document.removeEventListener('keydown', this._hidDocHandler);
-      this._hidDocHandler = null;
-    }
     if (this.scanner) {
       this.scanner.stop();
       this.scanner = null;
@@ -3091,7 +3087,7 @@ class FormEngine {
     hidInput.setAttribute('autocorrect', 'off');
     hidInput.setAttribute('autocapitalize', 'off');
     hidInput.setAttribute('spellcheck', 'false');
-    hidInput.setAttribute('inputmode', field.idType === 'doca' ? 'numeric' : 'none');
+    hidInput.setAttribute('inputmode', 'none');
     hidInput.setAttribute('tabindex', '0');
     if (this.values[field.id]) hidInput.value = this.values[field.id];
     this.scannerBody.appendChild(hidInput);
@@ -3119,10 +3115,23 @@ class FormEngine {
 
     let modalOpen = false;
     const isActive = () => !!this.scannerBody && this.scannerBody.contains(hidInput) && ScanUI.mode() === 'handheld' && !modalOpen;
-    const armHid   = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
+
+    let raceArmed = false;
+    const armHid = () => {
+      if (!isActive()) return;
+      if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+      raceArmed = false;
+      hidInput.setAttribute('inputmode', 'none');
+      hidInput.focus({ preventScroll: true });
+      setTimeout(() => {
+        if (!isActive() || document.activeElement !== hidInput) return;
+        hidInput.setAttribute('inputmode', 'text');
+        raceArmed = true;
+      }, 50);
+    };
 
     hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
-    hidInput.addEventListener('blur',  () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
+    hidInput.addEventListener('blur',  () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
 
     hidInput.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter' && e.keyCode !== 13) return;
@@ -3135,22 +3144,7 @@ class FormEngine {
       this.confirmManual(field);
     });
 
-    hidInput.addEventListener('input', () => {
-      if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
-      hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
-      hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    });
-    this._hidDocHandler = (e) => {
-      if (!isActive() || document.activeElement === hidInput) return;
-      if (e.key === 'Enter' || e.keyCode === 13) {
-        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        hidInput.value += e.key;
-      }
-    };
-    document.addEventListener('keydown', this._hidDocHandler);
-
-    setTimeout(armHid, 80);
+    armHid();
 
     // ── Floating manual button ───────────────────────────────────────────
     const manualBtn = document.createElement('button');
@@ -4148,10 +4142,23 @@ class DestinoDocaSession {
 
       let modalOpen = false;
       const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
-      const armHid = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
 
       hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
-      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' && e.keyCode !== 13) return;
@@ -4175,22 +4182,7 @@ class DestinoDocaSession {
         this.handleHuScanned(hu);
       });
 
-      hidInput.addEventListener('input', () => {
-        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
-        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
-        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      });
-      const _docHid0 = (e) => {
-        if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter' || e.keyCode === 13) {
-          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          hidInput.value += e.key;
-        }
-      };
-      document.addEventListener('keydown', _docHid0);
-
-      setTimeout(armHid, 80);
+      armHid();
 
       // Floating manual button
       const manualBtn = document.createElement('button');
@@ -4524,10 +4516,23 @@ class InboundDriversSession {
 
       let modalOpen = false;
       const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
-      const armHid = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
 
       hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
-      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' && e.keyCode !== 13) return;
@@ -4540,22 +4545,7 @@ class InboundDriversSession {
         this.submitRouteValue(raw);
       });
 
-      hidInput.addEventListener('input', () => {
-        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
-        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
-        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      });
-      const _docHid1 = (e) => {
-        if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter' || e.keyCode === 13) {
-          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          hidInput.value += e.key;
-        }
-      };
-      document.addEventListener('keydown', _docHid1);
-
-      setTimeout(armHid, 80);
+      armHid();
 
       // Floating manual button
       const manualBtn = document.createElement('button');
@@ -4892,10 +4882,23 @@ class InboundDriversSession {
 
       let modalOpen = false;
       const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
-      const armHid = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
 
       hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
-      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' && e.keyCode !== 13) return;
@@ -4910,22 +4913,7 @@ class InboundDriversSession {
         this.submitShipmentValue(raw, hidInput);
       });
 
-      hidInput.addEventListener('input', () => {
-        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
-        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
-        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      });
-      const _docHid2 = (e) => {
-        if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter' || e.keyCode === 13) {
-          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          hidInput.value += e.key;
-        }
-      };
-      document.addEventListener('keydown', _docHid2);
-
-      setTimeout(armHid, 80);
+      armHid();
 
       // Floating manual button
       const manualBtn = document.createElement('button');
@@ -5581,10 +5569,23 @@ class BarreduraSession {
 
       let modalOpen = false;
       const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
-      const armHid = () => { if (isActive()) hidInput.focus({ preventScroll: true }); };
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
 
       hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
-      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); requestAnimationFrame(armHid); });
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
 
       hidInput.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' && e.keyCode !== 13) return;
@@ -5599,22 +5600,7 @@ class BarreduraSession {
         this.submitScanValue(raw, hidInput);
       });
 
-      hidInput.addEventListener('input', () => {
-        if (!hidInput.value.includes('\n') && !hidInput.value.includes('\r')) return;
-        hidInput.value = hidInput.value.replace(/[\r\n]/g, '');
-        hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-      });
-      const _docHid3 = (e) => {
-        if (!isActive() || document.activeElement === hidInput) return;
-        if (e.key === 'Enter' || e.keyCode === 13) {
-          hidInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-        } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          hidInput.value += e.key;
-        }
-      };
-      document.addEventListener('keydown', _docHid3);
-
-      setTimeout(armHid, 80);
+      armHid();
 
       // Floating manual button
       const manualBtn = document.createElement('button');
