@@ -2209,7 +2209,7 @@ const FORMS_CONFIG = {
     fields: [
       { id: 'lugar', type: 'text' },
       { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
-      { id: 'accionable', type: 'text' },
+      { id: 'caso', type: 'text' },
     ],
   },
 };
@@ -5296,10 +5296,10 @@ class InboundDriversSession {
  *   - En catálogo: guarda directo con esos datos + los días en sitio
  *     calculados desde fecha_inbound. Si el subestatus es "on_hold",
  *     alerta que el paquete requiere auditoría fiscal con LP y lo guarda
- *     con ese accionable automáticamente.
+ *     con ese caso automáticamente.
  *   - Fuera de catálogo: pide revisar Sauron (link directo al shipment) y
- *     elegir un accionable (Mesa de Ayuda / Inventarios / Sin acción /
- *     Otro).
+ *     elegir un caso (Sin recepción / Despachado / Con estatus BPP /
+ *     Missort / Otro).
  * La barredura funciona igual sin catálogo publicado (o con uno viejo) —
  * solo avisa una vez al abrir el log, no bloquea el escaneo. No se puede
  * repetir un ID en un rango de 12h — la deduplicación es global: al abrir
@@ -5311,7 +5311,7 @@ class BarreduraSession {
   static DEDUP_WINDOW_MS = 12 * 60 * 60 * 1000;
   static CATALOG_STALE_MS = 12 * 60 * 60 * 1000;
 
-  static ACCIONABLE_OPTIONS = ['Canalizar a Mesa de Ayuda', 'Canalizar a Inventarios', 'Sin acción', 'Otro'];
+  static CASO_OPTIONS = ['Sin recepción', 'Despachado', 'Con estatus BPP', 'Missort', 'Otro'];
 
   static ZONA_OPTIONS = ['Sorting Large', 'Sorting GM1', 'Sorting GM2', 'Inbound FM', 'Inbound LH', 'Mesa de Ayuda', 'Inventarios', 'Otro'];
 
@@ -5720,7 +5720,7 @@ class BarreduraSession {
    * Duplicado en 12h -> aviso, no agrega. En catálogo -> guarda directo
    * con sus datos (o alerta de auditoría fiscal si el subestatus es
    * on_hold). Fuera de catálogo -> pide revisar Sauron y elegir un
-   * accionable antes de guardar.
+   * caso antes de guardar.
    */
   processShipment(shipmentId) {
     const id = String(shipmentId);
@@ -5823,7 +5823,7 @@ class BarreduraSession {
     return Math.max(days, 0);
   }
 
-  async saveFound(id, meta, accionable = '') {
+  async saveFound(id, meta, caso = '') {
     this.recentMap.set(id, new Date().toISOString());
     this.flash('ok', `${id} · En catálogo`);
     if (this.onScan) {
@@ -5836,7 +5836,7 @@ class BarreduraSession {
         ultimo_nodo: meta.ultimo_nodo || '',
         estatus: meta.estatus || '',
         subestatus: meta.subestatus || '',
-        accionable,
+        caso,
       });
     }
     this.count += 1;
@@ -5845,7 +5845,7 @@ class BarreduraSession {
 
   /**
    * Subestatus on_hold: alerta obligatoria de auditoría fiscal antes de
-   * guardar — el accionable queda resuelto por la alerta, no hace falta
+   * guardar — el caso queda resuelto por la alerta, no hace falta
    * que el usuario elija nada.
    */
   async handleOnHold(id, meta) {
@@ -5859,7 +5859,7 @@ class BarreduraSession {
   }
 
   /* ====================================================================== */
-  /* Fuera de catálogo: Sauron + accionable (enum + "Otro" texto libre)     */
+  /* Fuera de catálogo: Sauron + caso (enum + "Otro" texto libre)           */
   /* ====================================================================== */
 
   renderNotFound(id) {
@@ -5877,7 +5877,7 @@ class BarreduraSession {
           </div>
         </div>
         <a href="${sauronUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
-        <h1 class="step-question">¿Qué accionable requiere?</h1>
+        <h1 class="step-question">¿Cuál es el caso?</h1>
         <div class="choice-options"></div>
         <div class="step-support"></div>
       </div>
@@ -5891,7 +5891,7 @@ class BarreduraSession {
       this.renderLoop();
     });
 
-    BarreduraSession.ACCIONABLE_OPTIONS.forEach((opt) => {
+    BarreduraSession.CASO_OPTIONS.forEach((opt) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'choice-btn';
@@ -5909,11 +5909,11 @@ class BarreduraSession {
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
-          <div class="step-progress">Fuera de catálogo — otro accionable</div>
+          <div class="step-progress">Fuera de catálogo — otro caso</div>
         </div>
-        <h1 class="step-question">Escribe el accionable (${id})</h1>
+        <h1 class="step-question">Escribe el caso (${id})</h1>
         <div class="step-input-wrap">
-          <input type="text" class="step-input barredura-accionable-input" placeholder="ACCIONABLE" />
+          <input type="text" class="step-input barredura-caso-input" placeholder="CASO" />
         </div>
         <div class="step-support">Solo mayúsculas. Presiona Enter para guardar.</div>
       </div>
@@ -5924,7 +5924,7 @@ class BarreduraSession {
       this.renderNotFound(id);
     });
 
-    const input = this.container.querySelector('.barredura-accionable-input');
+    const input = this.container.querySelector('.barredura-caso-input');
     input.addEventListener('input', () => {
       const start = input.selectionStart;
       const end = input.selectionEnd;
@@ -5936,7 +5936,7 @@ class BarreduraSession {
       e.preventDefault();
       const val = input.value.trim().toUpperCase();
       if (!val) {
-        this.supportEl.textContent = 'Escribe un accionable para continuar.';
+        this.supportEl.textContent = 'Escribe un caso para continuar.';
         this.supportEl.classList.add('error');
         return;
       }
@@ -5945,12 +5945,12 @@ class BarreduraSession {
     setTimeout(() => input.focus(), 60);
   }
 
-  async saveNotFound(id, accionable) {
+  async saveNotFound(id, caso) {
     // Guard contra doble toque: un segundo click rápido en la misma
     // opción (o Enter dos veces en "Otro") duplicaba el registro mientras
     // el primer guardado todavía no terminaba.
-    if (this.savingAccionable) return;
-    this.savingAccionable = true;
+    if (this.savingCaso) return;
+    this.savingCaso = true;
 
     this.recentMap.set(id, new Date().toISOString());
     if (this.onScan) {
@@ -5963,11 +5963,11 @@ class BarreduraSession {
         ultimo_nodo: '',
         estatus: '',
         subestatus: '',
-        accionable,
+        caso,
       });
     }
     this.count += 1;
-    this.savingAccionable = false;
+    this.savingCaso = false;
     this.locked = false;
     this.renderLoop();
   }
