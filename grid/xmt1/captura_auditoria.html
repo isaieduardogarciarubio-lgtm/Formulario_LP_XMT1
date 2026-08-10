@@ -1847,11 +1847,15 @@ class RecordStore {
     return `${formId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  // add() en vez de put(): un uid duplicado (bug de generación o reintento
+  // indebido) debe fallar ruidosamente en vez de pisar en silencio el
+  // registro existente — put() nunca debería necesitarse aquí porque cada
+  // captura genera un uid nuevo.
   static async put(uid, formId, data) {
     const db = await this.open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(this.STORE, 'readwrite');
-      tx.objectStore(this.STORE).put({ uid, formId, data });
+      tx.objectStore(this.STORE).add({ uid, formId, data });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -2228,6 +2232,30 @@ const HISTORY_FIELD_MAP = {
   inbound_drivers: { id: 'shipment_id', result: 'estado' },
   barredura: { id: 'shipment_id', result: 'estado' },
 };
+
+/**
+ * dedupe_key: identidad de NEGOCIO del artículo escaneado, separada del
+ * `uid` (que identifica el evento/intento de captura, no el artículo — dos
+ * dispositivos escaneando el mismo shipment generan dos `uid` distintos
+ * pero deberían compartir el mismo dedupe_key). Solo cubre los logs de
+ * escaneo rápido en loop, donde el riesgo de doble captura entre
+ * dispositivos es real; los formularios de un solo registro no lo
+ * necesitan. Por ahora es metadato guardado junto al registro — no hay
+ * todavía una verificación remota contra esta clave (ver arquitectura de
+ * escaneos rápidos: eso requiere state buckets particionados/con claims,
+ * que queda fuera de este cambio).
+ */
+const DEDUPE_FIELD_MAP = {
+  destino_doca: { type: 'hu', field: 'hu' },
+  inbound_drivers: { type: 'shipment', field: 'shipment_id' },
+  barredura: { type: 'shipment', field: 'shipment_id' },
+};
+
+function buildDedupeKey(formId, type, rawValue) {
+  const code = String(rawValue ?? '').trim().toUpperCase();
+  if (!code) return null;
+  return [formId, type, code].join('|').toUpperCase();
+}
 
 /**
  * Scan parser and validator
@@ -7018,12 +7046,18 @@ class CapturaApp {
       const ts = new Date().toISOString();
       const uid = RecordStore.genUid(formId);
 
+      // dedupe_key: identidad de negocio del artículo (no del evento de
+      // captura) — ver comentario en DEDUPE_FIELD_MAP.
+      const dedupeInfo = DEDUPE_FIELD_MAP[formId];
+      const dedupeKey = dedupeInfo ? buildDedupeKey(formId, dedupeInfo.type, values[dedupeInfo.field]) : null;
+
       const record = {
         uid,
         ts,
         formId,
         ...values,
         auditoria: this.userEmail,
+        ...(dedupeKey ? { dedupe_key: dedupeKey } : {}),
       };
 
       // Store locally
@@ -7047,11 +7081,19 @@ class CapturaApp {
 
       DebugConsole.log(`Registro guardado localmente (${uid})`, 'info');
 
-      // Try to sync immediately if online
+      // Try to sync immediately if online. En modo loop (stayInSession) NO
+      // se espera la sincronización: el operador debe poder seguir
+      // escaneando de inmediato mientras flushOutbox corre en segundo
+      // plano — esperar aquí bloqueaba cada escaneo con el round-trip de
+      // red completo de TODA la cola pendiente, no solo de este registro.
       if (navigator.onLine) {
-        if (!stayInSession) LoadingOverlay.show('Sincronizando con Grid...');
-        await this.flushOutbox();
-        if (!stayInSession) LoadingOverlay.success('Guardado');
+        if (!stayInSession) {
+          LoadingOverlay.show('Sincronizando con Grid...');
+          await this.flushOutbox();
+          LoadingOverlay.success('Guardado');
+        } else {
+          this.flushOutbox().catch((e) => DebugConsole.log(`flushOutbox en segundo plano falló: ${e.message}`, 'warn'));
+        }
       } else if (!stayInSession) {
         LoadingOverlay.success('Guardado local');
         this.showToast('Guardado local — se sincronizará al reconectar', 'info');

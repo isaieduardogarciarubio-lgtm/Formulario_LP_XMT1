@@ -1589,11 +1589,15 @@ class RecordStore {
     return `${formId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  // add() en vez de put(): un uid duplicado (bug de generación o reintento
+  // indebido) debe fallar ruidosamente en vez de pisar en silencio el
+  // registro existente — put() nunca debería necesitarse aquí porque cada
+  // captura genera un uid nuevo.
   static async put(uid, formId, data) {
     const db = await this.open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(this.STORE, 'readwrite');
-      tx.objectStore(this.STORE).put({ uid, formId, data });
+      tx.objectStore(this.STORE).add({ uid, formId, data });
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
@@ -1794,6 +1798,27 @@ const FORMS_CONFIG = {
     ],
   },
 };
+
+/**
+ * dedupe_key: identidad de NEGOCIO del artículo escaneado, separada del
+ * `uid` (que identifica el evento/intento de captura, no el artículo — dos
+ * dispositivos escaneando el mismo shipment generan dos `uid` distintos
+ * pero deberían compartir el mismo dedupe_key). Solo cubre Contenedor, el
+ * único log de escaneo rápido en loop de SVC — los formularios de un solo
+ * registro no lo necesitan. Por ahora es metadato guardado junto al
+ * registro — no hay todavía una verificación remota contra esta clave (ver
+ * arquitectura de escaneos rápidos: eso requiere state buckets
+ * particionados/con claims, que queda fuera de este cambio).
+ */
+const DEDUPE_FIELD_MAP = {
+  contenedor: { type: 'shipment', field: 'shipment' },
+};
+
+function buildDedupeKey(formId, type, rawValue) {
+  const code = String(rawValue ?? '').trim().toUpperCase();
+  if (!code) return null;
+  return [formId, type, code].join('|').toUpperCase();
+}
 
 /**
  * Timestamp de registro en Hora del Centro de México (UTC-6 fijo — México
@@ -4196,7 +4221,7 @@ class ContenedorAuditSession {
     const uid = RecordStore.genUid('contenedor');
     const fullRecord = { uid, ts, ...record, auditoria: this.app.userEmail };
     try {
-      await this.app.persistRecord('contenedor', fullRecord);
+      await this.app.persistRecord('contenedor', fullRecord, { stayInSession: true });
     } catch (e) {
       DebugConsole.log(`Error al guardar: ${e.message}`, 'error');
       this.app.showToast('Error al guardar el registro', 'error');
@@ -4422,6 +4447,7 @@ class CapturaApp {
     this.statusCatalogLoadedAt = null;
     this.catalogAccessDenied = false;
     this.outboxRecords = []; // agrupa registros por formId: {contenedor: [...], rts: [...], ...}
+    this.syncing = false;
     this.currentEngine = null;
     this.userEmail = null;
     this.pendingCount = 0;
@@ -4903,9 +4929,23 @@ class CapturaApp {
    * navega a ningún lado — eso lo decide quien llama (el wizard genérico
    * vuelve al menú tras un único registro; el loop de Contenedor sigue
    * escaneando sin salir de la pantalla).
+   *
+   * stayInSession=true (loop de Contenedor) NO espera flushOutbox ni
+   * muestra el overlay bloqueante: el operador debe poder seguir
+   * escaneando de inmediato mientras la sincronización corre en segundo
+   * plano — esperar aquí bloqueaba cada escaneo con el round-trip de red
+   * completo de TODA la cola pendiente (fotos incluidas), no solo de este
+   * registro. La confirmación visual del loop ya la da flash(), no el
+   * overlay.
    */
-  async persistRecord(formId, record) {
-    LoadingOverlay.show('Guardando...');
+  async persistRecord(formId, record, { stayInSession = false } = {}) {
+    const dedupeInfo = DEDUPE_FIELD_MAP[formId];
+    if (dedupeInfo) {
+      const dedupeKey = buildDedupeKey(formId, dedupeInfo.type, record[dedupeInfo.field]);
+      if (dedupeKey) record.dedupe_key = dedupeKey;
+    }
+
+    if (!stayInSession) LoadingOverlay.show('Guardando...');
     try {
       await RecordStore.put(record.uid, formId, record);
       if (!this.outboxRecords[formId]) this.outboxRecords[formId] = [];
@@ -4925,15 +4965,19 @@ class CapturaApp {
       DebugConsole.log(`Registro guardado localmente (${record.uid})`, 'info');
 
       if (navigator.onLine) {
-        LoadingOverlay.show('Sincronizando con Grid...');
-        await this.flushOutbox();
-        LoadingOverlay.success('Guardado');
-      } else {
+        if (!stayInSession) {
+          LoadingOverlay.show('Sincronizando con Grid...');
+          await this.flushOutbox();
+          LoadingOverlay.success('Guardado');
+        } else {
+          this.flushOutbox().catch((e) => DebugConsole.log(`flushOutbox en segundo plano falló: ${e.message}`, 'warn'));
+        }
+      } else if (!stayInSession) {
         LoadingOverlay.success('Guardado local');
         this.showToast('Guardado local — se sincronizará al reconectar', 'info');
       }
     } catch (e) {
-      LoadingOverlay.error('Error al guardar');
+      if (!stayInSession) LoadingOverlay.error('Error al guardar');
       throw e;
     }
   }
@@ -5020,63 +5064,76 @@ class CapturaApp {
       return;
     }
 
-    DebugConsole.log('Sincronizando registros...', 'info');
+    if (this.syncing) {
+      // Ya hay un flushOutbox en curso (loop de Contenedor ahora lo llama
+      // en segundo plano en cada escaneo sin esperarlo) — ignorar la
+      // llamada duplicada en vez de procesar el mismo registro dos veces.
+      DebugConsole.log('Sincronización ya en curso — se ignora la llamada duplicada', 'info');
+      return;
+    }
 
-    const synced = [];
-    let networkDown = false;
+    this.syncing = true;
+    try {
+      DebugConsole.log('Sincronizando registros...', 'info');
 
-    for (const formId of Object.keys(this.outboxRecords)) {
-      const records = this.outboxRecords[formId];
-      for (const record of records) {
-        try {
-          await this.syncOneRecord(formId, record);
-          synced.push(record.uid);
-          await RecordStore.markHistorySynced(record.uid);
-          DebugConsole.log(`Sincronizado: ${record.uid}`, 'info');
-        } catch (e) {
-          if (e.isNetworkError || e.isTimeout) {
-            DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
-            networkDown = true;
-            break;
+      const synced = [];
+      let networkDown = false;
+
+      for (const formId of Object.keys(this.outboxRecords)) {
+        const records = this.outboxRecords[formId];
+        for (const record of records) {
+          try {
+            await this.syncOneRecord(formId, record);
+            synced.push(record.uid);
+            await RecordStore.markHistorySynced(record.uid);
+            DebugConsole.log(`Sincronizado: ${record.uid}`, 'info');
+          } catch (e) {
+            if (e.isNetworkError || e.isTimeout) {
+              DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
+              networkDown = true;
+              break;
+            }
+            DebugConsole.log(`Error al sincronizar ${record.uid}: ${e.message}`, 'error');
           }
-          DebugConsole.log(`Error al sincronizar ${record.uid}: ${e.message}`, 'error');
+        }
+        if (networkDown) break;
+      }
+
+      // Remove synced from outbox y Storage
+      for (const uid of synced) {
+        await RecordStore.delete(uid);
+      }
+
+      // Limpiar outboxRecords eliminando los sincronizados
+      for (const formId of Object.keys(this.outboxRecords)) {
+        this.outboxRecords[formId] = this.outboxRecords[formId].filter(r => !synced.includes(r.uid));
+        if (this.outboxRecords[formId].length === 0) {
+          delete this.outboxRecords[formId];
         }
       }
-      if (networkDown) break;
-    }
+      this.updatePendingBadge();
 
-    // Remove synced from outbox y Storage
-    for (const uid of synced) {
-      await RecordStore.delete(uid);
-    }
-
-    // Limpiar outboxRecords eliminando los sincronizados
-    for (const formId of Object.keys(this.outboxRecords)) {
-      this.outboxRecords[formId] = this.outboxRecords[formId].filter(r => !synced.includes(r.uid));
-      if (this.outboxRecords[formId].length === 0) {
-        delete this.outboxRecords[formId];
+      if (synced.length > 0) {
+        DebugConsole.log(`${synced.length} registros sincronizados`, 'info');
+        this.showToast(`${synced.length} registros sincronizados`, 'success');
       }
-    }
-    this.updatePendingBadge();
 
-    if (synced.length > 0) {
-      DebugConsole.log(`${synced.length} registros sincronizados`, 'info');
-      this.showToast(`${synced.length} registros sincronizados`, 'success');
-    }
+      const totalRemaining = Object.values(this.outboxRecords).reduce((acc, arr) => acc + arr.length, 0);
+      if (networkDown) {
+        this.showToast(
+          `Sin conexión con Grid — ${totalRemaining} pendiente(s), se reintentará al reconectar`,
+          'warn'
+        );
+      } else if (synced.length === 0 && totalRemaining > 0) {
+        this.showToast('No se pudo sincronizar — ver consola de errores', 'error');
+      }
 
-    const totalRemaining = Object.values(this.outboxRecords).reduce((acc, arr) => acc + arr.length, 0);
-    if (networkDown) {
-      this.showToast(
-        `Sin conexión con Grid — ${totalRemaining} pendiente(s), se reintentará al reconectar`,
-        'warn'
-      );
-    } else if (synced.length === 0 && totalRemaining > 0) {
-      this.showToast('No se pudo sincronizar — ver consola de errores', 'error');
-    }
-
-    // Si el menú está visible, refrescar el historial
-    if (document.getElementById('history-list')) {
-      this.renderHistoryList();
+      // Si el menú está visible, refrescar el historial
+      if (document.getElementById('history-list')) {
+        this.renderHistoryList();
+      }
+    } finally {
+      this.syncing = false;
     }
   }
 
