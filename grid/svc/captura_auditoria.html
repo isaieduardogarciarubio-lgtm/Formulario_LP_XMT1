@@ -2670,8 +2670,13 @@ class FormEngine {
     screen.appendChild(this.buildProgress());
 
     // Toggle Handheld / Cámara. Handheld es el modo principal (lector
-    // integrado); al cambiar se persiste y se re-renderiza el cuerpo.
-    screen.appendChild(ScanUI.buildToggle(() => this.applyScanMode(field)));
+    // integrado); al cambiar se persiste y se re-renderiza el cuerpo. El
+    // toggle mismo se reconstruye en cada cambio (ver applyScanMode) para
+    // que la pastilla activa refleje el modo real — si solo se
+    // re-renderizara el cuerpo, el toggle se quedaba mostrando el modo
+    // anterior aunque el escaneo ya hubiera cambiado.
+    this.toggleEl = ScanUI.buildToggle(() => this.applyScanMode(field));
+    screen.appendChild(this.toggleEl);
 
     const h1 = document.createElement('h1');
     h1.className = 'step-question';
@@ -2696,6 +2701,11 @@ class FormEngine {
 
   applyScanMode(field) {
     this.stopScanner();
+    if (this.toggleEl) {
+      const freshToggle = ScanUI.buildToggle(() => this.applyScanMode(field));
+      this.toggleEl.replaceWith(freshToggle);
+      this.toggleEl = freshToggle;
+    }
     if (ScanUI.mode() === 'camera') {
       this.enterScanningState(field);
     } else {
@@ -3697,7 +3707,7 @@ class ContenedorAuditSession {
 
     document.getElementById('loop-back-btn').addEventListener('click', () => this.back());
     document.getElementById('doca-pill').addEventListener('click', () => this.promptDoca({ isChange: true }));
-    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.applyScanMode()));
+    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.renderScanLoop()));
 
     this.scannerBody = document.getElementById('loop-scanner-body');
     this.supportEl = document.getElementById('loop-support');
