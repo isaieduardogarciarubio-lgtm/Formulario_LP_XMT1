@@ -5382,13 +5382,13 @@ class InboundDriversSession {
  *     Missort / Otro).
  * La barredura funciona igual sin catálogo publicado (o con uno viejo) —
  * solo avisa una vez al abrir el log, no bloquea el escaneo. No se puede
- * repetir un ID en un rango de 12h — la deduplicación es global: al abrir
+ * repetir un ID en un rango de 16h — la deduplicación es global: al abrir
  * el log se leen los registros de barredura_master (+ la cola local) de
- * las últimas 12h, y esos IDs quedan bloqueados desde el arranque aunque
+ * las últimas 16h, y esos IDs quedan bloqueados desde el arranque aunque
  * sean de otra sesión/dispositivo.
  */
 class BarreduraSession {
-  static DEDUP_WINDOW_MS = 12 * 60 * 60 * 1000;
+  static DEDUP_WINDOW_MS = 16 * 60 * 60 * 1000;
   static CATALOG_STALE_MS = 12 * 60 * 60 * 1000;
 
   static CASO_OPTIONS = ['Sin recepción', 'Despachado', 'Con estatus BPP', 'Missort', 'Otro'];
@@ -5483,7 +5483,7 @@ class BarreduraSession {
   }
 
   /**
-   * Duplicado si el ID se escaneó en las últimas 12h (por cualquiera). Se
+   * Duplicado si el ID se escaneó en las últimas 16h (por cualquiera). Se
    * evalúa contra la marca de tiempo real para no bloquear de más si la
    * sesión dura mucho.
    */
@@ -5902,7 +5902,7 @@ class BarreduraSession {
 
     if (this.isDuplicate(id)) {
       this.vibrate(40);
-      this.flash('warn', `${id} · Ya escaneado en las últimas 12h.`);
+      this.flash('warn', `${id} · Ya escaneado en las últimas 16h.`);
       return;
     }
 
@@ -5947,18 +5947,28 @@ class BarreduraSession {
 
     if (shipmentIds.length === 0) {
       this.vibrate(40);
-      this.flash('warn', `HU ${hu} no está en catálogo — escanea el Shipment ID directamente.`);
+      this.flash('error', `HU ${hu} no está en catálogo — escanea el Shipment ID directamente.`);
       return;
     }
 
     const pendingIds = shipmentIds.filter((sid) => !this.isDuplicate(sid));
     if (pendingIds.length === 0) {
       this.vibrate(40);
-      this.flash('warn', `HU ${hu} · Ya escaneado en las últimas 12h.`);
+      this.flash('error', `HU ${hu} · Ya escaneado en las últimas 16h.`);
       return;
     }
 
+    // Calcular despachados de forma sincrónica para el flash inmediato.
+    const dispatchedCount = pendingIds.filter(
+      (sid) => (this.catalogIndex[sid]?.hub_status || '').trim().toLowerCase() === 'dispatched'
+    ).length;
+    const dispatchedNote = dispatchedCount > 0 ? ` · ${dispatchedCount} despachado(s)` : '';
     this.vibrate(60);
+    // Flash inmediato (sincrónico) — no espera el guardado async.
+    this.flash(
+      dispatchedCount > 0 ? 'error' : 'ok',
+      `HU ${hu} · ${pendingIds.length} shipment(s)${dispatchedNote}`
+    );
 
     if (this.lugar === 'Staging') {
       this.locked = true;
@@ -5974,17 +5984,11 @@ class BarreduraSession {
   }
 
   async saveHuShipments(hu, shipmentIds, lugarForRecord = this.lugar) {
-    let dispatchedCount = 0;
     for (const sid of shipmentIds) {
       const meta = this.catalogIndex[sid];
       const isDispatched = (meta.hub_status || '').trim().toLowerCase() === 'dispatched';
-      if (isDispatched) dispatchedCount += 1;
       await this.saveFound(sid, meta, isDispatched ? 'Despachado' : '', lugarForRecord, { silent: true });
     }
-    const dispatchedNote = dispatchedCount > 0 ? ` · ${dispatchedCount} despachado(s)` : '';
-    // Aviso visual: despachado se marca en rojo aunque no sea un error —
-    // el flujo sigue igual, solo cambia el color para que salte a la vista.
-    this.flash(dispatchedCount > 0 ? 'error' : 'ok', `HU ${hu} · ${shipmentIds.length} shipment(s)${dispatchedNote}`);
   }
 
   /** Días transcurridos desde fecha_inbound hasta hoy (o '' si no hay fecha válida). */
@@ -7119,7 +7123,7 @@ class CapturaApp {
    * sin sincronizar. Devuelve [{ shipment_id, ts }].
    */
   async loadRecentBarredura() {
-    const cutoff = Date.now() - 12 * 60 * 60 * 1000;
+    const cutoff = Date.now() - BarreduraSession.DEDUP_WINDOW_MS;
     const recent = [];
     try {
       const bucket = await this.gridClient.getStateBucket('barredura_master');
