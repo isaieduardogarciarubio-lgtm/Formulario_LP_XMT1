@@ -409,6 +409,23 @@
       font-weight: 600;
     }
 
+    .editable-cell {
+      cursor: pointer;
+      border-bottom: 1px dashed var(--border);
+    }
+    .editable-cell:hover {
+      background: var(--surface-2);
+    }
+    .inline-edit-input {
+      width: 100%;
+      background: var(--bg);
+      color: inherit;
+      border: 1px solid var(--accent);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font: inherit;
+    }
+
     /* ── ACCIONES EN TABLA ── */
     .btn-action {
       background: transparent;
@@ -1810,6 +1827,19 @@
             // guarda el LDAP. Se muestra solo el LDAP en ambos casos —
             // todo desde el @ (inclusive) se descarta.
             td.textContent = value.replace(/@.*$/, '');
+          } else if (this.currentLog === 'barredura' && col.field === 'costo_usd') {
+            // Costo USD: columna editable, no viene de la captura — se
+            // llena manualmente desde el dashboard.
+            td.textContent = value || '—';
+            this.makeEditableCell(td, record, this.currentLog, 'costo_usd');
+          } else if (this.currentLog === 'barredura' && col.field === 'usuario_dispatch') {
+            // Editable solo cuando el registro tiene caso (fuera de
+            // catálogo / Backlog inesperado) y todavía no tiene un
+            // usuario_dispatch guardado — para los que sí vienen del
+            // catálogo, el dato ya es correcto y no debe tocarse.
+            const isEditableNow = !!record.caso && !value;
+            td.textContent = value || (isEditableNow ? '—' : '');
+            if (isEditableNow) this.makeEditableCell(td, record, this.currentLog, 'usuario_dispatch');
           } else if (isPhotoField(col.field)) {
             // La foto se ve con la acción "Ver fotos"; aquí solo un indicador.
             td.textContent = value ? '1 foto' : '—';
@@ -1878,6 +1908,84 @@
 
       // Recargar tabla y gráficas
       this.render();
+    }
+
+    /**
+     * Convierte una celda en editable al hacer clic: swap a <input>,
+     * guarda al perder foco o Enter (Escape cancela sin guardar). Se
+     * reusa para cualquier campo de cualquier log — el estilo/condición de
+     * cuándo mostrarla la decide quien llama en renderTable.
+     */
+    makeEditableCell(td, record, logType, field) {
+      td.classList.add('editable-cell');
+      td.title = 'Clic para editar';
+      td.addEventListener('click', () => {
+        if (td.querySelector('input')) return; // ya está en edición
+        const currentValue = record[field] || '';
+        td.textContent = '';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentValue;
+        input.className = 'inline-edit-input';
+        td.appendChild(input);
+        input.focus();
+        input.select();
+
+        let committed = false;
+        const commit = async () => {
+          if (committed) return;
+          committed = true;
+          const newValue = input.value.trim();
+          input.disabled = true;
+          if (newValue !== currentValue) {
+            await this.updateRecordField(logType, record.uid, field, newValue);
+          }
+          td.textContent = record[field] || '—';
+        };
+
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+          if (e.key === 'Escape') { input.value = currentValue; input.blur(); }
+        });
+      });
+    }
+
+    /**
+     * Guarda un solo campo de un registro ya existente en {logType}_master.
+     * Reintenta en 409 (otra edición/captura concurrente) releyendo el
+     * bucket antes de reintentar — a diferencia de deleteRecord (que no
+     * revisa el resultado de setStateBucket), aquí sí importa detectar el
+     * conflicto porque una edición silenciosamente perdida es peor que un
+     * borrado silenciosamente exitoso.
+     */
+    async updateRecordField(logType, uid, field, value) {
+      const records = this.logs[logType];
+      const record = records.find(r => r.uid === uid);
+      if (!record) {
+        this.showNotification('Registro no encontrado', 'error');
+        return false;
+      }
+
+      const previousValue = record[field];
+      record[field] = value;
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await this.gridClient.setStateBucket(logType + '_master', { version: 1, records });
+        if (result?.ok) {
+          this.showNotification('Campo actualizado', 'success');
+          return true;
+        }
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));
+          continue;
+        }
+        break; // error de red/servidor — no tiene caso reintentar en loop
+      }
+
+      record[field] = previousValue;
+      this.showNotification('No se pudo guardar el cambio — intenta de nuevo', 'error');
+      return false;
     }
 
     /**
@@ -2279,15 +2387,18 @@
       csvColumns: [
         { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
+        { field: 'hu', header: 'HU' },
         { field: 'shipment_id', header: 'Shipment ID' },
         { field: 'lugar', header: 'Lugar' },
         { field: 'estado', header: 'Estado' },
         { field: 'dias_en_sitio', header: 'Días en Sitio' },
         { field: 'hub_status', header: 'HUB Status' },
-        { field: 'ultimo_nodo', header: 'Último Nodo' },
-        { field: 'estatus', header: 'Estatus' },
-        { field: 'subestatus', header: 'Subestatus' },
+        { field: 'usuario_dispatch', header: 'Usuario Dispatch' },
+        { field: 'logistic_center', header: 'Logistic Center' },
+        { field: 'fecha_ultimo_estado', header: 'Fecha Último Estado' },
+        { field: 'total_shipments_por_hu', header: 'Total Shipments por HU' },
         { field: 'caso', header: 'Caso' },
+        { field: 'costo_usd', header: 'Costo USD' },
       ],
       fields: [],
     },

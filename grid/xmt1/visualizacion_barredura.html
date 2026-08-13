@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visualización — Barredura</title>
+  <script src="/d/_libs/plotly.min.js"></script>
+  <link rel="stylesheet" href="../css/lib/skeleton.min.css" />
+  <style>
+    /* ═══════════════════════════════════════════
+       NOCTURNE — Grid Design System (subconjunto de solo lectura,
+       misma identidad visual que consolidado_auditoria.html)
+    ═══════════════════════════════════════════ */
+    :root {
+      --bg:          #090C0E;
+      --surface:     #11161A;
+      --surface-2:   #161D22;
+      --border:      #1F2830;
+      --border-soft: #161C21;
+      --accent:        #FFD100;
+      --accent-strong: #E6BC00;
+      --accent-dim:    #6E5E00;
+      --accent-glow:   rgba(255,209,0,.14);
+      --on-accent:     #1A1A1A;
+      --text:     #F4F6F8;
+      --text-sub: #AAB4BC;
+      --text-mut: #6B757D;
+      --c-green:  #00D689;
+      --c-blue:   #5A95FF;
+      --c-orange: #FF9E45;
+      --c-red:    #FF5C6C;
+      --r-sm: 8px; --r-md: 12px; --r-lg: 18px; --r-pill: 999px;
+      --shadow: 0 18px 40px -20px rgba(0,0,0,.7);
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      background-image:
+        radial-gradient(1000px 640px at 100% -8%, rgba(255,209,0,.09), transparent 55%),
+        radial-gradient(760px 520px at -12% 108%, rgba(255,209,0,.04), transparent 60%);
+      background-attachment: fixed;
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding: 32px 16px 56px;
+    }
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 40px;
+      background: linear-gradient(180deg, rgba(9,12,14,.85), rgba(9,12,14,0));
+      backdrop-filter: blur(10px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+    }
+    .header-icon {
+      width: 36px; height: 36px;
+      background: var(--surface);
+      border-radius: var(--r-sm);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .header-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .header h1 { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.2; color: var(--text); letter-spacing: -.02em; }
+    .header-sub { font-size: 12px; color: var(--text-mut); margin-top: 2px; }
+
+    .header-right { display: flex; align-items: center; gap: 8px; }
+
+    .card {
+      background: var(--surface);
+      border-radius: var(--r-lg);
+      padding: 24px;
+      border: 1px solid var(--border);
+      max-width: 100%;
+      box-sizing: border-box;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 15px; font-weight: 700; color: var(--text);
+      margin: 0 0 20px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title svg { color: var(--accent); flex-shrink: 0; }
+
+    .btn-icon {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .16s;
+      padding: 0;
+      flex-shrink: 0;
+    }
+    .btn-icon:hover { border-color: var(--accent-dim); color: var(--accent); }
+    .btn-icon svg { width: 18px; height: 18px; }
+    .btn-icon.spinning svg { animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .btn-secondary {
+      background: var(--surface-2); border: 1px solid var(--border);
+      color: var(--text-sub); font-size: 13px; padding: 8px 14px;
+      border-radius: var(--r-pill); cursor: pointer; font-family: var(--font);
+      transition: all .16s;
+    }
+    .btn-secondary:hover { border-color: var(--accent-dim); color: var(--text); }
+
+    .empty-state { text-align: center; padding: 36px 16px; color: var(--text-mut); font-size: 14px; }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 16px;
+      text-align: center;
+    }
+    .kpi-value { font-size: 24px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+    .kpi-label { font-size: 11px; color: var(--text-mut); text-transform: uppercase; letter-spacing: .05em; }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-container {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 16px;
+      height: clamp(240px, 34vh, 400px);
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    .chart-container .js-plotly-plot,
+    .chart-container .plot-container { width: 100%; height: 100%; }
+
+    .table-wrapper { overflow-x: auto; margin-top: 16px; }
+    .table-controls { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+    .search-input {
+      flex: 1; min-width: 200px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 10px 14px;
+      font-size: 14px; color: var(--text); font-family: var(--font);
+    }
+    .search-input::placeholder { color: var(--text-mut); }
+
+    input[type="date"] {
+      padding: 6px 8px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+      font-family: var(--font);
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { background: transparent; border-bottom: 1px solid var(--border); }
+    th {
+      text-align: left; padding: 12px; color: var(--text-mut);
+      font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+      white-space: nowrap;
+    }
+    td { padding: 12px; border-bottom: 1px solid var(--border-soft); color: var(--text); }
+    tr:hover { background: rgba(255, 255, 255, .02); }
+    .status-good { color: var(--c-green); font-weight: 600; }
+    .status-critical { color: var(--c-red); font-weight: 600; }
+
+    .divider { height: 1px; background: var(--border-soft); margin: 20px 0; }
+
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+    @media (max-width: 640px) {
+      .wrap { width: 100%; padding: 24px 16px 48px; }
+      .header { padding: 16px 20px; flex-direction: column; gap: 16px; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+      .chart-container { height: clamp(220px, 46vh, 420px); }
+    }
+  </style>
+</head>
+
+<body>
+
+<header class="header">
+  <div class="brand">
+    <div class="header-icon"><img id="header-logo" alt="Logo" /></div>
+    <div>
+      <h1>Visualización — Barredura</h1>
+      <div class="header-sub">Solo lectura · sin campos editables</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn-icon" id="btn-refresh" title="Actualizar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M23 4v6h-6"/>
+        <path d="M1 20v-6h6"/>
+        <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+      </svg>
+    </button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <p class="card-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Barredura
+    </p>
+
+    <div id="no-data-message" class="empty-state">
+      <p>Todavía no hay registros de Barredura sincronizados.</p>
+    </div>
+
+    <div id="analysis-content" style="display: none;">
+      <div class="kpi-grid" id="kpi-grid"></div>
+      <div class="charts-grid" id="charts-grid"></div>
+
+      <div class="table-wrapper">
+        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
+          <input type="date" id="date-from" />
+          <span style="color: var(--text-mut);">hasta</span>
+          <input type="date" id="date-to" />
+          <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem;">Limpiar</button>
+        </div>
+        <div class="table-controls">
+          <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
+        </div>
+        <table id="records-table">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+        <div style="display: flex; gap: 12px; margin-top: 12px; justify-content: center; align-items: center;">
+          <button id="btn-load-more" class="btn-secondary" style="font-size: 0.85rem; display: none;">Cargar más</button>
+          <span id="pagination-info" style="color: var(--text-mut); font-size: 0.85rem;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/**
+ * Visualización de Barredura — dashboard adicional, SOLO LECTURA. Lee el
+ * mismo state bucket (barredura_master) que consolidado_auditoria.html,
+ * apuntando a la misma bóveda de datos por defecto — no tiene ninguna
+ * acción que escriba: sin editar, sin borrar, sin subir catálogo. Pensado
+ * para compartirse con gente que solo necesita ver el estado de Barredura
+ * sin tocar nada. Por ahora es el único log visible aquí; si más adelante
+ * se necesitan otros logs, se puede replicar el patrón de tabs del
+ * dashboard original.
+ */
+const BARREDURA_COLUMNS = [
+  { field: 'auditoria', header: 'Auditoría' },
+  { field: 'ts', header: 'Fecha/Hora' },
+  { field: 'hu', header: 'HU' },
+  { field: 'shipment_id', header: 'Shipment ID' },
+  { field: 'lugar', header: 'Lugar' },
+  { field: 'estado', header: 'Estado' },
+  { field: 'dias_en_sitio', header: 'Días en Sitio' },
+  { field: 'hub_status', header: 'HUB Status' },
+  { field: 'usuario_dispatch', header: 'Usuario Dispatch' },
+  { field: 'logistic_center', header: 'Logistic Center' },
+  { field: 'fecha_ultimo_estado', header: 'Fecha Último Estado' },
+  { field: 'total_shipments_por_hu', header: 'Total Shipments por HU' },
+  { field: 'caso', header: 'Caso' },
+  { field: 'costo_usd', header: 'Costo USD' },
+];
+
+class GridClient {
+  constructor(docId) {
+    this.docId = docId;
+    this.baseUrl = location.origin;
+  }
+
+  async downloadDocumentAsObjectUrl(docId) {
+    try {
+      const metaRes = await fetch(`${this.baseUrl}/api/v1/documents/${docId}/download`, { credentials: 'include' });
+      if (!metaRes.ok) throw new Error(`${metaRes.status}`);
+      const meta = await metaRes.json();
+      const url = meta.download_url || meta.agent_download_url;
+      if (!url) throw new Error('No se encontró download_url en la respuesta');
+      const blobRes = await fetch(url, { credentials: 'include' });
+      if (!blobRes.ok) throw new Error(`${blobRes.status}`);
+      const blob = await blobRes.blob();
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn(`downloadDocumentAsObjectUrl ${docId}:`, e);
+      return null;
+    }
+  }
+
+  async getStateBucket(name) {
+    try {
+      const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, { credentials: 'include' });
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(`${res.status}`);
+      const body = await res.json();
+      return body.state ?? null;
+    } catch (e) {
+      console.error(`getStateBucket ${name}:`, e);
+      return null;
+    }
+  }
+}
+
+class BarreduraViewer {
+  constructor() {
+    const params = new URLSearchParams(location.search);
+    this.docId = params.get('data_doc_id') || '01KZPRK3PDWP9TG0RKW3J9JGN7';
+    this.gridClient = new GridClient(this.docId);
+    this.records = [];
+    this.dateFrom = null;
+    this.dateTo = null;
+    this.displayedCount = 10;
+    this._chartsRafId = null;
+    this.init();
+  }
+
+  async init() {
+    this.setupEventListeners();
+    this.loadHeaderLogo();
+
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    this.dateFrom = firstDayOfMonth;
+    document.getElementById('date-from').value = firstDayOfMonth.toISOString().split('T')[0];
+
+    await this.loadRecords();
+  }
+
+  async loadHeaderLogo() {
+    const logoDocId = '01KTD4Q8GC7Y620F9F9WEXGDE4';
+    const objectUrl = await this.gridClient.downloadDocumentAsObjectUrl(logoDocId);
+    if (objectUrl) document.getElementById('header-logo').src = objectUrl;
+  }
+
+  setupEventListeners() {
+    document.getElementById('btn-refresh').addEventListener('click', () => this.refresh());
+    document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
+    document.getElementById('date-from').addEventListener('change', (e) => {
+      this.dateFrom = e.target.value ? new Date(e.target.value) : null;
+      this.displayedCount = 10;
+      this.render();
+    });
+    document.getElementById('date-to').addEventListener('change', (e) => {
+      this.dateTo = e.target.value ? new Date(e.target.value) : null;
+      this.displayedCount = 10;
+      this.render();
+    });
+    document.getElementById('btn-clear-filters').addEventListener('click', () => {
+      this.dateFrom = null;
+      this.dateTo = null;
+      document.getElementById('date-from').value = '';
+      document.getElementById('date-to').value = '';
+      this.displayedCount = 10;
+      this.render();
+    });
+    document.getElementById('btn-load-more').addEventListener('click', () => {
+      this.displayedCount += 10;
+      this.render();
+    });
+  }
+
+  async loadRecords() {
+    const data = await this.gridClient.getStateBucket('barredura_master');
+    this.records = (data && data.records) || [];
+    this.render();
+  }
+
+  async refresh() {
+    const btn = document.getElementById('btn-refresh');
+    if (btn.classList.contains('spinning')) return;
+    btn.classList.add('spinning');
+    btn.disabled = true;
+    try {
+      await this.loadRecords();
+    } finally {
+      btn.classList.remove('spinning');
+      btn.disabled = false;
+    }
+  }
+
+  render() {
+    if (this.records.length === 0) {
+      document.getElementById('no-data-message').style.display = 'block';
+      document.getElementById('analysis-content').style.display = 'none';
+      return;
+    }
+
+    const filteredRecords = this.getFilteredRecords();
+
+    if (filteredRecords.length === 0) {
+      document.getElementById('no-data-message').style.display = 'block';
+      document.getElementById('analysis-content').style.display = 'none';
+      return;
+    }
+
+    document.getElementById('no-data-message').style.display = 'none';
+    document.getElementById('analysis-content').style.display = 'block';
+
+    this.renderKpis(filteredRecords);
+
+    const displayedRecords = filteredRecords.slice(0, this.displayedCount);
+    this.renderTable(displayedRecords);
+
+    const btnLoadMore = document.getElementById('btn-load-more');
+    const paginationInfo = document.getElementById('pagination-info');
+    if (filteredRecords.length > this.displayedCount) {
+      btnLoadMore.style.display = 'inline-block';
+      paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
+    } else {
+      btnLoadMore.style.display = 'none';
+      paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+    }
+
+    this.renderCharts(filteredRecords);
+  }
+
+  getFilteredRecords() {
+    let records = this.records;
+
+    if (this.dateFrom || this.dateTo) {
+      records = records.filter(r => {
+        const recDate = r.ts ? new Date(r.ts) : null;
+        if (!recDate) return true;
+        if (this.dateFrom && recDate < this.dateFrom) return false;
+        if (this.dateTo) {
+          const dateToEndOfDay = new Date(this.dateTo);
+          dateToEndOfDay.setHours(23, 59, 59, 999);
+          if (recDate > dateToEndOfDay) return false;
+        }
+        return true;
+      });
+    }
+
+    return records.slice().sort((a, b) => {
+      const aDate = a.ts ? new Date(a.ts).getTime() : 0;
+      const bDate = b.ts ? new Date(b.ts).getTime() : 0;
+      return bDate - aDate;
+    });
+  }
+
+  renderKpis(records) {
+    const container = document.getElementById('kpi-grid');
+    container.innerHTML = '';
+    const total = records.length;
+
+    this.addKpiCard(container, total.toString(), 'Total');
+    // Acepta el valor viejo ('En catálogo') y el nuevo ('Backlog
+    // esperado') — mismo significado, renombrado.
+    const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
+    this.addKpiCard(container, enCatalogo.toString(), 'Backlog esperado');
+    this.addKpiCard(container, (total - enCatalogo).toString(), 'Backlog inesperado');
+    const conCaso = records.filter(r => (r.caso || '').trim()).length;
+    if (conCaso > 0) this.addKpiCard(container, conCaso.toString(), 'Con caso');
+    const totalCosto = records.reduce((sum, r) => sum + (Number(r.costo_usd) || 0), 0);
+    if (totalCosto > 0) this.addKpiCard(container, `$${totalCosto.toFixed(2)}`, 'Costo USD');
+  }
+
+  addKpiCard(container, value, label) {
+    const card = document.createElement('div');
+    card.className = 'kpi-card';
+    card.innerHTML = `<div class="kpi-value">${value}</div><div class="kpi-label">${label}</div>`;
+    container.appendChild(card);
+  }
+
+  countByField(records, field) {
+    const counts = {};
+    records.forEach(r => {
+      const key = (r[field] || '').toString().trim() || '(sin dato)';
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }
+
+  renderCharts(records) {
+    const container = document.getElementById('charts-grid');
+
+    if (typeof Plotly === 'undefined') {
+      container.innerHTML = '';
+      const warn = document.createElement('div');
+      warn.className = 'empty-state';
+      warn.textContent = 'Plotly no está disponible en este entorno.';
+      container.appendChild(warn);
+      return;
+    }
+
+    if (this._chartsRafId) cancelAnimationFrame(this._chartsRafId);
+
+    this._chartsRafId = requestAnimationFrame(() => {
+      container.innerHTML = '';
+
+      const estadoDiv = document.createElement('div');
+      estadoDiv.className = 'chart-container';
+      container.appendChild(estadoDiv);
+      const estadoChart = this.buildEstadoChart(records);
+      Plotly.newPlot(estadoDiv, estadoChart.data, estadoChart.layout, { responsive: true, displayModeBar: false });
+
+      const lugarDiv = document.createElement('div');
+      lugarDiv.className = 'chart-container';
+      container.appendChild(lugarDiv);
+      const lugarChart = this.buildLugarChart(records);
+      Plotly.newPlot(lugarDiv, lugarChart.data, lugarChart.layout, { responsive: true, displayModeBar: false });
+    });
+  }
+
+  buildEstadoChart(records) {
+    const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
+    const fueraCatalogo = records.length - enCatalogo;
+
+    return {
+      data: [{
+        labels: ['Backlog esperado', 'Backlog inesperado'],
+        values: [enCatalogo, fueraCatalogo],
+        type: 'pie',
+        marker: { colors: ['#34C759', '#FF453A'] },
+      }],
+      layout: {
+        title: 'Estado del escaneo',
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        showlegend: true,
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
+        margin: { l: 20, r: 20, t: 40, b: 20 },
+      },
+    };
+  }
+
+  buildLugarChart(records) {
+    const counts = this.countByField(records, 'lugar');
+    return {
+      data: [{
+        x: Object.keys(counts),
+        y: Object.values(counts),
+        type: 'bar',
+        marker: { color: '#FFD100' },
+      }],
+      layout: {
+        title: 'Escaneos por lugar',
+        xaxis: { title: 'Lugar' },
+        yaxis: { title: 'Cantidad' },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 60 },
+      },
+    };
+  }
+
+  renderTable(records) {
+    const thead = document.getElementById('table-head');
+    const tbody = document.getElementById('table-body');
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+
+    const tr = document.createElement('tr');
+    BARREDURA_COLUMNS.forEach(col => {
+      const th = document.createElement('th');
+      th.textContent = col.header;
+      tr.appendChild(th);
+    });
+    thead.appendChild(tr);
+
+    records.forEach((record) => {
+      const tr = document.createElement('tr');
+      BARREDURA_COLUMNS.forEach(col => {
+        const td = document.createElement('td');
+        const value = record[col.field] || '';
+
+        if (col.field === 'ts') {
+          td.textContent = value ? new Date(value).toLocaleString('es-MX', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+          }) : '';
+        } else if (col.field === 'auditoria') {
+          // Registros viejos guardaron el correo completo; ahora se
+          // guarda el LDAP. Se muestra solo el LDAP en ambos casos.
+          td.textContent = value.replace(/@.*$/, '');
+        } else if (col.field === 'estado') {
+          td.className = (value === 'Backlog esperado' || value === 'En catálogo') ? 'status-good' : 'status-critical';
+          td.textContent = value;
+        } else {
+          td.textContent = value;
+        }
+
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  filterTable(query) {
+    if (!query.trim()) {
+      this.displayedCount = 10;
+      this.render();
+      return;
+    }
+
+    const filteredRecords = this.getFilteredRecords();
+    const queryLower = query.toLowerCase();
+    const searchResults = filteredRecords.filter(r => {
+      const recordText = BARREDURA_COLUMNS
+        .map(col => String(r[col.field] || '').toLowerCase())
+        .join(' ');
+      return recordText.includes(queryLower);
+    });
+
+    this.renderTable(searchResults);
+
+    const btnLoadMore = document.getElementById('btn-load-more');
+    const paginationInfo = document.getElementById('pagination-info');
+    btnLoadMore.style.display = 'none';
+    paginationInfo.textContent = `${searchResults.length} resultado${searchResults.length !== 1 ? 's' : ''} encontrado${searchResults.length !== 1 ? 's' : ''}`;
+  }
+}
+
+const viewer = new BarreduraViewer();
+</script>
+</body>
+</html>
