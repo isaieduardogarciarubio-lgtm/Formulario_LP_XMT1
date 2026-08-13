@@ -1870,6 +1870,31 @@ class RecordStore {
     });
   }
 
+  /**
+   * Actualiza el payload de una captura que YA existe. Se usa para persistir
+   * referencias de fotos subidas y metadata local de recovery. No crea UIDs.
+   */
+  static async updateData(uid, data) {
+    const db = await this.open();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(this.STORE, 'readwrite');
+      const store = tx.objectStore(this.STORE);
+      const req = store.get(uid);
+      req.onsuccess = () => {
+        const row = req.result;
+        if (!row) {
+          reject(new Error(`Registro local no encontrado: ${uid}`));
+          return;
+        }
+        row.data = data;
+        store.put(row);
+      };
+      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   static async delete(uid) {
     const db = await this.open();
     return new Promise((resolve, reject) => {
@@ -6496,12 +6521,17 @@ class GridClient {
     }
   }
 
-  async uploadPublicDocument(blob, filename) {
+  /**
+   * Subida genérica de archivos a Grid. Se usa tanto para fotos como para
+   * los CSV de recovery. El recovery es un documento NUEVO e inmutable: no
+   * depende de leer ningún State Bucket antes de poder persistir el lote.
+   */
+  async uploadDocument(blob, filename, { description = 'Documento de auditoría', visibility = 'public' } = {}) {
     const fd = new FormData();
     fd.append('file', blob, filename);
     fd.append('title', filename);
-    fd.append('description', 'Foto de auditoría (captura)');
-    fd.append('visibility', 'public');
+    fd.append('description', description);
+    if (visibility) fd.append('visibility', visibility);
 
     const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents`, {
       method: 'POST',
@@ -6514,7 +6544,16 @@ class GridClient {
       throw new Error(err.error || err.message || `HTTP ${res.status}`);
     }
     const body = await res.json();
-    return body.id || body.doc_id || (body.document && body.document.id) || null;
+    const docId = body.id || body.doc_id || (body.document && body.document.id) || null;
+    if (!docId) throw new Error('Grid creó el documento pero no devolvió doc_id');
+    return docId;
+  }
+
+  async uploadPublicDocument(blob, filename) {
+    return this.uploadDocument(blob, filename, {
+      description: 'Foto de auditoría (captura)',
+      visibility: 'public',
+    });
   }
 
   /**
@@ -6587,6 +6626,65 @@ class GridClient {
     return data;
   }
 
+  /**
+   * Lectura FAIL-CLOSED exclusiva para *_master antes de una escritura.
+   *
+   * Un master vacío solo es confiable si lleva el sentinel initialized:true.
+   * Los masters legacy con registros se aceptan y se migran al sentinel en
+   * la siguiente escritura. Si 3 lecturas siguen llegando null/[] sin ese
+   * sentinel, NO se escribe: se lanza un error tipado y Captura activa el
+   * circuito de contingencia + recovery CSV.
+   */
+  async getStateBucketForProtectedMasterWrite(name, confirmations = 3) {
+    let last = null;
+    for (let i = 0; i < confirmations; i++) {
+      const data = await this.getStateBucket(name);
+      last = data;
+      const hasRecordsArray = !!data && Array.isArray(data.records);
+      const isInitialized = hasRecordsArray && data.initialized === true;
+      const isLegacyNonEmpty = hasRecordsArray && data.records.length > 0;
+
+      if (isInitialized || isLegacyNonEmpty) {
+        // Migración segura de legacy: solo se agrega el sentinel después de
+        // haber observado un master no vacío. OCC seguirá protegiendo el PUT.
+        if (data.initialized !== true) return { ...data, initialized: true };
+        return data;
+      }
+
+      if (i < confirmations - 1) {
+        DebugConsole.log(
+          `GET ${name}: vacío/no inicializado; fail-closed, confirmación ${i + 1}/${confirmations}`,
+          'warn'
+        );
+        await new Promise((r) => setTimeout(r, 700 + Math.random() * 300));
+      }
+    }
+
+    const err = new Error(`Lectura ambigua de ${name}: no se acepta vacío sin initialized:true`);
+    err.isAmbiguousMaster = true;
+    err.bucketName = name;
+    err.lastState = last;
+    throw err;
+  }
+
+  /**
+   * Después de un PUT 200, no eliminamos la copia local hasta comprobar que
+   * el UID ya es visible en el master. Una lectura stale puede retrasar el
+   * ACK, pero eso es seguro: el siguiente intento deduplica por uid.
+   */
+  async confirmRecordPresent(name, uid, attempts = 3) {
+    for (let i = 0; i < attempts; i++) {
+      const data = await this.getStateBucket(name);
+      if (data && Array.isArray(data.records) && data.records.some((r) => r && r.uid === uid)) {
+        return true;
+      }
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 500 + Math.random() * 350));
+      }
+    }
+    return false;
+  }
+
   async setStateBucket(name, data, attempt = 0) {
     const ifUpdatedAt = this._updatedAtByName[name] || '';
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
@@ -6647,6 +6745,18 @@ class CapturaApp {
     this.barreduraCatalogGeneratedAt = null;
     this.barreduraCatalogAccessDenied = false;
     this.folderIds = {}; // folder_id de Grid por tipo de log (cache en memoria)
+
+    // Resiliencia de sincronización. El operador nunca decide entre master y
+    // recovery: Captura conmuta automáticamente y sigue guardando local.
+    this.deviceId = null;
+    this.masterCircuit = {}; // formId -> { openUntil, openedAt, reason }
+    this.MASTER_CIRCUIT_MS = 60 * 1000;
+    this.RECOVERY_BATCH_THRESHOLD = 50;
+    this.RECOVERY_MAX_WAIT_MS = 5 * 60 * 1000;
+    this.RECOVERY_BATCH_MAX = 100;
+    this.RECOVERY_PREFIX = 'RECOVERY_AUDITORIAS';
+    this._maintenanceTimer = null;
+
     // Modo de captura de códigos: 'handheld' (lector integrado, principal) o
     // 'camera'. Se restaura desde IndexedDB en init() (por dispositivo).
     this.scanMode = 'handheld';
@@ -6852,6 +6962,7 @@ class CapturaApp {
       this.renderUserAvatar();
       this.loadHeaderLogo();
 
+      await this.loadDeviceId();
       await this.loadScanMode();
       await this.loadLastDoca();
       await this.loadLastLugar();
@@ -6861,6 +6972,12 @@ class CapturaApp {
       await this.loadOutboxFromStorage();
 
       this.renderMenu();
+      this.startSyncMaintenance();
+      if (navigator.onLine && this.outboxRecords.length > 0) {
+        this.flushOutbox({ silent: true }).catch((e) =>
+          DebugConsole.log(`Sincronización inicial pendiente: ${e.message}`, 'warn')
+        );
+      }
     } catch (e) {
       DebugConsole.log(`Error al inicializar: ${e.message}`, 'error');
       this.renderError(e.message);
@@ -7057,6 +7174,216 @@ class CapturaApp {
     }
   }
 
+  /** ID estable por dispositivo, persistido en IndexedDB. */
+  async loadDeviceId() {
+    let saved = await RecordStore.getSetting('recoveryDeviceId');
+    if (!saved) {
+      const raw = (globalThis.crypto && crypto.randomUUID)
+        ? crypto.randomUUID().replace(/-/g, '').slice(0, 10)
+        : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`.slice(0, 10);
+      saved = `HH_${raw.toUpperCase()}`;
+      await RecordStore.setSetting('recoveryDeviceId', saved);
+    }
+    this.deviceId = saved;
+    DebugConsole.log(`Recovery device_id: ${this.deviceId}`, 'info');
+  }
+
+  isMasterCircuitOpen(formId) {
+    const state = this.masterCircuit[formId];
+    return !!state && Date.now() < state.openUntil;
+  }
+
+  openMasterCircuit(formId, reason) {
+    const current = this.masterCircuit[formId];
+    const wasOpen = !!current && Date.now() < current.openUntil;
+    this.masterCircuit[formId] = {
+      openedAt: wasOpen ? current.openedAt : Date.now(),
+      openUntil: Date.now() + this.MASTER_CIRCUIT_MS,
+      reason: reason || 'lectura ambigua',
+    };
+    if (!wasOpen) {
+      DebugConsole.log(`Circuit breaker ${formId}_master ABIERTO: ${reason}`, 'warn');
+    }
+    return !wasOpen;
+  }
+
+  closeMasterCircuit(formId) {
+    if (this.masterCircuit[formId]) {
+      DebugConsole.log(`Circuit breaker ${formId}_master CERRADO: master saludable`, 'info');
+      delete this.masterCircuit[formId];
+    }
+  }
+
+  startSyncMaintenance() {
+    if (this._maintenanceTimer) clearInterval(this._maintenanceTimer);
+    // Un minuto es suficientemente espaciado para no bombardear Grid y permite
+    // que el master se recupere sin intervención del operador.
+    this._maintenanceTimer = setInterval(() => {
+      if (!navigator.onLine || this.syncing || this.outboxRecords.length === 0) return;
+      this.flushOutbox({ silent: true }).catch((e) =>
+        DebugConsole.log(`Mantenimiento de sync: ${e.message}`, 'warn')
+      );
+    }, 60 * 1000);
+  }
+
+  sanitizeRecordForRemote(record) {
+    const clean = {};
+    Object.entries(record || {}).forEach(([key, value]) => {
+      if (!key.startsWith('__local')) clean[key] = value;
+    });
+    return clean;
+  }
+
+  /**
+   * Sube fotos pendientes y PERSISTE sus doc_id en IndexedDB antes de intentar
+   * master/recovery. Así un reload no vuelve a subir la misma foto y los CSV
+   * de contingencia nunca incluyen data:URL gigantes.
+   */
+  async prepareRecordAssets(record) {
+    const formConfig = FORMS_CONFIG[record.formId];
+    const photoFields = formConfig ? formConfig.fields.filter((f) => f.type === 'photo') : [];
+    let changed = false;
+
+    for (const field of photoFields) {
+      const value = record[field.id];
+      if (!value || typeof value !== 'string' || !value.startsWith('data:')) continue;
+
+      const blob = await this.dataUrlToBlob(value);
+      const docId = await this.gridClient.uploadPublicDocument(blob, `${field.id}_${record.uid}.jpg`);
+      record[field.id] = docId;
+      changed = true;
+
+      const folderId = await this.getOrCreateFolderId(record.formId);
+      if (folderId && docId) {
+        try {
+          await this.gridClient._fetchWithTimeout(
+            `${location.origin}/api/v1/folders/${folderId}/documents`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ doc_id: docId }),
+            }
+          );
+          DebugConsole.log(`Foto asociada a carpeta: ${docId}`, 'info');
+        } catch (e) {
+          DebugConsole.log(`No se pudo asociar foto a carpeta: ${e.message}`, 'warn');
+        }
+      }
+    }
+
+    if (changed) await RecordStore.updateData(record.uid, record);
+    return record;
+  }
+
+  escapeRecoveryCsv(value) {
+    if (value === null || value === undefined) return '';
+    let str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      str = '"' + str.replace(/"/g, '""') + '"';
+    }
+    return str;
+  }
+
+  buildRecoveryCsv(records, meta) {
+    const cleanRecords = records.map((r) => this.sanitizeRecordForRemote(r));
+    const dynamicFields = [];
+    const seen = new Set();
+    cleanRecords.forEach((record) => {
+      Object.keys(record).forEach((key) => {
+        if (!seen.has(key)) { seen.add(key); dynamicFields.push(key); }
+      });
+    });
+
+    const fixed = [
+      '__recovery_batch_id', '__recovery_device_id', '__recovery_created_at',
+      '__recovery_form_id', '__recovery_data_doc_id'
+    ];
+    const headers = [...fixed, ...dynamicFields, '__record_json'];
+    const lines = [headers.map((h) => this.escapeRecoveryCsv(h)).join(',')];
+
+    cleanRecords.forEach((record) => {
+      const row = {
+        __recovery_batch_id: meta.batchId,
+        __recovery_device_id: meta.deviceId,
+        __recovery_created_at: meta.createdAt,
+        __recovery_form_id: meta.formId,
+        __recovery_data_doc_id: this.docId,
+        ...record,
+        __record_json: JSON.stringify(record),
+      };
+      lines.push(headers.map((h) => this.escapeRecoveryCsv(row[h])).join(','));
+    });
+    return '\uFEFF' + lines.join('\n');
+  }
+
+  buildRecoveryFilename(formId, batchId, createdAt) {
+    const compactTs = createdAt.replace(/[-:.TZ]/g, '').slice(0, 14);
+    const safeDevice = String(this.deviceId || 'UNKNOWN').replace(/[^A-Za-z0-9_-]/g, '_');
+    return `${this.RECOVERY_PREFIX}__${formId}__${safeDevice}__${compactTs}__${batchId}.csv`;
+  }
+
+  /**
+   * Crea CSVs inmutables por lote. Primera degradación = respaldo inmediato
+   * de todo lo pendiente sin backup. Después, nuevos registros se agrupan
+   * hasta 50 filas o 5 minutos (máximo 100 por archivo).
+   */
+  async backupRecoveryForForm(formId, { force = false } = {}) {
+    let totalBackedUp = 0;
+
+    while (true) {
+      const pending = this.outboxRecords
+        .filter((r) => r.formId === formId && !(r.__localRecovery && r.__localRecovery.docId))
+        .sort((a, b) => new Date(a.ts || 0) - new Date(b.ts || 0));
+
+      if (pending.length === 0) break;
+      const oldestAge = Date.now() - new Date(pending[0].ts || Date.now()).getTime();
+      const due = force || pending.length >= this.RECOVERY_BATCH_THRESHOLD || oldestAge >= this.RECOVERY_MAX_WAIT_MS;
+      if (!due) break;
+
+      const candidates = pending.slice(0, this.RECOVERY_BATCH_MAX);
+      const ready = [];
+      for (const record of candidates) {
+        try {
+          await this.prepareRecordAssets(record);
+          ready.push(record);
+        } catch (e) {
+          if (e.isNetworkError || e.isTimeout) throw e;
+          DebugConsole.log(`Recovery: no se pudo preparar ${record.uid}: ${e.message}`, 'error');
+        }
+      }
+      if (ready.length === 0) break;
+
+      const createdAt = new Date().toISOString();
+      const batchId = `RB_${Date.now().toString(36).toUpperCase()}_${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      const filename = this.buildRecoveryFilename(formId, batchId, createdAt);
+      const csv = this.buildRecoveryCsv(ready, {
+        batchId,
+        deviceId: this.deviceId,
+        createdAt,
+        formId,
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const docId = await this.gridClient.uploadDocument(blob, filename, {
+        description: `AUDITORIAS_RECOVERY | form=${formId} | device=${this.deviceId} | batch=${batchId} | data_doc_id=${this.docId}`,
+        visibility: 'public',
+      });
+
+      for (const record of ready) {
+        record.__localRecovery = { docId, batchId, filename, backedUpAt: createdAt };
+        await RecordStore.updateData(record.uid, record);
+      }
+      totalBackedUp += ready.length;
+      DebugConsole.log(`Recovery CSV subido: ${filename} (${ready.length} registros, doc_id=${docId})`, 'warn');
+
+      // force respalda todo lo acumulado; en modo normal basta un lote por tick.
+      if (!force) break;
+    }
+
+    this.updatePendingBadge();
+    return totalBackedUp;
+  }
+
   /**
    * Última doca de Pre-Missort, persistida por dispositivo para que
    * reabrir el log (o recargar la app) vaya directo a escanear en vez de
@@ -7084,7 +7411,10 @@ class CapturaApp {
   updatePendingBadge() {
     const badge = document.getElementById('status-badge');
     if (badge) {
-      badge.textContent = `${this.outboxRecords.length} pendientes`;
+      const backed = this.outboxRecords.filter((r) => r.__localRecovery && r.__localRecovery.docId).length;
+      badge.textContent = backed > 0
+        ? `${this.outboxRecords.length} pendientes · ${backed} respaldados`
+        : `${this.outboxRecords.length} pendientes`;
     }
   }
 
@@ -7124,9 +7454,12 @@ class CapturaApp {
 
         ${this.outboxRecords.length > 0 ? `
           <div style="margin-top: 32px;">
-            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 12px;">Registros Pendientes (${this.outboxRecords.length})</h3>
+            <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 6px;">Registros Pendientes (${this.outboxRecords.length})</h3>
+            <p style="font-size: .82rem; color: var(--color-text-muted); margin-bottom: 12px;">
+              ${this.outboxRecords.filter((r) => r.__localRecovery && r.__localRecovery.docId).length} con respaldo remoto de contingencia. La app reintenta el master automáticamente.
+            </p>
             <button id="btn-sync-now" onclick="window.app.flushOutbox()" class="btn btn-primary" style="width: 100%;">
-              ${Icons.svg('refresh', { size: 16 })} <span class="btn-sync-now-label">Sincronizar Ahora</span>
+              ${Icons.svg('refresh', { size: 16 })} <span class="btn-sync-now-label">Reintentar ahora</span>
             </button>
           </div>
         ` : ''}
@@ -7405,63 +7738,61 @@ class CapturaApp {
   }
 
   /**
-   * Sube un registro a {formId}_master con reintento en 409 (otro
-   * dispositivo escribió al mismo tiempo). Los errores de red/timeout se
-   * relanzan tal cual (marcados isNetworkError/isTimeout) para que
-   * flushOutbox decida cortar el lote en vez de reintentar cada registro
-   * contra una conexión que ya sabemos que no responde. Cada log declara
-   * sus propios campos de tipo 'photo' en FORMS_CONFIG — se suben todos
-   * los que aún estén en data:URL (fotos ya sincronizadas quedan con su
-   * doc_id de Grid y no vuelven a subirse).
+   * Sube un registro al master con fail-closed + OCC + confirmación de UID.
+   * Nunca convierte null/[] ambiguo en {records:[]}.
    */
   async syncOneRecord(record, attempt = 0) {
-    const formConfig = FORMS_CONFIG[record.formId];
-    const photoFields = formConfig ? formConfig.fields.filter((f) => f.type === 'photo') : [];
+    await this.prepareRecordAssets(record);
 
-    for (const field of photoFields) {
-      const value = record[field.id];
-      if (value && value.startsWith('data:')) {
-        const blob = await this.dataUrlToBlob(value);
-        const docId = await this.gridClient.uploadPublicDocument(blob, `${field.id}_${record.uid}.jpg`);
-        record[field.id] = docId;
-
-        // Asociar la foto a la carpeta de este tipo de log (si se pudo
-        // resolver) — no es bloqueante, la foto ya quedó subida aunque
-        // esto falle, solo sin organizar.
-        const folderId = await this.getOrCreateFolderId(record.formId);
-        if (folderId && docId) {
-          try {
-            await this.gridClient._fetchWithTimeout(
-              `${location.origin}/api/v1/folders/${folderId}/documents`,
-              {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({ doc_id: docId }),
-              }
-            );
-            DebugConsole.log(`Foto asociada a carpeta: ${docId}`, 'info');
-          } catch (e) {
-            DebugConsole.log(`No se pudo asociar foto a carpeta: ${e.message}`, 'warn');
-          }
-        }
-      }
+    const formId = record.formId;
+    const bucketName = `${formId}_master`;
+    if (this.isMasterCircuitOpen(formId)) {
+      const err = new Error(`Circuit breaker abierto para ${bucketName}`);
+      err.isMasterCircuitOpen = true;
+      err.formId = formId;
+      throw err;
     }
 
-    const bucketName = `${record.formId}_master`;
-    const bucket = (await this.gridClient.getStateBucketConfirmedNonEmpty(bucketName)) || { records: [] };
-    if (!bucket.records) bucket.records = [];
+    let bucket;
+    try {
+      bucket = await this.gridClient.getStateBucketForProtectedMasterWrite(bucketName, 3);
+    } catch (e) {
+      if (e.isAmbiguousMaster) {
+        e.formId = formId;
+        e.circuitJustOpened = this.openMasterCircuit(formId, e.message);
+      }
+      throw e;
+    }
 
-    const alreadyThere = bucket.records.some((r) => r.uid === record.uid);
-    if (!alreadyThere) bucket.records.push(record);
+    const alreadyThere = bucket.records.some((r) => r && r.uid === record.uid);
+    if (alreadyThere) {
+      this.closeMasterCircuit(formId);
+      return { ok: true, alreadyThere: true };
+    }
+
+    bucket.initialized = true;
+    if (!bucket.version) bucket.version = 1;
+    bucket.records.push(this.sanitizeRecordForRemote(record));
 
     const result = await this.gridClient.setStateBucket(bucketName, bucket);
-
     if (result?.conflict) {
       if (attempt >= 5) throw new Error('Demasiados conflictos de escritura simultánea — intenta de nuevo');
       await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
       return this.syncOneRecord(record, attempt + 1);
     }
+    if (!result?.ok) throw new Error(`No se confirmó la escritura de ${bucketName}`);
+
+    const confirmed = await this.gridClient.confirmRecordPresent(bucketName, record.uid, 3);
+    if (!confirmed) {
+      const err = new Error(`PUT aceptado pero UID ${record.uid} aún no es visible en ${bucketName}`);
+      err.isWriteUnconfirmed = true;
+      err.formId = formId;
+      err.circuitJustOpened = this.openMasterCircuit(formId, err.message);
+      throw err;
+    }
+
+    this.closeMasterCircuit(formId);
+    return { ok: true };
   }
 
   // Alterna el estado visual del botón "Sincronizar Ahora" (deshabilitado +
@@ -7475,26 +7806,23 @@ class CapturaApp {
     btn.style.opacity = syncing ? '0.6' : '';
     btn.style.cursor = syncing ? 'not-allowed' : '';
     const label = btn.querySelector('.btn-sync-now-label');
-    if (label) label.textContent = syncing ? 'Sincronizando...' : 'Sincronizar Ahora';
+    if (label) label.textContent = syncing ? 'Sincronizando...' : 'Reintentar ahora';
     const icon = btn.querySelector('svg');
     if (icon) icon.classList.toggle('spinning', syncing);
   }
 
-  async flushOutbox() {
+  async flushOutbox({ silent = false } = {}) {
     if (this.outboxRecords.length === 0) {
-      this.showToast('No hay registros pendientes', 'info');
+      if (!silent) this.showToast('No hay registros pendientes', 'info');
       return;
     }
 
     if (!navigator.onLine) {
-      this.showToast('Sin conexión — intenta de nuevo cuando te conectes', 'warn');
+      if (!silent) this.showToast('Sin conexión — se reintentará al reconectar', 'warn');
       return;
     }
 
     if (this.syncing) {
-      // Ya hay un flushOutbox en curso (llamado desde el botón, el evento
-      // 'online', u onFormComplete tras cada registro) — ignorar la
-      // llamada duplicada en vez de sincronizar el mismo lote dos veces.
       DebugConsole.log('Sincronización ya en curso — se ignora la llamada duplicada', 'info');
       return;
     }
@@ -7504,11 +7832,14 @@ class CapturaApp {
 
     try {
       DebugConsole.log('Sincronizando registros...', 'info');
-
       const synced = [];
+      const blockedForms = new Set();
+      const forceRecoveryForms = new Set();
       let networkDown = false;
+      let recoveryBacked = 0;
 
-      for (const record of this.outboxRecords) {
+      for (const record of [...this.outboxRecords]) {
+        if (blockedForms.has(record.formId)) continue;
         try {
           await this.syncOneRecord(record);
           synced.push(record.uid);
@@ -7516,45 +7847,65 @@ class CapturaApp {
           DebugConsole.log(`Sincronizado: ${record.uid}`, 'info');
         } catch (e) {
           if (e.isNetworkError || e.isTimeout) {
-            // La red no responde: seguir intentando registro por registro
-            // solo repetiría el mismo fallo. Se corta el lote y se deja el
-            // resto en la cola para el próximo intento (evento 'online',
-            // botón manual, o reintento automático).
             DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
             networkDown = true;
             break;
           }
+
+          if (e.isAmbiguousMaster || e.isMasterCircuitOpen || e.isWriteUnconfirmed) {
+            const formId = e.formId || record.formId;
+            blockedForms.add(formId);
+            if (e.circuitJustOpened) forceRecoveryForms.add(formId);
+            DebugConsole.log(`${formId}: master no confiable — se conmuta a recovery sin escribir el master`, 'warn');
+            continue;
+          }
+
           DebugConsole.log(`Error al sincronizar ${record.uid}: ${e.message}`, 'error');
         }
       }
 
-      // Remove synced from outbox
-      for (const uid of synced) {
-        await RecordStore.delete(uid);
+      // Eliminar SOLO UIDs confirmados presentes en master.
+      for (const uid of synced) await RecordStore.delete(uid);
+      this.outboxRecords = this.outboxRecords.filter((r) => !synced.includes(r.uid));
+
+      // Segunda vía automática: un master degradado nunca recibe PUT; los
+      // pendientes se respaldan como CSV inmutable en Grid.
+      if (!networkDown) {
+        for (const formId of blockedForms) {
+          try {
+            recoveryBacked += await this.backupRecoveryForForm(formId, {
+              force: forceRecoveryForms.has(formId),
+            });
+          } catch (e) {
+            if (e.isNetworkError || e.isTimeout) {
+              networkDown = true;
+              DebugConsole.log(`Recovery sin conexión: ${e.message}`, 'warn');
+              break;
+            }
+            DebugConsole.log(`Recovery ${formId} falló: ${e.message}`, 'error');
+          }
+        }
       }
 
-      this.outboxRecords = this.outboxRecords.filter(r => !synced.includes(r.uid));
       this.updatePendingBadge();
 
-      if (synced.length > 0) {
-        DebugConsole.log(`${synced.length} registros sincronizados`, 'info');
-        this.showToast(`${synced.length} registros sincronizados`, 'success');
+      if (!silent) {
+        if (networkDown) {
+          this.showToast(`Sin conexión con Grid — ${this.outboxRecords.length} pendiente(s) locales`, 'warn');
+        } else if (recoveryBacked > 0) {
+          this.showToast(`${recoveryBacked} registro(s) respaldados en Grid; master pendiente`, 'warn');
+        } else if (synced.length > 0) {
+          this.showToast(`${synced.length} registros sincronizados`, 'success');
+        } else if (blockedForms.size > 0) {
+          const backed = this.outboxRecords.filter((r) => r.__localRecovery && r.__localRecovery.docId).length;
+          this.showToast(`Master temporalmente no confiable · ${backed} pendiente(s) ya respaldados`, 'info');
+        } else if (this.outboxRecords.length > 0) {
+          this.showToast('Sincronización pendiente — se reintentará automáticamente', 'warn');
+        }
       }
 
-      if (networkDown) {
-        this.showToast(
-          `Sin conexión con Grid — ${this.outboxRecords.length} pendiente(s), se reintentará al reconectar`,
-          'warn'
-        );
-      } else if (synced.length === 0 && this.outboxRecords.length > 0) {
-        this.showToast('No se pudo sincronizar — ver consola de errores', 'error');
-      }
-
-      // Si el menú está visible, refrescar el historial para reflejar los
-      // nuevos badges "Sincronizado" sin esperar a la próxima navegación.
-      if (document.getElementById('history-list')) {
-        this.renderHistoryList();
-      }
+      if (synced.length > 0) DebugConsole.log(`${synced.length} registros sincronizados`, 'info');
+      if (document.getElementById('history-list')) this.renderHistoryList();
     } finally {
       this.syncing = false;
       this.setSyncButtonState(false);
