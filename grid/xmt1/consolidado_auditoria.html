@@ -1064,22 +1064,27 @@
     return index;
   }
 
-  // Catálogo de Barredura: [Shipment_ID, Fecha_Inbound, HUB_Status,
-  // Ultimo_Nodo, Estatus, Subestatus] → índice por Shipment_ID. Solo
-  // Shipment_ID es obligatoria; el resto se guarda tal cual para mostrar
-  // en captura y exportar desde el dashboard.
+  // Catálogo de Barredura: [HU, Shipment_ID, Fecha_Inbound,
+  // Usuario_Dispatch, HUB_Status, Logistic_Center, Fecha_Ultimo_Estado,
+  // Total_Shipments_Por_HU] → índice por Shipment_ID (cada fila trae su
+  // propio HU, con el que la app arma en el cliente el índice inverso
+  // HU -> [shipment_id...] para el escaneo de HU). Solo Shipment_ID es
+  // obligatoria; el resto se guarda tal cual para mostrar en captura y
+  // exportar desde el dashboard.
   function buildBarreduraCatalogIndex(rows) {
     if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
 
     const header = rows[0].map(h => cleanCell(h).toUpperCase());
     const idx = (name) => header.indexOf(name);
     const col = {
+      hu: idx('HU'),
       shipment: idx('SHIPMENT_ID'),
       fecha: idx('FECHA_INBOUND'),
+      usuarioDispatch: idx('USUARIO_DISPATCH'),
       hub: idx('HUB_STATUS'),
-      nodo: idx('ULTIMO_NODO'),
-      estatus: idx('ESTATUS'),
-      subestatus: idx('SUBESTATUS'),
+      logisticCenter: idx('LOGISTIC_CENTER'),
+      fechaUltimoEstado: idx('FECHA_ULTIMO_ESTADO'),
+      totalShipmentsPorHu: idx('TOTAL_SHIPMENTS_POR_HU'),
     };
     if (col.shipment === -1) {
       throw new Error('Falta la columna SHIPMENT_ID en el CSV');
@@ -1091,11 +1096,13 @@
       const shipmentId = cleanCell(row[col.shipment]);
       if (!shipmentId) continue;
       index[shipmentId] = {
+        hu: col.hu !== -1 ? cleanCell(row[col.hu]) : '',
         fecha_inbound: col.fecha !== -1 ? cleanCell(row[col.fecha]) : '',
+        usuario_dispatch: col.usuarioDispatch !== -1 ? cleanCell(row[col.usuarioDispatch]) : '',
         hub_status: col.hub !== -1 ? cleanCell(row[col.hub]) : '',
-        ultimo_nodo: col.nodo !== -1 ? cleanCell(row[col.nodo]) : '',
-        estatus: col.estatus !== -1 ? cleanCell(row[col.estatus]) : '',
-        subestatus: col.subestatus !== -1 ? cleanCell(row[col.subestatus]) : '',
+        logistic_center: col.logisticCenter !== -1 ? cleanCell(row[col.logisticCenter]) : '',
+        fecha_ultimo_estado: col.fechaUltimoEstado !== -1 ? cleanCell(row[col.fechaUltimoEstado]) : '',
+        total_shipments_por_hu: col.totalShipmentsPorHu !== -1 ? cleanCell(row[col.totalShipmentsPorHu]) : '',
       };
     }
 
@@ -1798,6 +1805,11 @@
           } else if (col.field === 'resultado') {
             td.className = value === 'Sin incidencia' ? 'status-good' : 'status-critical';
             td.textContent = value;
+          } else if (col.field === 'auditoria') {
+            // Registros viejos guardaron el correo completo; ahora se
+            // guarda el LDAP. Se muestra solo el LDAP en ambos casos —
+            // todo desde el @ (inclusive) se descarta.
+            td.textContent = value.replace(/@.*$/, '');
           } else if (isPhotoField(col.field)) {
             // La foto se ve con la acción "Ver fotos"; aquí solo un indicador.
             td.textContent = value ? '1 foto' : '—';

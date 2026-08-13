@@ -2011,6 +2011,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           if (col.field === 'resultado') {
             td.className = value === 'Correcto' ? 'status-good' : 'status-critical';
             td.textContent = value;
+          } else if (col.field === 'auditoria') {
+            // Registros viejos guardaron el correo completo; ahora se
+            // guarda el LDAP. Se muestra solo el LDAP en ambos casos —
+            // todo desde el @ (inclusive) se descarta.
+            td.textContent = value.replace(/@.*$/, '');
           } else if (isPhotoField(col.field)) {
             // La foto se ve con la acción "Ver fotos"; aquí solo un indicador.
             td.textContent = value ? '1 foto' : '—';

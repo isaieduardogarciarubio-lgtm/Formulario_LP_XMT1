@@ -4219,7 +4219,7 @@ class ContenedorAuditSession {
   async saveRecord(record) {
     const ts = nowMexicoISOString();
     const uid = RecordStore.genUid('contenedor');
-    const fullRecord = { uid, ts, ...record, auditoria: this.app.userEmail };
+    const fullRecord = { uid, ts, ...record, auditoria: this.app.userLdap };
     try {
       await this.app.persistRecord('contenedor', fullRecord, { stayInSession: true });
     } catch (e) {
@@ -4631,6 +4631,11 @@ class CapturaApp {
     try {
       const me = await this.gridClient.getMe();
       this.userEmail = me?.email || 'unknown@mercadolibre.com.mx';
+      // Auditoría se guarda con el LDAP (lo que va antes del @), no el
+      // correo completo — this.userEmail se conserva tal cual para el
+      // avatar/tooltip/confirmación de logout, que sí deben mostrar el
+      // correo completo.
+      this.userLdap = this.userEmail.split('@')[0];
       DebugConsole.log(`Usuario: ${this.userEmail}`, 'info');
       this.renderUserAvatar();
       this.loadHeaderLogo();
@@ -4988,7 +4993,7 @@ class CapturaApp {
 
       const ts = nowMexicoISOString();
       const uid = RecordStore.genUid(formId);
-      const record = { uid, ts, ...values, auditoria: this.userEmail };
+      const record = { uid, ts, ...values, auditoria: this.userLdap };
 
       await this.persistRecord(formId, record);
       this.renderMenu();
