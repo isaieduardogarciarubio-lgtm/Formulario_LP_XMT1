@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Migrar historial de Barredura — herramienta de un solo uso</title>
+  <style>
+    :root {
+      --bg: #090C0E; --surface: #11161A; --surface-2: #161D22;
+      --border: #1F2830; --accent: #FFD100; --accent-strong: #E6BC00;
+      --text: #F4F6F8; --text-sub: #AAB4BC; --text-mut: #6B757D;
+      --c-green: #00D689; --c-red: #FF5C6C;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: var(--font); background: var(--bg); color: var(--text);
+      max-width: 720px; margin: 0 auto; padding: 32px 20px 80px;
+    }
+    h1 { font-size: 20px; margin-bottom: 4px; }
+    .sub { color: var(--text-mut); font-size: 13px; margin-bottom: 24px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 20px; margin-bottom: 16px;
+    }
+    .card h2 { font-size: 14px; margin-bottom: 10px; }
+    label { display: block; font-size: 11px; color: var(--text-mut); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+    input[type="text"] {
+      width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--surface-2); color: var(--text); font-family: var(--font); margin-bottom: 14px;
+    }
+    button {
+      display: inline-flex; align-items: center; gap: 8px;
+      border: none; border-radius: 999px; padding: 10px 18px;
+      font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font);
+      background: linear-gradient(180deg, var(--accent), var(--accent-strong)); color: #1A1A1A;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    button.secondary { background: var(--surface-2); color: var(--text-sub); border: 1px solid var(--border); }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; flex: 1; min-width: 140px; }
+    .stat .n { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .stat .l { font-size: 11px; color: var(--text-mut); text-transform: uppercase; }
+    .log {
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 12px; font-family: monospace; font-size: 12px; white-space: pre-wrap;
+      max-height: 240px; overflow-y: auto; margin-top: 12px;
+    }
+    .ok { color: var(--c-green); }
+    .err { color: var(--c-red); }
+    .warn-box {
+      border: 1px solid rgba(255,209,0,.35); background: rgba(255,209,0,.08);
+      border-radius: 10px; padding: 14px 16px; font-size: 13px; margin-bottom: 20px; line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <h1>Migrar historial de Barredura</h1>
+  <p class="sub">Herramienta de un solo uso — no forma parte de la app ni del dashboard normal.</p>
+
+  <div class="warn-box">
+    Cuando se creó la bóveda de datos nueva de XMT1, el historial capturado
+    ANTES de ese cambio se quedó guardado en el documento viejo (el que
+    hospedaba la app), no en la bóveda. Esta herramienta lee ambos buckets
+    <code>barredura_master</code>, los combina (sin duplicar por <code>uid</code>)
+    y escribe el resultado combinado en la bóveda nueva. No borra nada del
+    documento viejo — solo copia hacia la bóveda.
+  </div>
+
+  <div class="card">
+    <h2>1. Documentos</h2>
+    <label>Doc ID viejo (donde vivía el historial antes de la bóveda)</label>
+    <input type="text" id="old-doc-id" value="01KY8F1NQ0CGK80JNEN1DPNFVF" />
+    <label>Doc ID de la bóveda nueva (destino)</label>
+    <input type="text" id="new-doc-id" value="01KZPRK3PDWP9TG0RKW3J9JGN7" />
+    <button id="btn-read" type="button">Leer ambos buckets</button>
+  </div>
+
+  <div class="card" id="preview-card" style="display: none;">
+    <h2>2. Vista previa</h2>
+    <div class="row">
+      <div class="stat"><div class="n" id="stat-old">0</div><div class="l">En doc viejo</div></div>
+      <div class="stat"><div class="n" id="stat-new">0</div><div class="l">En bóveda nueva</div></div>
+      <div class="stat"><div class="n" id="stat-merged">0</div><div class="l">Total combinado</div></div>
+      <div class="stat"><div class="n" id="stat-added">0</div><div class="l">Se agregarían</div></div>
+    </div>
+    <div style="margin-top: 16px;">
+      <button id="btn-migrate" type="button">Confirmar y migrar a la bóveda</button>
+      <button id="btn-cancel" type="button" class="secondary">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+<script>
+class MigrationClient {
+  constructor(docId) {
+    this.docId = docId;
+    this.baseUrl = location.origin;
+    this._updatedAt = '';
+  }
+  _shouldRetryStatus(status, bodyText) {
+    if (status === 503) return true;
+    try {
+      return !!JSON.parse(bodyText).retry;
+    } catch (e) {
+      return false;
+    }
+  }
+  async getStateBucket(name, attempt = 0) {
+    const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, { credentials: 'include' });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+        return this.getStateBucket(name, attempt + 1);
+      }
+      throw new Error(`GET ${name} en ${this.docId}: HTTP ${res.status}`);
+    }
+    const body = await res.json();
+    this._updatedAt = body.updated_at || '';
+    return body.state ?? null;
+  }
+  async setStateBucket(name, data, attempt = 0) {
+    const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: data, if_updated_at: this._updatedAt }),
+      credentials: 'include',
+    });
+    if (res.status === 409) {
+      const body = await res.json().catch(() => ({}));
+      return { conflict: true, currentUpdatedAt: body.current_updated_at };
+    }
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+        return this.setStateBucket(name, data, attempt + 1);
+      }
+      throw new Error(`PUT ${name} en ${this.docId}: HTTP ${res.status}`);
+    }
+    const body = await res.json();
+    this._updatedAt = body.updated_at || '';
+    return { ok: true };
+  }
+}
+
+const logEl = document.getElementById('log');
+function log(msg, cls) {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = `[${new Date().toLocaleTimeString('es-MX')}] ${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+let oldRecords = [];
+let newRecords = [];
+let mergedRecords = [];
+let newClient = null;
+
+document.getElementById('btn-read').addEventListener('click', async () => {
+  const oldDocId = document.getElementById('old-doc-id').value.trim();
+  const newDocId = document.getElementById('new-doc-id').value.trim();
+  if (!oldDocId || !newDocId) {
+    log('Faltan uno o los dos Doc ID.', 'err');
+    return;
+  }
+  if (oldDocId === newDocId) {
+    log('El doc viejo y la bóveda nueva no pueden ser el mismo ID.', 'err');
+    return;
+  }
+
+  const btn = document.getElementById('btn-read');
+  btn.disabled = true;
+  try {
+    log(`Leyendo barredura_master de ${oldDocId} (doc viejo)...`);
+    const oldClient = new MigrationClient(oldDocId);
+    const oldBucket = await oldClient.getStateBucket('barredura_master');
+    oldRecords = (oldBucket && oldBucket.records) || [];
+    log(`Doc viejo: ${oldRecords.length} registro(s)`, 'ok');
+
+    log(`Leyendo barredura_master de ${newDocId} (bóveda nueva)...`);
+    newClient = new MigrationClient(newDocId);
+    const newBucket = await newClient.getStateBucket('barredura_master');
+    newRecords = (newBucket && newBucket.records) || [];
+    log(`Bóveda nueva: ${newRecords.length} registro(s)`, 'ok');
+
+    // Combinar sin duplicar por uid. Si el mismo uid existe en ambos (no
+    // debería pasar, pero por si acaso), gana la versión de la bóveda
+    // nueva por ser la más reciente.
+    const byUid = new Map();
+    oldRecords.forEach((r) => byUid.set(r.uid, r));
+    newRecords.forEach((r) => byUid.set(r.uid, r));
+    mergedRecords = Array.from(byUid.values()).sort((a, b) => {
+      const aT = a.ts ? new Date(a.ts).getTime() : 0;
+      const bT = b.ts ? new Date(b.ts).getTime() : 0;
+      return aT - bT;
+    });
+
+    const added = mergedRecords.length - newRecords.length;
+    document.getElementById('stat-old').textContent = oldRecords.length;
+    document.getElementById('stat-new').textContent = newRecords.length;
+    document.getElementById('stat-merged').textContent = mergedRecords.length;
+    document.getElementById('stat-added').textContent = added;
+    document.getElementById('preview-card').style.display = 'block';
+
+    log(`Vista previa lista: se agregarían ${added} registro(s) a la bóveda.`, 'ok');
+  } catch (e) {
+    log(`Error al leer: ${e.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('btn-cancel').addEventListener('click', () => {
+  document.getElementById('preview-card').style.display = 'none';
+  log('Cancelado — no se escribió nada.');
+});
+
+document.getElementById('btn-migrate').addEventListener('click', async () => {
+  if (!confirm(`¿Escribir ${mergedRecords.length} registros combinados en la bóveda nueva? Esto reemplaza el contenido actual de barredura_master ahí.`)) {
+    return;
+  }
+  const btn = document.getElementById('btn-migrate');
+  btn.disabled = true;
+  try {
+    log('Escribiendo en la bóveda nueva...');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const result = await newClient.setStateBucket('barredura_master', { version: 1, records: mergedRecords });
+      if (result?.ok) {
+        log(`Migración completa: ${mergedRecords.length} registros en la bóveda.`, 'ok');
+        return;
+      }
+      if (result?.conflict) {
+        log('Conflicto de escritura (alguien más guardó al mismo tiempo) — releyendo y reintentando...', 'warn');
+        const freshBucket = await newClient.getStateBucket('barredura_master');
+        const freshRecords = (freshBucket && freshBucket.records) || [];
+        const byUid = new Map();
+        freshRecords.forEach((r) => byUid.set(r.uid, r));
+        mergedRecords.forEach((r) => byUid.set(r.uid, r));
+        mergedRecords = Array.from(byUid.values()).sort((a, b) => {
+          const aT = a.ts ? new Date(a.ts).getTime() : 0;
+          const bT = b.ts ? new Date(b.ts).getTime() : 0;
+          return aT - bT;
+        });
+        await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
+        continue;
+      }
+      throw new Error('Respuesta inesperada al escribir.');
+    }
+    throw new Error('Demasiados conflictos — intenta de nuevo.');
+  } catch (e) {
+    log(`Error al migrar: ${e.message}`, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

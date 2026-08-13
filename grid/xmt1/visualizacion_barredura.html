@@ -353,11 +353,33 @@ class GridClient {
     }
   }
 
-  async getStateBucket(name) {
+  /**
+   * Errores 503 de Grid ("object-storage is temporarily unavailable")
+   * traen retry:true explícito en el body — hay que reintentar, no
+   * tratarlo como cualquier otro error, o el visor muestra menos
+   * registros de los que en realidad hay por una falla transitoria.
+   */
+  _shouldRetryStatus(status, bodyText) {
+    if (status === 503) return true;
+    try {
+      return !!JSON.parse(bodyText).retry;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async getStateBucket(name, attempt = 0) {
     try {
       const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, { credentials: 'include' });
       if (res.status === 404) return null;
-      if (!res.ok) throw new Error(`${res.status}`);
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '');
+        if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+          return this.getStateBucket(name, attempt + 1);
+        }
+        throw new Error(`${res.status}`);
+      }
       const body = await res.json();
       return body.state ?? null;
     } catch (e) {
@@ -558,6 +580,7 @@ class BarreduraViewer {
       const builders = [
         () => this.buildEstadoChart(records),
         () => this.buildLugarChart(records),
+        () => this.buildCasoCountChart(records),
         () => this.buildCostoChart(records),
       ];
 
@@ -611,6 +634,30 @@ class BarreduraViewer {
         // overflow:hidden del contenedor de altura fija.
         xaxis: { automargin: true, tickangle: -30 },
         yaxis: { title: 'USD', automargin: true },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 60 },
+      },
+    };
+  }
+
+  /** Cantidad de registros por tipo de caso (conteo, no costo). */
+  buildCasoCountChart(records) {
+    const counts = this.countByField(records, 'caso');
+    const casos = Object.keys(counts);
+
+    return {
+      data: [{
+        x: casos,
+        y: casos.map((c) => counts[c]),
+        type: 'bar',
+        marker: { color: '#D4AF37' },
+      }],
+      layout: {
+        title: 'Cantidad por tipo de Caso',
+        xaxis: { automargin: true, tickangle: -30 },
+        yaxis: { title: 'Cantidad', automargin: true },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },

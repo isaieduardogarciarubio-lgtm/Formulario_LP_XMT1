@@ -4401,18 +4401,42 @@ class GridClient {
    * "no se pudo hablar con Grid" (hay que detener la sincronización, no
    * seguir intentando registro por registro contra una red caída).
    */
-  async getStateBucket(name) {
+  /**
+   * Errores 503 de Grid (típicamente "object-storage is temporarily
+   * unavailable") vienen con retry:true explícito en el body — Grid mismo
+   * dice que es transitorio. Antes esto se trataba igual que cualquier
+   * otro error (se relanzaba y se abandonaba el registro hasta el
+   * siguiente flushOutbox), más lento e innecesario dado que Grid ya
+   * indica que hay que reintentar.
+   */
+  _shouldRetryStatus(status, bodyText) {
+    if (status === 503) return true;
+    try {
+      return !!JSON.parse(bodyText).retry;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async getStateBucket(name, attempt = 0) {
     const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
       credentials: 'include',
     });
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`${res.status}`);
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+        return this.getStateBucket(name, attempt + 1);
+      }
+      throw new Error(`${res.status}`);
+    }
     const body = await res.json();
     this._updatedAtByName[name] = body.updated_at || '';
     return body.state ?? null;
   }
 
-  async setStateBucket(name, data) {
+  async setStateBucket(name, data, attempt = 0) {
     const ifUpdatedAt = this._updatedAtByName[name] || '';
     const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
       method: 'PUT',
@@ -4429,7 +4453,14 @@ class GridClient {
       console.warn('Conflict on state bucket update — retrying');
       return { conflict: true };
     }
-    if (!res.ok) throw new Error(`${res.status}`);
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+        return this.setStateBucket(name, data, attempt + 1);
+      }
+      throw new Error(`${res.status}`);
+    }
     const body = await res.json();
     this._updatedAtByName[name] = body.updated_at || '';
     return { ok: true };

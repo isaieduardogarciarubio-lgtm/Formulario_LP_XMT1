@@ -672,6 +672,14 @@
           <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
         </div>
 
+        <!-- Filtro por área (lugar) — solo Barredura -->
+        <div id="barredura-area-filter-wrap" style="display: none; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por área:</label>
+          <select id="area-filter" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: var(--font);">
+            <option value="">Todas</option>
+          </select>
+        </div>
+
         <!-- Sub-vista de Barredura: Historial completo vs Faltantes de costo. Mismo estilo de tabs que log-tabs. -->
         <div class="tabs" id="barredura-view-tabs" style="display: none; margin-bottom: 16px; max-width: 420px;">
           <button type="button" class="tab active" data-view="historial">Historial</button>
@@ -894,13 +902,40 @@
       return body.id || body.doc_id || (body.document && body.document.id) || null;
     }
 
-    async getStateBucket(name) {
+    /**
+     * Errores 503 de Grid ("object-storage is temporarily unavailable")
+     * traen retry:true explícito en el body — hay que reintentar, no
+     * tratarlo como cualquier otro error. Antes esto se tragaba en el
+     * catch de abajo y devolvía null, haciendo que el dashboard mostrara
+     * "sin registros" (o menos de los que en realidad hay) por una falla
+     * puramente transitoria.
+     */
+    _shouldRetryStatus(status, bodyText) {
+      if (status === 503) return true;
+      try {
+        return !!JSON.parse(bodyText).retry;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async getStateBucket(name, attempt = 0) {
       try {
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
           credentials: 'include',
         });
         if (res.status === 404) return null;
-        if (!res.ok) throw new Error(`${res.status}`);
+        if (!res.ok) {
+          const bodyText = await res.text().catch(() => '');
+          if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+            if (typeof DebugConsole !== 'undefined') {
+              DebugConsole.log(`GET ${name}: HTTP ${res.status} (transitorio, reintentando)`, 'warn');
+            }
+            await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+            return this.getStateBucket(name, attempt + 1);
+          }
+          throw new Error(`${res.status}`);
+        }
         const body = await res.json();
         this._updatedAtByName[name] = body.updated_at || '';
         return body.state ?? null;
@@ -913,7 +948,7 @@
       }
     }
 
-    async setStateBucket(name, data) {
+    async setStateBucket(name, data, attempt = 0) {
       try {
         const ifUpdatedAt = this._updatedAtByName[name] || '';
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
@@ -931,7 +966,14 @@
           console.warn('Conflict on state bucket update — retrying');
           return { conflict: true };
         }
-        if (!res.ok) throw new Error(`${res.status}`);
+        if (!res.ok) {
+          const bodyText = await res.text().catch(() => '');
+          if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+            await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+            return this.setStateBucket(name, data, attempt + 1);
+          }
+          throw new Error(`${res.status}`);
+        }
         const body = await res.json();
         this._updatedAtByName[name] = body.updated_at || '';
         return { ok: true };
@@ -1219,6 +1261,8 @@
       // Sub-vista de Barredura: 'historial' (tabla completa) o 'faltantes'
       // (solo registros sin Costo USD capturado). Solo aplica a ese log.
       this.barreduraView = 'historial';
+      // Filtro por área (lugar) — solo aplica a Barredura. '' = todas.
+      this.areaFilter = '';
       this.init();
     }
 
@@ -1302,6 +1346,12 @@
           this.render();
         });
       });
+
+      document.getElementById('area-filter').addEventListener('change', (e) => {
+        this.areaFilter = e.target.value;
+        this.displayedCount = 10;
+        this.render();
+      });
     }
 
     async loadAllLogs() {
@@ -1370,6 +1420,7 @@
         tab.addEventListener('click', () => {
           this.currentLog = logType;
           this.barreduraView = 'historial';
+          this.areaFilter = '';
           this.displayedCount = 10;
           this.render();
         });
@@ -1405,6 +1456,9 @@
       const viewTabs = document.getElementById('barredura-view-tabs');
       const costosPendientesEl = document.getElementById('barredura-costos-pendientes');
       const historialWrap = document.getElementById('historial-wrap');
+
+      document.getElementById('barredura-area-filter-wrap').style.display = isBarredura ? 'flex' : 'none';
+      if (isBarredura) this.populateAreaFilter();
 
       if (isBarredura) {
         viewTabs.style.display = 'flex';
@@ -1449,6 +1503,33 @@
     }
 
     /**
+     * Llena el select de filtro por área con los valores únicos de `lugar`
+     * presentes en Barredura, preservando la selección actual si sigue
+     * siendo válida.
+     */
+    populateAreaFilter() {
+      const select = document.getElementById('area-filter');
+      const records = this.logs.barredura || [];
+      const areas = Array.from(new Set(records.map(r => r.lugar).filter(Boolean))).sort();
+
+      const previousValue = this.areaFilter;
+      select.innerHTML = '<option value="">Todas</option>';
+      areas.forEach((area) => {
+        const opt = document.createElement('option');
+        opt.value = area;
+        opt.textContent = area;
+        select.appendChild(opt);
+      });
+
+      if (previousValue && areas.includes(previousValue)) {
+        select.value = previousValue;
+      } else {
+        this.areaFilter = '';
+        select.value = '';
+      }
+    }
+
+    /**
      * Registros del log actual filtrados por rango de fecha (this.dateFrom/
      * dateTo) y ordenados por más reciente primero. KPIs/gráficas/búsqueda
      * usan esta lista completa; solo la tabla pagina sobre ella.
@@ -1468,6 +1549,10 @@
           }
           return true;
         });
+      }
+
+      if (this.currentLog === 'barredura' && this.areaFilter) {
+        records = records.filter(r => r.lugar === this.areaFilter);
       }
 
       return records.slice().sort((a, b) => {
@@ -1625,6 +1710,7 @@
           builders = [
             () => this.buildBarreduraEstadoChart(records),
             () => this.buildBarreduraLugarChart(records),
+            () => this.buildBarreduraCasoCountChart(records),
             () => this.buildBarreduraCostoChart(records),
           ];
         }
@@ -1902,6 +1988,31 @@
         // Sin título de eje, mismo motivo que en el chart de costo — libera
         // el espacio que faltaba para que los nombres de lugar no se
         // recortaran.
+        xaxis: { automargin: true, tickangle: -30 },
+        yaxis: { title: 'Cantidad', automargin: true },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 60 },
+      };
+
+      return { data, layout };
+    }
+
+    /** Cantidad de registros por tipo de caso (conteo, no costo). */
+    buildBarreduraCasoCountChart(records) {
+      const counts = this.countByField(records, 'caso');
+      const casos = Object.keys(counts);
+
+      const data = [{
+        x: casos,
+        y: casos.map((c) => counts[c]),
+        type: 'bar',
+        marker: { color: '#D4AF37' },
+      }];
+
+      const layout = {
+        title: 'Cantidad por tipo de Caso',
         xaxis: { automargin: true, tickangle: -30 },
         yaxis: { title: 'Cantidad', automargin: true },
         plot_bgcolor: 'transparent',
