@@ -676,6 +676,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     #debug-console-panel { max-height: 0; }
     #debug-console-panel.open { max-height: 320px; }
+    #field-error-logs-panel.open { max-height: 380px; }
   </style>
 <script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KY7WX4VR2DVT9PDR2WY9HGMV";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KY7WX4VR2DVT9PDR2WY9HGMV"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KY7WX4VR2DVT9PDR2WY9HGMV"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KY7WX4VR2DVT9PDR2WY9HGMV"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KY7WX4VR2DVT9PDR2WY9HGMV"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KY7WX4VR2DVT9PDR2WY9HGMV"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KY7WX4VR2DVT9PDR2WY9HGMV"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script></head>
 
@@ -737,8 +738,38 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         align-items: center; justify-content: center;
       "></span>
     </button>
+    <button class="btn-icon" id="btn-field-error-logs" title="Logs de errores de los dispositivos de campo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </button>
   </div>
 </header>
+
+<!-- Panel de logs de errores persistidos desde los dispositivos de campo
+     (warn/error de DebugConsole en las apps de captura) — no confundir con
+     el panel de arriba, que solo muestra los errores de esta pestaña. -->
+<div id="field-error-logs-panel" style="
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 500;
+  background: var(--surface); border-top: 1px solid var(--border);
+  box-shadow: 0 -18px 40px -20px rgba(0,0,0,.7);
+  overflow: hidden; transition: max-height .2s ease; max-height: 0;
+">
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border);">
+    <span style="font-size: 13px; font-weight: 700;">Logs de errores (dispositivos de campo)</span>
+    <div style="display: flex; gap: 8px;">
+      <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" id="btn-field-error-logs-refresh">Actualizar</button>
+      <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" id="btn-field-error-logs-clear">Limpiar</button>
+      <button class="btn-secondary" style="font-size: 12px; padding: 6px 12px;" id="btn-field-error-logs-close">Cerrar</button>
+    </div>
+  </div>
+  <div id="field-error-logs-body" style="
+    padding: 12px 16px; font-family: monospace; font-size: 12px; line-height: 1.6;
+    max-height: 320px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  "></div>
+</div>
 
 <!-- Panel de consola de depuración (Grid bloquea DevTools en su iframe) -->
 <div id="debug-console-panel" style="
@@ -1113,6 +1144,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
 
+    /**
+     * Confirmado en producción: dos lecturas seguidas del mismo bucket, sin
+     * ninguna escritura de por medio, devolvieron 0 registros y luego 46 —
+     * object-storage puede responder OK con un estado vacío/obsoleto para
+     * un bucket que en realidad sí tiene datos. Mostrar "sin registros" en
+     * el dashboard por una lectura así es una falsa alarma; se reintenta un
+     * par de veces antes de aceptarla como real.
+     */
+    async getStateBucketConfirmedNonEmpty(name) {
+      let data = await this.getStateBucket(name);
+      for (let i = 0; i < 2 && (!data || !data.records || data.records.length === 0); i++) {
+        await new Promise((r) => setTimeout(r, 700 + Math.random() * 300));
+        data = await this.getStateBucket(name);
+      }
+      return data;
+    }
+
     async setStateBucket(name, data, attempt = 0) {
       try {
         const ifUpdatedAt = this._updatedAtByName[name] || '';
@@ -1381,6 +1429,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
       document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
       document.getElementById('btn-debug-console').addEventListener('click', () => DebugConsole.toggle());
+
+      document.getElementById('btn-field-error-logs').addEventListener('click', () => {
+        document.getElementById('field-error-logs-panel').classList.add('open');
+        this.loadFieldErrorLogs();
+      });
+      document.getElementById('btn-field-error-logs-close').addEventListener('click', () => {
+        document.getElementById('field-error-logs-panel').classList.remove('open');
+      });
+      document.getElementById('btn-field-error-logs-refresh').addEventListener('click', () => this.loadFieldErrorLogs());
+      document.getElementById('btn-field-error-logs-clear').addEventListener('click', () => this.clearFieldErrorLogs());
       document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
       document.getElementById('photo-modal-close').addEventListener('click', () => {
         document.getElementById('photo-modal').classList.remove('active');
@@ -1782,6 +1840,40 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     render() {
       this.renderTabs();
       this.renderAnalysis();
+    }
+
+    /**
+     * Lee el bucket compartido error_logs (llenado por DebugConsole.log de
+     * la app de captura vía attachRemote) y lo pinta como tabla, más
+     * reciente primero. Es el único lugar donde estos errores de campo son
+     * visibles — la app de captura solo los persiste, no los muestra.
+     */
+    async loadFieldErrorLogs() {
+      const body = document.getElementById('field-error-logs-body');
+      body.textContent = 'Cargando...';
+      const bucket = await this.gridClient.getStateBucket('error_logs');
+      const entries = (bucket && bucket.entries) || [];
+      if (entries.length === 0) {
+        body.textContent = 'Sin errores registrados.';
+        return;
+      }
+      const colors = { error: '#ff453a', warn: '#ffcc00', info: '#8e8e93' };
+      const escapeHtml = (s) => {
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+      };
+      body.innerHTML = entries.slice().reverse().map((e) => {
+        const ts = e.ts ? new Date(e.ts).toLocaleString('es-MX') : '?';
+        const color = colors[e.level] || colors.info;
+        return `<div style="color:${color};">[${ts}] [${escapeHtml(e.app || '?')}] [${escapeHtml(e.usuario || '?')}] ${escapeHtml(e.message || '')}</div>`;
+      }).join('');
+    }
+
+    async clearFieldErrorLogs() {
+      if (!confirm('¿Borrar todos los logs de errores de campo registrados hasta ahora?')) return;
+      await this.gridClient.setStateBucket('error_logs', { version: 1, entries: [] });
+      this.loadFieldErrorLogs();
     }
 
     renderTabs() {

@@ -4236,6 +4236,25 @@ class DebugConsole {
   static entries = [];
   static maxEntries = 300;
 
+  // Persistencia remota de warn/error: la consola local se pierde al
+  // cerrar el dispositivo, así que un error de sync en campo nunca llega
+  // al equipo de auditoría a menos que alguien mire la pantalla en ese
+  // momento. attachRemote() conecta esta clase a un GridClient para que
+  // los niveles warn/error también se guarden en un bucket compartido
+  // (error_logs), visible solo desde el consolidado.
+  static remoteClient = null;
+  static remoteApp = '';
+  static getRemoteUsuario = () => '';
+  static pendingRemote = [];
+  static flushTimer = null;
+  static _suppressRemote = false;
+
+  static attachRemote(gridClient, appTag, getUsuario) {
+    this.remoteClient = gridClient;
+    this.remoteApp = appTag;
+    this.getRemoteUsuario = getUsuario || (() => '');
+  }
+
   static log(message, level = 'info') {
     const ts = new Date().toISOString().split('T')[1].slice(0, 8);
     this.entries.push({ ts, level, message: String(message) });
@@ -4244,6 +4263,50 @@ class DebugConsole {
     if (level === 'error') console.error(message);
     else if (level === 'warn') console.warn(message);
     else console.log(message);
+
+    if ((level === 'error' || level === 'warn') && this.remoteClient && !this._suppressRemote) {
+      this.pendingRemote.push({
+        ts: new Date().toISOString(),
+        level,
+        message: String(message),
+        usuario: this.getRemoteUsuario() || '',
+        app: this.remoteApp,
+      });
+      clearTimeout(this.flushTimer);
+      this.flushTimer = setTimeout(() => this.flushRemote(), 2500);
+    }
+  }
+
+  /**
+   * Junta las entradas pendientes en una sola escritura (evita un PUT por
+   * cada warn/error individual) y las agrega al bucket compartido
+   * error_logs, con el mismo reintento por conflicto que el resto de la
+   * app. _suppressRemote evita que los propios logs de GET/PUT que genera
+   * este flush (p. ej. un warn de "reintentando") se vuelvan a encolar en
+   * un ciclo infinito.
+   */
+  static async flushRemote() {
+    if (!this.remoteClient || this.pendingRemote.length === 0) return;
+    const toFlush = this.pendingRemote;
+    this.pendingRemote = [];
+    this._suppressRemote = true;
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const bucket = await this.remoteClient.getStateBucketConfirmedNonEmpty('error_logs');
+        const entries = (bucket && bucket.entries) || [];
+        entries.push(...toFlush);
+        while (entries.length > 500) entries.shift();
+        const result = await this.remoteClient.setStateBucket('error_logs', { version: 1, entries });
+        if (result?.ok) return;
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
+          continue;
+        }
+        break;
+      }
+    } finally {
+      this._suppressRemote = false;
+    }
   }
 
   static escapeHtml(s) {
@@ -4434,6 +4497,28 @@ class GridClient {
     const body = await res.json();
     this._updatedAtByName[name] = body.updated_at || '';
     return body.state ?? null;
+  }
+
+  /**
+   * Confirmado en producción: dos lecturas seguidas del mismo bucket, sin
+   * ninguna escritura de por medio, devolvieron 0 registros y luego 46 —
+   * object-storage puede responder 200 OK con un estado vacío/obsoleto
+   * para un bucket que en realidad sí tiene datos, sin ningún error que
+   * detectar ni reintentar por status. syncOneRecord usa este resultado
+   * como base para decidir si el bucket "no existe todavía" (empieza desde
+   * cero) — confiar en una lectura vacía ahí sobreescribiría el historial
+   * real con solo el registro que se está sincronizando. Por eso, antes de
+   * aceptar una lectura vacía como base para escribir, se reintenta un par
+   * de veces con una breve espera.
+   */
+  async getStateBucketConfirmedNonEmpty(name) {
+    let data = await this.getStateBucket(name);
+    for (let i = 0; i < 2 && (!data || !data.records || data.records.length === 0); i++) {
+      DebugConsole.log(`GET ${name}: vino vacío, confirmando antes de usarlo como base (intento ${i + 1})`, 'warn');
+      await new Promise((r) => setTimeout(r, 700 + Math.random() * 300));
+      data = await this.getStateBucket(name);
+    }
+    return data;
   }
 
   async setStateBucket(name, data, attempt = 0) {
@@ -4668,6 +4753,7 @@ class CapturaApp {
       // correo completo.
       this.userLdap = this.userEmail.split('@')[0];
       DebugConsole.log(`Usuario: ${this.userEmail}`, 'info');
+      DebugConsole.attachRemote(this.gridClient, 'svc_captura', () => this.userLdap);
       this.renderUserAvatar();
       this.loadHeaderLogo();
 
@@ -5073,7 +5159,7 @@ class CapturaApp {
     }
 
     const bucketName = `${formId}_master`;
-    const bucket = (await this.gridClient.getStateBucket(bucketName)) || { records: [] };
+    const bucket = (await this.gridClient.getStateBucketConfirmedNonEmpty(bucketName)) || { records: [] };
     if (!bucket.records) bucket.records = [];
 
     const alreadyThere = bucket.records.some((r) => r.uid === record.uid);
