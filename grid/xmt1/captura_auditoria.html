@@ -5393,7 +5393,7 @@ class BarreduraSession {
 
   static CASO_OPTIONS = ['Sin recepción', 'Despachado', 'Con estatus BPP', 'Missort', 'Otro'];
 
-  static ZONA_OPTIONS = ['Sorting Large', 'Sorting GM1', 'Sorting GM2', 'Inbound FM', 'Inbound LH', 'Mesa de Ayuda', 'Inventarios', 'Despacho', 'Otro'];
+  static ZONA_OPTIONS = ['Sorting Large', 'Sorting GM1', 'Sorting GM2', 'Inbound FM', 'Inbound LH', 'Mesa de Ayuda', 'Inventarios', 'Staging', 'Otro'];
 
   // A diferencia del "Otro" de ZONA_OPTIONS (texto libre), el "Otro" de
   // tipo de ruta no abre un input manual — se guarda tal cual como valor.
@@ -5533,21 +5533,21 @@ class BarreduraSession {
   }
 
   /**
-   * Sub-enum de "Despacho": tipo de ruta — solo aplica al escanear un HU
+   * Sub-enum de "Staging": tipo de ruta — solo aplica al escanear un HU
    * (ver processHu), NO a un shipment suelto. Se pregunta DESPUÉS de
    * escanear el HU (no al elegir la zona), y el resultado se aplica a
    * TODOS los shipment_id ligados a ese HU de una sola vez. A diferencia
    * del "Otro" de zona, el "Otro" aquí no abre entrada manual — se guarda
-   * literal. Se combina con "Despacho" solo para ese lote de registros
-   * (this.lugar de la sesión sigue siendo "Despacho"). onPicked recibe el
-   * lugarForRecord resultante ("Despacho - V3" / "Despacho - Otro").
+   * literal. Se combina con "Staging" solo para ese lote de registros
+   * (this.lugar de la sesión sigue siendo "Staging"). onPicked recibe el
+   * lugarForRecord resultante ("Staging - V3" / "Staging - Otro").
    */
   pickTipoRutaForScan(label, onPicked) {
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
-          <div class="step-progress">Despacho — ${label}</div>
+          <div class="step-progress">Staging — ${label}</div>
         </div>
         <h1 class="step-question">¿Cuál es el tipo de ruta?</h1>
         <div class="choice-options"></div>
@@ -5570,7 +5570,7 @@ class BarreduraSession {
       btn.textContent = opt;
       btn.addEventListener('click', () => {
         this.locked = false;
-        onPicked(`Despacho - ${opt}`);
+        onPicked(`Staging - ${opt}`);
       });
       options.appendChild(btn);
     });
@@ -5791,11 +5791,11 @@ class BarreduraSession {
     }
 
     if (resolved.type === 'hu') {
-      // El único caso que navega (reemplaza el loop) es Despacho, que pide
+      // El único caso que navega (reemplaza el loop) es Staging, que pide
       // tipo de ruta antes de guardar. El resto (HU no en catálogo, o
       // guardado silencioso en bloque de todos sus shipments) se queda en
       // el loop.
-      const willNavigate = this.lugar === 'Despacho';
+      const willNavigate = this.lugar === 'Staging';
       this.processHu(resolved.value);
       if (!willNavigate && input && document.body.contains(input)) {
         input.value = '';
@@ -5806,7 +5806,7 @@ class BarreduraSession {
 
     // Si va a navegar (duplicado no, fuera de catálogo sí) no limpiar el
     // input todavía — se limpia al volver al loop. El tipo de ruta de
-    // Despacho no aplica a un shipment suelto (solo a HU).
+    // Staging no aplica a un shipment suelto (solo a HU).
     const willNavigate = !this.isDuplicate(resolved.value) && !this.catalogIndex[resolved.value];
     this.processShipment(resolved.value);
     if (!willNavigate && input && document.body.contains(input)) {
@@ -5893,7 +5893,7 @@ class BarreduraSession {
    * caso "Despachado", sin preguntar nada). Fuera de catálogo -> pide
    * revisar Sauron y elegir un caso antes de guardar.
    *
-   * El tipo de ruta de "Despacho" NO aplica aquí — solo se pregunta al
+   * El tipo de ruta de "Staging" NO aplica aquí — solo se pregunta al
    * escanear un HU (ver processHu). Un shipment suelto sigue el flujo
    * normal sin importar la zona.
    */
@@ -5910,7 +5910,7 @@ class BarreduraSession {
   }
 
   /**
-   * Resto del flujo de processShipment. El tipo de ruta de "Despacho" no
+   * Resto del flujo de processShipment. El tipo de ruta de "Staging" no
    * aplica a un shipment suelto (solo a HU, ver processHu), así que
    * lugarForRecord aquí siempre es this.lugar tal cual.
    */
@@ -5960,7 +5960,7 @@ class BarreduraSession {
 
     this.vibrate(60);
 
-    if (this.lugar === 'Despacho') {
+    if (this.lugar === 'Staging') {
       this.locked = true;
       if (this.scanner) this.scanner.pause();
       this.pickTipoRutaForScan(hu, async (lugarForRecord) => {

@@ -1437,6 +1437,31 @@
     return !isDentroDeCatalogo(record.estado) || record.caso === 'Despachado';
   }
 
+  // Valores de "lugar"/"caso" reconocidos (enum de la app de captura). Todo
+  // lo demás es texto libre que el operador escribió tras elegir "Otro" —
+  // en las gráficas se agrupa en una sola barra "Otro" en vez de una barra
+  // distinta por cada texto manual. Incluye "Despacho" (nombre anterior de
+  // la zona, antes de renombrarse a "Staging") para que el historial viejo
+  // siga contando como zona real y no como texto libre.
+  const KNOWN_LUGARES = [
+    'Sorting Large', 'Sorting GM1', 'Sorting GM2', 'Inbound FM', 'Inbound LH',
+    'Mesa de Ayuda', 'Inventarios', 'Staging', 'Despacho',
+    'Staging - V3', 'Staging - Otro', 'Despacho - V3', 'Despacho - Otro',
+  ];
+  const KNOWN_CASOS = ['Sin recepción', 'Despachado', 'Con estatus BPP', 'Missort'];
+
+  function bucketLugar(lugar) {
+    const v = (lugar || '').toString().trim();
+    if (!v) return '(sin dato)';
+    return KNOWN_LUGARES.includes(v) ? v : 'Otro';
+  }
+
+  function bucketCaso(caso) {
+    const v = (caso || '').toString().trim();
+    if (!v) return '(sin caso)';
+    return KNOWN_CASOS.includes(v) ? v : 'Otro';
+  }
+
   // ==========================================================================
   // AuditDashboard
   // ==========================================================================
@@ -2195,7 +2220,7 @@
     buildBarreduraCostoChart(records) {
       const totals = {};
       records.forEach((r) => {
-        const caso = (r.caso || '').trim() || '(sin caso)';
+        const caso = bucketCaso(r.caso);
         totals[caso] = (totals[caso] || 0) + (Number(r.costo_usd) || 0);
       });
       const casos = Object.keys(totals);
@@ -2229,7 +2254,7 @@
     }
 
     buildBarreduraLugarChart(records) {
-      const counts = this.countByField(records, 'lugar');
+      const counts = this.countByField(records.map(r => ({ lugar: bucketLugar(r.lugar) })), 'lugar');
 
       const data = [{
         x: Object.keys(counts),
@@ -2256,7 +2281,7 @@
 
     /** Cantidad de registros por tipo de caso (conteo, no costo). */
     buildBarreduraCasoCountChart(records) {
-      const counts = this.countByField(records, 'caso');
+      const counts = this.countByField(records.map(r => ({ caso: bucketCaso(r.caso) })), 'caso');
       const casos = Object.keys(counts);
 
       const data = [{
