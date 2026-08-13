@@ -5940,7 +5940,9 @@ class BarreduraSession {
       await this.saveFound(sid, meta, isDispatched ? 'Despachado' : '', lugarForRecord, { silent: true });
     }
     const dispatchedNote = dispatchedCount > 0 ? ` · ${dispatchedCount} despachado(s)` : '';
-    this.flash('ok', `HU ${hu} · ${shipmentIds.length} shipment(s)${dispatchedNote}`);
+    // Aviso visual: despachado se marca en rojo aunque no sea un error —
+    // el flujo sigue igual, solo cambia el color para que salte a la vista.
+    this.flash(dispatchedCount > 0 ? 'error' : 'ok', `HU ${hu} · ${shipmentIds.length} shipment(s)${dispatchedNote}`);
   }
 
   /** Días transcurridos desde fecha_inbound hasta hoy (o '' si no hay fecha válida). */
@@ -6020,7 +6022,15 @@ class BarreduraSession {
 
   async saveFound(id, meta, caso = '', lugarForRecord = this.lugar, { silent = false } = {}) {
     this.recentMap.set(id, new Date().toISOString());
-    if (!silent) this.flash('ok', caso ? `${id} · ${caso}` : `${id} · Backlog esperado`);
+    // Aviso visual: despachado se marca en rojo aunque no sea un error —
+    // el flujo sigue igual (Backlog esperado, sin pedir nada al operador),
+    // solo cambia el color para que salte a la vista.
+    if (!silent) {
+      this.flash(
+        caso === 'Despachado' ? 'error' : 'ok',
+        caso ? `${id} · ${caso}` : `${id} · Backlog esperado`
+      );
+    }
     if (this.onScan) {
       await this.onScan({
         shipment_id: id,
