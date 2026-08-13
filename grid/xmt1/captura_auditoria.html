@@ -5473,7 +5473,6 @@ class BarreduraSession {
       btn.textContent = opt;
       btn.addEventListener('click', () => {
         if (opt === 'Otro') this.pickLugarOtro();
-        else if (opt === 'Despacho') this.pickTipoRuta();
         else this.setLugar(opt);
       });
       options.appendChild(btn);
@@ -5481,15 +5480,19 @@ class BarreduraSession {
   }
 
   /**
-   * Sub-enum de "Despacho": tipo de ruta. A diferencia del "Otro" de zona,
-   * el "Otro" aquí no abre entrada manual — se guarda literal.
+   * Sub-enum de "Despacho": tipo de ruta — se pregunta DESPUÉS de escanear
+   * cada paquete (no al elegir la zona), porque aplica por shipment, no
+   * por sesión. A diferencia del "Otro" de zona, el "Otro" aquí no abre
+   * entrada manual — se guarda literal. El resultado se combina con
+   * "Despacho" para ese registro puntual (this.lugar de la sesión sigue
+   * siendo "Despacho").
    */
-  pickTipoRuta() {
+  pickTipoRutaForScan(id) {
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
-          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
-          <div class="step-progress">Barredura — Despacho</div>
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Despacho — ${id}</div>
         </div>
         <h1 class="step-question">¿Cuál es el tipo de ruta?</h1>
         <div class="choice-options"></div>
@@ -5501,7 +5504,8 @@ class BarreduraSession {
     const options = this.container.querySelector('.choice-options');
 
     this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      this.pickLugar();
+      this.locked = false;
+      this.renderLoop();
     });
 
     BarreduraSession.TIPO_RUTA_OPTIONS.forEach((opt) => {
@@ -5509,7 +5513,10 @@ class BarreduraSession {
       btn.type = 'button';
       btn.className = 'choice-btn';
       btn.textContent = opt;
-      btn.addEventListener('click', () => this.setLugar(`Despacho - ${opt}`));
+      btn.addEventListener('click', () => {
+        this.locked = false;
+        this.continueProcessShipment(id, `Despacho - ${opt}`, true);
+      });
       options.appendChild(btn);
     });
   }
@@ -5808,21 +5815,49 @@ class BarreduraSession {
       return;
     }
 
+    // En la zona "Despacho" cada paquete escaneado pide su tipo de ruta
+    // antes de seguir con el flujo normal (catálogo / fuera de catálogo).
+    if (this.lugar === 'Despacho') {
+      this.locked = true;
+      if (this.scanner) this.scanner.pause();
+      this.pickTipoRutaForScan(id);
+      return;
+    }
+
+    this.continueProcessShipment(id, this.lugar);
+  }
+
+  /**
+   * Resto del flujo de processShipment, ya con el lugar resuelto para
+   * ESTE registro (puede venir de this.lugar directo, o de "Despacho - V3"
+   * / "Despacho - Otro" tras pickTipoRutaForScan).
+   *
+   * fromDespachoDetour=true indica que la pantalla del loop fue
+   * reemplazada por el picker de tipo de ruta (pickTipoRutaForScan) — si
+   * el paquete resulta estar en catálogo, saveFound/handleOnHold no
+   * repintan nada por su cuenta (asumen que el loop sigue montado), así
+   * que hay que volver a renderLoop() explícitamente aquí. En el flujo
+   * normal (sin Despacho) el loop nunca se reemplazó, así que no hace
+   * falta — y no conviene, forzaría un re-render de pantalla completo en
+   * cada escaneo de cualquier otra zona.
+   */
+  async continueProcessShipment(id, lugarForRecord, fromDespachoDetour = false) {
     const meta = this.catalogIndex[id];
     if (meta) {
       this.vibrate(60);
       if ((meta.subestatus || '').trim().toLowerCase() === 'on_hold') {
-        this.handleOnHold(id, meta);
+        await this.handleOnHold(id, meta, lugarForRecord);
       } else {
-        this.saveFound(id, meta);
+        await this.saveFound(id, meta, '', lugarForRecord);
       }
+      if (fromDespachoDetour) this.renderLoop();
       return;
     }
 
     this.locked = true;
     if (this.scanner) this.scanner.pause();
     this.vibrate([40, 60, 40]);
-    this.renderNotFound(id);
+    this.renderNotFound(id, lugarForRecord);
   }
 
   /** Días transcurridos desde fecha_inbound hasta hoy (o '' si no hay fecha válida). */
@@ -5900,13 +5935,13 @@ class BarreduraSession {
     return Math.max(days, 0);
   }
 
-  async saveFound(id, meta, caso = '') {
+  async saveFound(id, meta, caso = '', lugarForRecord = this.lugar) {
     this.recentMap.set(id, new Date().toISOString());
     this.flash('ok', `${id} · Backlog esperado`);
     if (this.onScan) {
       await this.onScan({
         shipment_id: id,
-        lugar: this.lugar,
+        lugar: lugarForRecord,
         estado: 'Backlog esperado',
         dias_en_sitio: this.diasEnSitio(meta.fecha_inbound),
         hub_status: meta.hub_status || '',
@@ -5925,21 +5960,21 @@ class BarreduraSession {
    * guardar — el caso queda resuelto por la alerta, no hace falta
    * que el usuario elija nada.
    */
-  async handleOnHold(id, meta) {
+  async handleOnHold(id, meta, lugarForRecord = this.lugar) {
     await ConfirmModal.show({
       title: 'Auditoría fiscal',
       message: 'Este paquete debe llevar un proceso de auditoría fiscal, canalízalo con tu equipo de LP',
       confirmText: 'Entendido',
       danger: true,
     });
-    await this.saveFound(id, meta, 'Auditoría Fiscal - LP');
+    await this.saveFound(id, meta, 'Auditoría Fiscal - LP', lugarForRecord);
   }
 
   /* ====================================================================== */
   /* Fuera de catálogo: Sauron + caso (enum + "Otro" texto libre)           */
   /* ====================================================================== */
 
-  renderNotFound(id) {
+  renderNotFound(id, lugarForRecord = this.lugar) {
     const sauronUrl = `https://shipping-bo.adminml.com/sauron/shipments/shipment/${encodeURIComponent(id)}`;
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
@@ -5974,14 +6009,14 @@ class BarreduraSession {
       btn.className = 'choice-btn';
       btn.textContent = opt;
       btn.addEventListener('click', () => {
-        if (opt === 'Otro') this.renderNotFoundOtro(id);
-        else this.saveNotFound(id, opt);
+        if (opt === 'Otro') this.renderNotFoundOtro(id, lugarForRecord);
+        else this.saveNotFound(id, opt, lugarForRecord);
       });
       options.appendChild(btn);
     });
   }
 
-  renderNotFoundOtro(id) {
+  renderNotFoundOtro(id, lugarForRecord = this.lugar) {
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
@@ -5998,7 +6033,7 @@ class BarreduraSession {
 
     this.supportEl = this.container.querySelector('.step-support');
     this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      this.renderNotFound(id);
+      this.renderNotFound(id, lugarForRecord);
     });
 
     const input = this.container.querySelector('.barredura-caso-input');
@@ -6017,12 +6052,12 @@ class BarreduraSession {
         this.supportEl.classList.add('error');
         return;
       }
-      this.saveNotFound(id, val);
+      this.saveNotFound(id, val, lugarForRecord);
     });
     setTimeout(() => input.focus(), 60);
   }
 
-  async saveNotFound(id, caso) {
+  async saveNotFound(id, caso, lugarForRecord = this.lugar) {
     // Guard contra doble toque: un segundo click rápido en la misma
     // opción (o Enter dos veces en "Otro") duplicaba el registro mientras
     // el primer guardado todavía no terminaba.
@@ -6033,7 +6068,7 @@ class BarreduraSession {
     if (this.onScan) {
       await this.onScan({
         shipment_id: id,
-        lugar: this.lugar,
+        lugar: lugarForRecord,
         estado: 'Backlog inesperado',
         dias_en_sitio: '',
         hub_status: '',
