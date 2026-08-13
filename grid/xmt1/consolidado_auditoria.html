@@ -1799,26 +1799,25 @@
       return { data, layout };
     }
 
-    /** Costo USD capturado por día (suma), para ver de un vistazo la tendencia. */
+    /** Costo USD capturado por tipo de caso (suma). */
     buildBarreduraCostoChart(records) {
       const totals = {};
       records.forEach((r) => {
-        if (!r.ts) return;
-        const day = new Date(r.ts).toISOString().split('T')[0];
-        totals[day] = (totals[day] || 0) + (Number(r.costo_usd) || 0);
+        const caso = (r.caso || '').trim() || '(sin caso)';
+        totals[caso] = (totals[caso] || 0) + (Number(r.costo_usd) || 0);
       });
-      const days = Object.keys(totals).sort();
+      const casos = Object.keys(totals);
 
       const data = [{
-        x: days,
-        y: days.map((d) => totals[d]),
+        x: casos,
+        y: casos.map((c) => totals[c]),
         type: 'bar',
         marker: { color: '#FF9E45' },
       }];
 
       const layout = {
-        title: 'Costo USD por día',
-        xaxis: { title: 'Fecha' },
+        title: 'Costo USD por Caso',
+        xaxis: { title: 'Caso' },
         yaxis: { title: 'USD' },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
