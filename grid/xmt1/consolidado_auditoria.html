@@ -663,12 +663,23 @@
           <button id="btn-export-capturados" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px;">Exportar capturados (CSV)</button>
         </div>
 
+        <!-- Date Range Filter (siempre visible, aplica a ambas sub-vistas de Barredura y a los demás logs) -->
+        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
+          <input type="date" id="date-from" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+          <span style="color: var(--text-mut);">hasta</span>
+          <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+          <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
+        </div>
+
+        <!-- Sub-vista de Barredura: Historial completo vs Faltantes de costo. Mismo estilo de tabs que log-tabs. -->
+        <div class="tabs" id="barredura-view-tabs" style="display: none; margin-bottom: 16px; max-width: 420px;">
+          <button type="button" class="tab active" data-view="historial">Historial</button>
+          <button type="button" class="tab" data-view="faltantes">Faltantes de costo</button>
+        </div>
+
         <!-- Costos pendientes: fuera de catálogo o despachado sin Costo USD capturado — se puede editar directo desde aquí -->
         <div id="barredura-costos-pendientes" style="display: none; margin-bottom: 20px;">
-          <p class="card-title" style="font-size: 13px; margin-bottom: 12px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Costos pendientes de capturar
-          </p>
           <div class="table-wrapper">
             <table id="costos-pendientes-table">
               <thead id="costos-pendientes-head"></thead>
@@ -677,16 +688,8 @@
           </div>
         </div>
 
-        <!-- Table -->
-        <div class="table-wrapper">
-          <!-- Date Range Filter -->
-          <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-            <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
-            <input type="date" id="date-from" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
-            <span style="color: var(--text-mut);">hasta</span>
-            <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
-            <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
-          </div>
+        <!-- Table (Historial) -->
+        <div class="table-wrapper" id="historial-wrap">
           <div class="table-controls">
             <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
           </div>
@@ -1199,6 +1202,9 @@
       this.dateFrom = null;
       this.dateTo = null;
       this.displayedCount = 10;
+      // Sub-vista de Barredura: 'historial' (tabla completa) o 'faltantes'
+      // (solo registros sin Costo USD capturado). Solo aplica a ese log.
+      this.barreduraView = 'historial';
       this.init();
     }
 
@@ -1274,6 +1280,14 @@
         this.displayedCount += 10;
         this.render();
       });
+
+      document.querySelectorAll('#barredura-view-tabs .tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          this.barreduraView = btn.dataset.view;
+          this.displayedCount = 10;
+          this.render();
+        });
+      });
     }
 
     async loadAllLogs() {
@@ -1341,6 +1355,7 @@
         tab.textContent = this.getLogTitle(logType);
         tab.addEventListener('click', () => {
           this.currentLog = logType;
+          this.barreduraView = 'historial';
           this.displayedCount = 10;
           this.render();
         });
@@ -1372,27 +1387,48 @@
       document.getElementById('barredura-tools').style.display =
         this.currentLog === 'barredura' ? 'flex' : 'none';
 
-      if (this.currentLog === 'barredura') {
-        this.renderCostosPendientes(filteredRecords);
+      const isBarredura = this.currentLog === 'barredura';
+      const viewTabs = document.getElementById('barredura-view-tabs');
+      const costosPendientesEl = document.getElementById('barredura-costos-pendientes');
+      const historialWrap = document.getElementById('historial-wrap');
+
+      if (isBarredura) {
+        viewTabs.style.display = 'flex';
+        viewTabs.querySelectorAll('.tab').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.view === this.barreduraView);
+        });
+
+        if (this.barreduraView === 'faltantes') {
+          this.renderCostosPendientes(filteredRecords);
+          costosPendientesEl.style.display = 'block';
+          historialWrap.style.display = 'none';
+        } else {
+          costosPendientesEl.style.display = 'none';
+          historialWrap.style.display = 'block';
+        }
       } else {
-        document.getElementById('barredura-costos-pendientes').style.display = 'none';
+        viewTabs.style.display = 'none';
+        costosPendientesEl.style.display = 'none';
+        historialWrap.style.display = 'block';
       }
 
       // KPIs y gráficas usan todos los registros filtrados por fecha (no
       // paginados); la tabla sí pagina, para no renderizar cientos de filas.
       this.renderKpis(filteredRecords);
 
-      const displayedRecords = filteredRecords.slice(0, this.displayedCount);
-      this.renderTable(displayedRecords);
+      if (!isBarredura || this.barreduraView === 'historial') {
+        const displayedRecords = filteredRecords.slice(0, this.displayedCount);
+        this.renderTable(displayedRecords);
 
-      const btnLoadMore = document.getElementById('btn-load-more');
-      const paginationInfo = document.getElementById('pagination-info');
-      if (filteredRecords.length > this.displayedCount) {
-        btnLoadMore.style.display = 'inline-block';
-        paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
-      } else {
-        btnLoadMore.style.display = 'none';
-        paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+        const btnLoadMore = document.getElementById('btn-load-more');
+        const paginationInfo = document.getElementById('pagination-info');
+        if (filteredRecords.length > this.displayedCount) {
+          btnLoadMore.style.display = 'inline-block';
+          paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
+        } else {
+          btnLoadMore.style.display = 'none';
+          paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+        }
       }
 
       this.renderCharts(filteredRecords);
@@ -1783,7 +1819,8 @@
         labels: ['Dentro de catálogo', 'Fuera de catálogo'],
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
-        marker: { colors: ['#34C759', '#FF453A'] },
+        // Todas las gráficas de la app usan tonos de amarillo, no verde/rojo.
+        marker: { colors: ['#FFD100', '#8A7300'] },
       }];
 
       const layout = {
@@ -1812,7 +1849,7 @@
         x: casos,
         y: casos.map((c) => totals[c]),
         type: 'bar',
-        marker: { color: '#FF9E45' },
+        marker: { color: '#E6BC00' },
       }];
 
       const layout = {

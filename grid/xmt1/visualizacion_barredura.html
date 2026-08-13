@@ -583,7 +583,7 @@ class BarreduraViewer {
         x: casos,
         y: casos.map((c) => totals[c]),
         type: 'bar',
-        marker: { color: '#FF9E45' },
+        marker: { color: '#E6BC00' },
       }],
       layout: {
         title: 'Costo USD por Caso',
@@ -606,7 +606,8 @@ class BarreduraViewer {
         labels: ['Dentro de catálogo', 'Fuera de catálogo'],
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
-        marker: { colors: ['#34C759', '#FF453A'] },
+        // Todas las gráficas de la app usan tonos de amarillo, no verde/rojo.
+        marker: { colors: ['#FFD100', '#8A7300'] },
       }],
       layout: {
         title: 'Estado del escaneo',
