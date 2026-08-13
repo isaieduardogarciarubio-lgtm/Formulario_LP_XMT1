@@ -538,25 +538,34 @@ class BarreduraViewer {
     if (this._chartsRafId) cancelAnimationFrame(this._chartsRafId);
 
     this._chartsRafId = requestAnimationFrame(() => {
+      this._chartsRafId = null;
       container.innerHTML = '';
 
-      const estadoDiv = document.createElement('div');
-      estadoDiv.className = 'chart-container';
-      container.appendChild(estadoDiv);
-      const estadoChart = this.buildEstadoChart(records);
-      Plotly.newPlot(estadoDiv, estadoChart.data, estadoChart.layout, { responsive: true, displayModeBar: false });
+      const builders = [
+        () => this.buildEstadoChart(records),
+        () => this.buildLugarChart(records),
+        () => this.buildCostoChart(records),
+      ];
 
-      const lugarDiv = document.createElement('div');
-      lugarDiv.className = 'chart-container';
-      container.appendChild(lugarDiv);
-      const lugarChart = this.buildLugarChart(records);
-      Plotly.newPlot(lugarDiv, lugarChart.data, lugarChart.layout, { responsive: true, displayModeBar: false });
+      // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
+      // (auto-fit), el número de columnas depende de cuántos items hay en
+      // el momento de medir: si se dibuja el primer gráfico antes de que
+      // existan los demás divs, el grid colapsa a 1 sola columna a ancho
+      // completo, Plotly mide ese ancho incorrecto, y cuando el grid se
+      // reacomoda al llegar los siguientes divs, el SVG ya dibujado no se
+      // vuelve a medir solo — queda descuadrado y recortado por el
+      // overflow:hidden del contenedor.
+      const specs = builders.map((build) => {
+        const div = document.createElement('div');
+        div.className = 'chart-container';
+        container.appendChild(div);
+        return { div, ...build() };
+      });
 
-      const costoDiv = document.createElement('div');
-      costoDiv.className = 'chart-container';
-      container.appendChild(costoDiv);
-      const costoChart = this.buildCostoChart(records);
-      Plotly.newPlot(costoDiv, costoChart.data, costoChart.layout, { responsive: true, displayModeBar: false });
+      // Fase 2: con el grid ya en su layout final, dibujar cada gráfica.
+      specs.forEach(({ div, data, layout }) => {
+        Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+      });
     });
   }
 
