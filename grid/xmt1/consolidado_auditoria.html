@@ -1858,7 +1858,11 @@
         // largos y se cortaban contra el overflow:hidden del contenedor —
         // esto hace que Plotly encoja el área de la gráfica para que las
         // etiquetas siempre quepan, en vez de desbordarse.
-        xaxis: { title: 'Caso', automargin: true, tickangle: -30 },
+        // Sin título de eje (el título de la gráfica ya dice "por Caso") —
+        // liberar ese espacio era necesario para que los nombres largos
+        // ("Con estatus BPP") y su ángulo no se recortaran contra el
+        // overflow:hidden del contenedor de altura fija.
+        xaxis: { automargin: true, tickangle: -30 },
         yaxis: { title: 'USD', automargin: true },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
@@ -1881,7 +1885,10 @@
 
       const layout = {
         title: 'Escaneos por lugar',
-        xaxis: { title: 'Lugar', automargin: true, tickangle: -30 },
+        // Sin título de eje, mismo motivo que en el chart de costo — libera
+        // el espacio que faltaba para que los nombres de lugar no se
+        // recortaran.
+        xaxis: { automargin: true, tickangle: -30 },
         yaxis: { title: 'Cantidad', automargin: true },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
