@@ -2055,6 +2055,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     }
 
+    /**
+     * CRÍTICO: nunca escribir this.logs[logType] tal cual al bucket — es la
+     * copia en memoria del dashboard, cargada una vez al abrir/actualizar.
+     * Si otro dispositivo sincronizó registros nuevos desde entonces, esa
+     * copia queda desactualizada, y escribirla de vuelta (reemplazo
+     * completo del bucket, no un patch) BORRA en silencio todo lo
+     * capturado después. Por eso se relee el bucket fresco del servidor
+     * justo antes de mutar y escribir, en vez de mutar this.logs.
+     */
     async deleteRecord(logType, uid) {
       const confirmed = await AppModal.confirm(
         '¿Estás seguro de que quieres borrar este registro? Se eliminará tanto de la tabla como del consolidado.',
@@ -2062,33 +2071,40 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       );
       if (!confirmed) return;
 
-      const records = this.logs[logType];
-      const recordIndex = records.findIndex(r => r.uid === uid);
-      if (recordIndex < 0) {
-        await AppModal.alert('Registro no encontrado', { title: 'Error' });
-        return;
-      }
-
-      const deletedRecord = records[recordIndex];
-
-      // Borrar del array local
-      records.splice(recordIndex, 1);
-
       LoadingOverlay.show('Borrando...');
-      // Actualizar el bucket en Grid
-      try {
-        await this.gridClient.setStateBucket(`${logType}_master`, { version: 1, records });
-        this.showNotification('Registro borrado exitosamente', 'success');
-        LoadingOverlay.success('Borrado');
-      } catch (error) {
-        records.splice(recordIndex, 0, deletedRecord); // Restaurar si falla
-        this.showNotification('Error al borrar: ' + error.message, 'error');
-        LoadingOverlay.error('Error al borrar');
-        return;
+
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const bucket = await this.gridClient.getStateBucket(`${logType}_master`);
+        const records = (bucket && bucket.records) || [];
+        const recordIndex = records.findIndex(r => r.uid === uid);
+        if (recordIndex < 0) {
+          const localIndex = this.logs[logType].findIndex(r => r.uid === uid);
+          if (localIndex >= 0) this.logs[logType].splice(localIndex, 1);
+          await AppModal.alert('Registro no encontrado en el servidor (puede que ya estuviera borrado)', { title: 'Error' });
+          LoadingOverlay.error('No encontrado');
+          this.render();
+          return;
+        }
+        records.splice(recordIndex, 1);
+
+        const result = await this.gridClient.setStateBucket(`${logType}_master`, { version: 1, records });
+        if (result?.ok) {
+          const localIndex = this.logs[logType].findIndex(r => r.uid === uid);
+          if (localIndex >= 0) this.logs[logType].splice(localIndex, 1);
+          this.showNotification('Registro borrado exitosamente', 'success');
+          LoadingOverlay.success('Borrado');
+          this.render();
+          return;
+        }
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));
+          continue;
+        }
+        break;
       }
 
-      // Recargar tabla y gráficas
-      this.render();
+      this.showNotification('Error al borrar — intenta de nuevo', 'error');
+      LoadingOverlay.error('Error al borrar');
     }
 
     filterTable(query) {

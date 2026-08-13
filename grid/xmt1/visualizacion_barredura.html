@@ -307,6 +307,20 @@ function isDentroDeCatalogo(estado) {
   return estado === 'En catálogo' || estado === 'Backlog esperado' || estado === 'Dentro de catálogo';
 }
 
+/**
+ * `new Date("2026-08-13")` (el valor crudo de un <input type="date">) se
+ * interpreta como medianoche UTC, no medianoche local — para alguien en
+ * México (UTC-6) eso corre el filtro 6 horas hacia atrás, mostrando el día
+ * equivocado cerca de la medianoche. Se arma la fecha con los componentes
+ * año/mes/día directamente en el constructor local de Date para evitar el
+ * parseo UTC por completo.
+ */
+function parseLocalDateInput(value) {
+  if (!value) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function hasCosto(record) {
   return record.costo_usd !== undefined && record.costo_usd !== null && String(record.costo_usd).trim() !== '';
 }
@@ -388,12 +402,12 @@ class BarreduraViewer {
     document.getElementById('btn-refresh').addEventListener('click', () => this.refresh());
     document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
     document.getElementById('date-from').addEventListener('change', (e) => {
-      this.dateFrom = e.target.value ? new Date(e.target.value) : null;
+      this.dateFrom = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
       this.render();
     });
     document.getElementById('date-to').addEventListener('change', (e) => {
-      this.dateTo = e.target.value ? new Date(e.target.value) : null;
+      this.dateTo = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
       this.render();
     });

@@ -1162,6 +1162,20 @@
   }
 
   /**
+   * `new Date("2026-08-13")` (el valor crudo de un <input type="date">) se
+   * interpreta como medianoche UTC, no medianoche local — para alguien en
+   * México (UTC-6) eso corre el filtro 6 horas hacia atrás, mostrando el
+   * día equivocado cerca de la medianoche. Se arma la fecha con los
+   * componentes año/mes/día directamente en el constructor local de Date
+   * para evitar el parseo UTC por completo.
+   */
+  function parseLocalDateInput(value) {
+    if (!value) return null;
+    const [y, m, d] = value.split('-').map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  /**
    * El estado "encontrado en catálogo" de Barredura ha tenido 3 nombres
    * ('En catálogo' → 'Backlog esperado' → 'Dentro de catálogo') según
    * cambios de terminología — acepta cualquiera para que los registros
@@ -1259,12 +1273,12 @@
       });
 
       document.getElementById('date-from').addEventListener('change', (e) => {
-        this.dateFrom = e.target.value ? new Date(e.target.value) : null;
+        this.dateFrom = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
         this.render();
       });
       document.getElementById('date-to').addEventListener('change', (e) => {
-        this.dateTo = e.target.value ? new Date(e.target.value) : null;
+        this.dateTo = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
         this.render();
       });
@@ -2069,35 +2083,50 @@
       });
     }
 
+    /**
+     * CRÍTICO: nunca escribir this.logs[logType] tal cual al bucket. Esa es
+     * la copia en memoria del dashboard, cargada una vez al abrir/actualizar
+     * — si algún otro dispositivo sincronizó registros nuevos desde
+     * entonces, esta copia queda desactualizada, y escribirla de vuelta
+     * (reemplazo completo del bucket, no un patch) BORRA en silencio todo lo
+     * capturado después. Por eso cada intento relee el bucket fresco del
+     * servidor justo antes de mutar y escribir — nunca se muta la copia en
+     * memoria del dashboard.
+     */
     async deleteRecord(logType, uid) {
       if (!confirm('¿Estás seguro de que quieres borrar este registro? Se eliminará tanto de la tabla como del consolidado.')) {
         return;
       }
 
-      const records = this.logs[logType];
-      const recordIndex = records.findIndex(r => r.uid === uid);
-      if (recordIndex < 0) {
-        alert('Registro no encontrado');
-        return;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const bucket = await this.gridClient.getStateBucket(`${logType}_master`);
+        const records = (bucket && bucket.records) || [];
+        const recordIndex = records.findIndex(r => r.uid === uid);
+        if (recordIndex < 0) {
+          const localIndex = this.logs[logType].findIndex(r => r.uid === uid);
+          if (localIndex >= 0) this.logs[logType].splice(localIndex, 1);
+          this.showNotification('Registro no encontrado en el servidor (puede que ya estuviera borrado)', 'error');
+          this.render();
+          return;
+        }
+        records.splice(recordIndex, 1);
+
+        const result = await this.gridClient.setStateBucket(`${logType}_master`, { version: 1, records });
+        if (result?.ok) {
+          const localIndex = this.logs[logType].findIndex(r => r.uid === uid);
+          if (localIndex >= 0) this.logs[logType].splice(localIndex, 1);
+          this.showNotification('Registro borrado exitosamente', 'success');
+          this.render();
+          return;
+        }
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 300 + Math.random() * 300));
+          continue;
+        }
+        break;
       }
 
-      const deletedRecord = records[recordIndex];
-
-      // Borrar del array local
-      records.splice(recordIndex, 1);
-
-      // Actualizar el bucket en Grid
-      try {
-        await this.gridClient.setStateBucket(`${logType}_master`, { version: 1, records });
-        this.showNotification('Registro borrado exitosamente', 'success');
-      } catch (error) {
-        records.splice(recordIndex, 0, deletedRecord); // Restaurar si falla
-        this.showNotification('Error al borrar: ' + error.message, 'error');
-        return;
-      }
-
-      // Recargar tabla y gráficas
-      this.render();
+      this.showNotification('Error al borrar — intenta de nuevo', 'error');
     }
 
     /**
@@ -2150,19 +2179,24 @@
      * borrado silenciosamente exitoso.
      */
     async updateRecordField(logType, uid, field, value) {
-      const records = this.logs[logType];
-      const record = records.find(r => r.uid === uid);
-      if (!record) {
-        this.showNotification('Registro no encontrado', 'error');
-        return false;
-      }
-
-      const previousValue = record[field];
-      record[field] = value;
-
+      // Ver nota en deleteRecord: siempre releer el bucket fresco antes de
+      // escribir, nunca reusar this.logs[logType] — evita borrar en
+      // silencio registros capturados por otros dispositivos después de
+      // que este dashboard cargó.
       for (let attempt = 0; attempt < 3; attempt++) {
+        const bucket = await this.gridClient.getStateBucket(logType + '_master');
+        const records = (bucket && bucket.records) || [];
+        const record = records.find(r => r.uid === uid);
+        if (!record) {
+          this.showNotification('Registro no encontrado en el servidor — actualiza e intenta de nuevo', 'error');
+          return false;
+        }
+        record[field] = value;
+
         const result = await this.gridClient.setStateBucket(logType + '_master', { version: 1, records });
         if (result?.ok) {
+          const localRecord = this.logs[logType].find(r => r.uid === uid);
+          if (localRecord) localRecord[field] = value;
           this.showNotification('Campo actualizado', 'success');
           return true;
         }
@@ -2173,7 +2207,6 @@
         break; // error de red/servidor — no tiene caso reintentar en loop
       }
 
-      record[field] = previousValue;
       this.showNotification('No se pudo guardar el cambio — intenta de nuevo', 'error');
       return false;
     }
