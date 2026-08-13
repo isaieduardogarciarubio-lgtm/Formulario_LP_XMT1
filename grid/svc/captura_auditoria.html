@@ -1399,6 +1399,7 @@ select.step-input {
   <div id="debug-console-body" style="flex: 1; overflow-y: auto; font-size: 0.75rem; font-family: monospace; padding: 8px; line-height: 1.3; color: #aab4bc;"></div>
   <div style="padding: 8px; border-top: 1px solid #2c2c2e; display: flex; gap: 6px;">
     <button onclick="DebugConsole.copyToClipboard()" style="flex: 1; padding: 6px; background: #2c2c2e; border: none; color: #aab4bc; border-radius: 6px; cursor: pointer; font-size: 0.75rem;">Copiar</button>
+    <button onclick="DebugConsole.saveToServer()" style="flex: 1; padding: 6px; background: #2c2c2e; border: none; color: #aab4bc; border-radius: 6px; cursor: pointer; font-size: 0.75rem;">Guardar</button>
     <button onclick="DebugConsole.toggle()" style="flex: 1; padding: 6px; background: #2c2c2e; border: none; color: #aab4bc; border-radius: 6px; cursor: pointer; font-size: 0.75rem;">Cerrar</button>
   </div>
 </div>
@@ -4236,18 +4237,17 @@ class DebugConsole {
   static entries = [];
   static maxEntries = 300;
 
-  // Persistencia remota de warn/error: la consola local se pierde al
-  // cerrar el dispositivo, así que un error de sync en campo nunca llega
-  // al equipo de auditoría a menos que alguien mire la pantalla en ese
-  // momento. attachRemote() conecta esta clase a un GridClient para que
-  // los niveles warn/error también se guarden en un bucket compartido
-  // (error_logs), visible solo desde el consolidado.
+  // Persistencia remota de warn/error, a petición del usuario (botón
+  // "Guardar en servidor" dentro de la consola): la consola local se
+  // pierde al cerrar el dispositivo, así que sin este botón un error de
+  // sync en campo nunca llega al equipo de auditoría a menos que alguien
+  // mire la pantalla en ese momento. attachRemote() conecta esta clase a
+  // un GridClient para poder subir los warn/error actuales a un bucket
+  // compartido (error_logs), visible solo desde el consolidado. No se
+  // sube nada automáticamente en cada log — solo cuando el usuario lo pide.
   static remoteClient = null;
   static remoteApp = '';
   static getRemoteUsuario = () => '';
-  static pendingRemote = [];
-  static flushTimer = null;
-  static _suppressRemote = false;
 
   static attachRemote(gridClient, appTag, getUsuario) {
     this.remoteClient = gridClient;
@@ -4257,56 +4257,54 @@ class DebugConsole {
 
   static log(message, level = 'info') {
     const ts = new Date().toISOString().split('T')[1].slice(0, 8);
-    this.entries.push({ ts, level, message: String(message) });
+    this.entries.push({ ts, fullTs: new Date().toISOString(), level, message: String(message) });
     if (this.entries.length > this.maxEntries) this.entries.shift();
     this.render();
     if (level === 'error') console.error(message);
     else if (level === 'warn') console.warn(message);
     else console.log(message);
-
-    if ((level === 'error' || level === 'warn') && this.remoteClient && !this._suppressRemote) {
-      this.pendingRemote.push({
-        ts: new Date().toISOString(),
-        level,
-        message: String(message),
-        usuario: this.getRemoteUsuario() || '',
-        app: this.remoteApp,
-      });
-      clearTimeout(this.flushTimer);
-      this.flushTimer = setTimeout(() => this.flushRemote(), 2500);
-    }
   }
 
   /**
-   * Junta las entradas pendientes en una sola escritura (evita un PUT por
-   * cada warn/error individual) y las agrega al bucket compartido
-   * error_logs, con el mismo reintento por conflicto que el resto de la
-   * app. _suppressRemote evita que los propios logs de GET/PUT que genera
-   * este flush (p. ej. un warn de "reintentando") se vuelvan a encolar en
-   * un ciclo infinito.
+   * Botón "Guardar en servidor" de la consola: sube los warn/error
+   * actuales de este dispositivo al bucket compartido error_logs, con el
+   * mismo reintento por conflicto que el resto de la app.
    */
-  static async flushRemote() {
-    if (!this.remoteClient || this.pendingRemote.length === 0) return;
-    const toFlush = this.pendingRemote;
-    this.pendingRemote = [];
-    this._suppressRemote = true;
-    try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const bucket = await this.remoteClient.getStateBucketConfirmedNonEmpty('error_logs');
-        const entries = (bucket && bucket.entries) || [];
-        entries.push(...toFlush);
-        while (entries.length > 500) entries.shift();
-        const result = await this.remoteClient.setStateBucket('error_logs', { version: 1, entries });
-        if (result?.ok) return;
-        if (result?.conflict) {
-          await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
-          continue;
-        }
-        break;
-      }
-    } finally {
-      this._suppressRemote = false;
+  static async saveToServer() {
+    if (!this.remoteClient) {
+      this.log('No se pudo guardar: sin conexión con el servidor todavía', 'error');
+      return;
     }
+    const toSave = this.entries
+      .filter((e) => e.level === 'error' || e.level === 'warn')
+      .map((e) => ({
+        ts: e.fullTs || new Date().toISOString(),
+        level: e.level,
+        message: e.message,
+        usuario: this.getRemoteUsuario() || '',
+        app: this.remoteApp,
+      }));
+    if (toSave.length === 0) {
+      this.log('No hay errores ni warnings que guardar', 'info');
+      return;
+    }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const bucket = await this.remoteClient.getStateBucketConfirmedNonEmpty('error_logs');
+      const entries = (bucket && bucket.entries) || [];
+      entries.push(...toSave);
+      while (entries.length > 500) entries.shift();
+      const result = await this.remoteClient.setStateBucket('error_logs', { version: 1, entries });
+      if (result?.ok) {
+        this.log(`${toSave.length} entrada(s) guardadas en el servidor`, 'info');
+        return;
+      }
+      if (result?.conflict) {
+        await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
+        continue;
+      }
+      break;
+    }
+    this.log('No se pudo guardar en el servidor — intenta de nuevo', 'error');
   }
 
   static escapeHtml(s) {
