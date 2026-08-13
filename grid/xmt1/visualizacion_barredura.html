@@ -297,6 +297,25 @@ const BARREDURA_COLUMNS = [
   { field: 'costo_usd', header: 'Costo USD' },
 ];
 
+/**
+ * El estado "encontrado en catálogo" de Barredura ha tenido 3 nombres
+ * ('En catálogo' → 'Backlog esperado' → 'Dentro de catálogo') según
+ * cambios de terminología — acepta cualquiera para que los registros
+ * viejos se sigan contando/mostrando bien.
+ */
+function isDentroDeCatalogo(estado) {
+  return estado === 'En catálogo' || estado === 'Backlog esperado' || estado === 'Dentro de catálogo';
+}
+
+function hasCosto(record) {
+  return record.costo_usd !== undefined && record.costo_usd !== null && String(record.costo_usd).trim() !== '';
+}
+
+/** ¿Este registro de Barredura debería tener un Costo USD capturado? Fuera de catálogo, o despachado. */
+function needsCosto(record) {
+  return !isDentroDeCatalogo(record.estado) || record.caso === 'Despachado';
+}
+
 class GridClient {
   constructor(docId) {
     this.docId = docId;
@@ -477,15 +496,15 @@ class BarreduraViewer {
     const total = records.length;
 
     this.addKpiCard(container, total.toString(), 'Total');
-    // Acepta el valor viejo ('En catálogo') y el nuevo ('Backlog
-    // esperado') — mismo significado, renombrado.
-    const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
-    this.addKpiCard(container, enCatalogo.toString(), 'Backlog esperado');
-    this.addKpiCard(container, (total - enCatalogo).toString(), 'Backlog inesperado');
+    const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
+    this.addKpiCard(container, enCatalogo.toString(), 'Dentro de catálogo');
+    this.addKpiCard(container, (total - enCatalogo).toString(), 'Fuera de catálogo');
     const conCaso = records.filter(r => (r.caso || '').trim()).length;
     if (conCaso > 0) this.addKpiCard(container, conCaso.toString(), 'Con caso');
     const totalCosto = records.reduce((sum, r) => sum + (Number(r.costo_usd) || 0), 0);
     if (totalCosto > 0) this.addKpiCard(container, `$${totalCosto.toFixed(2)}`, 'Costo USD');
+    const sinCosto = records.filter(r => needsCosto(r) && !hasCosto(r)).length;
+    if (sinCosto > 0) this.addKpiCard(container, sinCosto.toString(), 'Sin costo capturado');
   }
 
   addKpiCard(container, value, label) {
@@ -532,16 +551,51 @@ class BarreduraViewer {
       container.appendChild(lugarDiv);
       const lugarChart = this.buildLugarChart(records);
       Plotly.newPlot(lugarDiv, lugarChart.data, lugarChart.layout, { responsive: true, displayModeBar: false });
+
+      const costoDiv = document.createElement('div');
+      costoDiv.className = 'chart-container';
+      container.appendChild(costoDiv);
+      const costoChart = this.buildCostoChart(records);
+      Plotly.newPlot(costoDiv, costoChart.data, costoChart.layout, { responsive: true, displayModeBar: false });
     });
   }
 
+  /** Costo USD capturado por día (suma), para ver de un vistazo la tendencia. */
+  buildCostoChart(records) {
+    const totals = {};
+    records.forEach((r) => {
+      if (!r.ts) return;
+      const day = new Date(r.ts).toISOString().split('T')[0];
+      totals[day] = (totals[day] || 0) + (Number(r.costo_usd) || 0);
+    });
+    const days = Object.keys(totals).sort();
+
+    return {
+      data: [{
+        x: days,
+        y: days.map((d) => totals[d]),
+        type: 'bar',
+        marker: { color: '#FF9E45' },
+      }],
+      layout: {
+        title: 'Costo USD por día',
+        xaxis: { title: 'Fecha' },
+        yaxis: { title: 'USD' },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 60 },
+      },
+    };
+  }
+
   buildEstadoChart(records) {
-    const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
+    const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
     const fueraCatalogo = records.length - enCatalogo;
 
     return {
       data: [{
-        labels: ['Backlog esperado', 'Backlog inesperado'],
+        labels: ['Dentro de catálogo', 'Fuera de catálogo'],
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
         marker: { colors: ['#34C759', '#FF453A'] },
@@ -609,8 +663,8 @@ class BarreduraViewer {
           // guarda el LDAP. Se muestra solo el LDAP en ambos casos.
           td.textContent = value.replace(/@.*$/, '');
         } else if (col.field === 'estado') {
-          td.className = (value === 'Backlog esperado' || value === 'En catálogo') ? 'status-good' : 'status-critical';
-          td.textContent = value;
+          td.className = isDentroDeCatalogo(value) ? 'status-good' : 'status-critical';
+          td.textContent = isDentroDeCatalogo(value) ? 'Dentro de catálogo' : 'Fuera de catálogo';
         } else {
           td.textContent = value;
         }

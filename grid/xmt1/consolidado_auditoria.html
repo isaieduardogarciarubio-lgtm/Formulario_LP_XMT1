@@ -663,6 +663,20 @@
           <button id="btn-export-capturados" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px;">Exportar capturados (CSV)</button>
         </div>
 
+        <!-- Costos pendientes: fuera de catálogo o despachado sin Costo USD capturado — se puede editar directo desde aquí -->
+        <div id="barredura-costos-pendientes" style="display: none; margin-bottom: 20px;">
+          <p class="card-title" style="font-size: 13px; margin-bottom: 12px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Costos pendientes de capturar
+          </p>
+          <div class="table-wrapper">
+            <table id="costos-pendientes-table">
+              <thead id="costos-pendientes-head"></thead>
+              <tbody id="costos-pendientes-body"></tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Table -->
         <div class="table-wrapper">
           <!-- Date Range Filter -->
@@ -1144,6 +1158,25 @@
     return null;
   }
 
+  /**
+   * El estado "encontrado en catálogo" de Barredura ha tenido 3 nombres
+   * ('En catálogo' → 'Backlog esperado' → 'Dentro de catálogo') según
+   * cambios de terminología — acepta cualquiera para que los registros
+   * viejos se sigan contando/mostrando bien.
+   */
+  function isDentroDeCatalogo(estado) {
+    return estado === 'En catálogo' || estado === 'Backlog esperado' || estado === 'Dentro de catálogo';
+  }
+
+  function hasCosto(record) {
+    return record.costo_usd !== undefined && record.costo_usd !== null && String(record.costo_usd).trim() !== '';
+  }
+
+  /** ¿Este registro de Barredura debería tener un Costo USD capturado? Fuera de catálogo, o despachado. */
+  function needsCosto(record) {
+    return !isDentroDeCatalogo(record.estado) || record.caso === 'Despachado';
+  }
+
   // ==========================================================================
   // AuditDashboard
   // ==========================================================================
@@ -1339,6 +1372,12 @@
       document.getElementById('barredura-tools').style.display =
         this.currentLog === 'barredura' ? 'flex' : 'none';
 
+      if (this.currentLog === 'barredura') {
+        this.renderCostosPendientes(filteredRecords);
+      } else {
+        document.getElementById('barredura-costos-pendientes').style.display = 'none';
+      }
+
       // KPIs y gráficas usan todos los registros filtrados por fecha (no
       // paginados); la tabla sí pagina, para no renderizar cientos de filas.
       this.renderKpis(filteredRecords);
@@ -1445,15 +1484,21 @@
         }
       } else if (this.currentLog === 'barredura') {
         this.addKpiCard(container, total.toString(), 'Total');
-        // Acepta el valor viejo ('En catálogo') y el nuevo ('Backlog
-        // esperado') — mismo significado, renombrado; así los registros
-        // capturados antes del cambio de terminología se siguen contando.
-        const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
-        this.addKpiCard(container, enCatalogo.toString(), 'Backlog esperado');
-        this.addKpiCard(container, (total - enCatalogo).toString(), 'Backlog inesperado');
+        // Acepta cualquiera de los 3 nombres que ha tenido este estado
+        // (En catálogo / Backlog esperado / Dentro de catálogo) — mismo
+        // significado, renombrado varias veces; así los registros
+        // capturados antes de cada cambio de terminología se siguen
+        // contando bien.
+        const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
+        this.addKpiCard(container, enCatalogo.toString(), 'Dentro de catálogo');
+        this.addKpiCard(container, (total - enCatalogo).toString(), 'Fuera de catálogo');
         const conCaso = records.filter(r => (r.caso || '').trim()).length;
         if (conCaso > 0) {
           this.addKpiCard(container, conCaso.toString(), 'Con caso');
+        }
+        const sinCosto = records.filter(r => needsCosto(r) && !hasCosto(r)).length;
+        if (sinCosto > 0) {
+          this.addKpiCard(container, sinCosto.toString(), 'Sin costo capturado');
         }
       }
     }
@@ -1530,6 +1575,7 @@
           builders = [
             () => this.buildBarreduraEstadoChart(records),
             () => this.buildBarreduraLugarChart(records),
+            () => this.buildBarreduraCostoChart(records),
           ];
         }
 
@@ -1730,13 +1776,11 @@
     }
 
     buildBarreduraEstadoChart(records) {
-      // Acepta el valor viejo ('En catálogo') y el nuevo ('Backlog
-      // esperado') — mismo significado, renombrado.
-      const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
+      const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
       const fueraCatalogo = records.length - enCatalogo;
 
       const data = [{
-        labels: ['Backlog esperado', 'Backlog inesperado'],
+        labels: ['Dentro de catálogo', 'Fuera de catálogo'],
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
         marker: { colors: ['#34C759', '#FF453A'] },
@@ -1750,6 +1794,36 @@
         showlegend: true,
         legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
         margin: { l: 20, r: 20, t: 40, b: 20 },
+      };
+
+      return { data, layout };
+    }
+
+    /** Costo USD capturado por día (suma), para ver de un vistazo la tendencia. */
+    buildBarreduraCostoChart(records) {
+      const totals = {};
+      records.forEach((r) => {
+        if (!r.ts) return;
+        const day = new Date(r.ts).toISOString().split('T')[0];
+        totals[day] = (totals[day] || 0) + (Number(r.costo_usd) || 0);
+      });
+      const days = Object.keys(totals).sort();
+
+      const data = [{
+        x: days,
+        y: days.map((d) => totals[d]),
+        type: 'bar',
+        marker: { color: '#FF9E45' },
+      }];
+
+      const layout = {
+        title: 'Costo USD por día',
+        xaxis: { title: 'Fecha' },
+        yaxis: { title: 'USD' },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 60 },
       };
 
       return { data, layout };
@@ -1776,6 +1850,72 @@
       };
 
       return { data, layout };
+    }
+
+    /**
+     * Panel aparte con los registros de Barredura que "deberían" tener un
+     * Costo USD capturado (fuera de catálogo, o despachado) y todavía no
+     * lo tienen — para no tener que buscarlos manualmente en la tabla
+     * completa. Costo USD es editable directo desde aquí (misma celda
+     * reutilizable que la tabla principal).
+     */
+    renderCostosPendientes(records) {
+      const wrap = document.getElementById('barredura-costos-pendientes');
+      const pending = records.filter((r) => needsCosto(r) && !hasCosto(r));
+
+      if (pending.length === 0) {
+        wrap.style.display = 'none';
+        return;
+      }
+      wrap.style.display = 'block';
+
+      const columns = [
+        { field: 'auditoria', header: 'Auditoría' },
+        { field: 'ts', header: 'Fecha/Hora' },
+        { field: 'hu', header: 'HU' },
+        { field: 'shipment_id', header: 'Shipment ID' },
+        { field: 'lugar', header: 'Lugar' },
+        { field: 'caso', header: 'Caso' },
+        { field: 'costo_usd', header: 'Costo USD' },
+      ];
+
+      const thead = document.getElementById('costos-pendientes-head');
+      const tbody = document.getElementById('costos-pendientes-body');
+      thead.innerHTML = '';
+      tbody.innerHTML = '';
+
+      const trHead = document.createElement('tr');
+      columns.forEach((col) => {
+        const th = document.createElement('th');
+        th.textContent = col.header;
+        trHead.appendChild(th);
+      });
+      thead.appendChild(trHead);
+
+      pending.forEach((record) => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-uid', record.uid || '');
+        columns.forEach((col) => {
+          const td = document.createElement('td');
+          const value = record[col.field] || '';
+
+          if (col.field === 'ts') {
+            td.textContent = value ? new Date(value).toLocaleString('es-MX', {
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit', second: '2-digit',
+            }) : '';
+          } else if (col.field === 'auditoria') {
+            td.textContent = value.replace(/@.*$/, '');
+          } else if (col.field === 'costo_usd') {
+            td.textContent = value || '—';
+            this.makeEditableCell(td, record, 'barredura', 'costo_usd');
+          } else {
+            td.textContent = value;
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
     }
 
     renderTable(records) {
@@ -1827,6 +1967,9 @@
             // guarda el LDAP. Se muestra solo el LDAP en ambos casos —
             // todo desde el @ (inclusive) se descarta.
             td.textContent = value.replace(/@.*$/, '');
+          } else if (this.currentLog === 'barredura' && col.field === 'estado') {
+            td.className = isDentroDeCatalogo(value) ? 'status-good' : 'status-critical';
+            td.textContent = isDentroDeCatalogo(value) ? 'Dentro de catálogo' : 'Fuera de catálogo';
           } else if (this.currentLog === 'barredura' && col.field === 'costo_usd') {
             // Costo USD: columna editable, no viene de la captura — se
             // llena manualmente desde el dashboard.
@@ -1834,9 +1977,9 @@
             this.makeEditableCell(td, record, this.currentLog, 'costo_usd');
           } else if (this.currentLog === 'barredura' && col.field === 'usuario_dispatch') {
             // Editable solo cuando el registro tiene caso (fuera de
-            // catálogo / Backlog inesperado) y todavía no tiene un
-            // usuario_dispatch guardado — para los que sí vienen del
-            // catálogo, el dato ya es correcto y no debe tocarse.
+            // catálogo) y todavía no tiene un usuario_dispatch guardado —
+            // para los que sí vienen del catálogo, el dato ya es correcto
+            // y no debe tocarse.
             const isEditableNow = !!record.caso && !value;
             td.textContent = value || (isEditableNow ? '—' : '');
             if (isEditableNow) this.makeEditableCell(td, record, this.currentLog, 'usuario_dispatch');
