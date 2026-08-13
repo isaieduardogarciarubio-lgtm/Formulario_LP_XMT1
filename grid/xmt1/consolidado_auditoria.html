@@ -1421,9 +1421,12 @@
         }
       } else if (this.currentLog === 'barredura') {
         this.addKpiCard(container, total.toString(), 'Total');
-        const enCatalogo = records.filter(r => r.estado === 'En catálogo').length;
-        this.addKpiCard(container, enCatalogo.toString(), 'En catálogo');
-        this.addKpiCard(container, (total - enCatalogo).toString(), 'Fuera de catálogo');
+        // Acepta el valor viejo ('En catálogo') y el nuevo ('Backlog
+        // esperado') — mismo significado, renombrado; así los registros
+        // capturados antes del cambio de terminología se siguen contando.
+        const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
+        this.addKpiCard(container, enCatalogo.toString(), 'Backlog esperado');
+        this.addKpiCard(container, (total - enCatalogo).toString(), 'Backlog inesperado');
         const conCaso = records.filter(r => (r.caso || '').trim()).length;
         if (conCaso > 0) {
           this.addKpiCard(container, conCaso.toString(), 'Con caso');
@@ -1703,11 +1706,13 @@
     }
 
     buildBarreduraEstadoChart(records) {
-      const enCatalogo = records.filter(r => r.estado === 'En catálogo').length;
+      // Acepta el valor viejo ('En catálogo') y el nuevo ('Backlog
+      // esperado') — mismo significado, renombrado.
+      const enCatalogo = records.filter(r => r.estado === 'En catálogo' || r.estado === 'Backlog esperado').length;
       const fueraCatalogo = records.length - enCatalogo;
 
       const data = [{
-        labels: ['En catálogo', 'Fuera de catálogo'],
+        labels: ['Backlog esperado', 'Backlog inesperado'],
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
         marker: { colors: ['#34C759', '#FF453A'] },

@@ -5351,7 +5351,11 @@ class BarreduraSession {
 
   static CASO_OPTIONS = ['Sin recepción', 'Despachado', 'Con estatus BPP', 'Missort', 'Otro'];
 
-  static ZONA_OPTIONS = ['Sorting Large', 'Sorting GM1', 'Sorting GM2', 'Inbound FM', 'Inbound LH', 'Mesa de Ayuda', 'Inventarios', 'Otro'];
+  static ZONA_OPTIONS = ['Sorting Large', 'Sorting GM1', 'Sorting GM2', 'Inbound FM', 'Inbound LH', 'Mesa de Ayuda', 'Inventarios', 'Despacho', 'Otro'];
+
+  // A diferencia del "Otro" de ZONA_OPTIONS (texto libre), el "Otro" de
+  // tipo de ruta no abre un input manual — se guarda tal cual como valor.
+  static TIPO_RUTA_OPTIONS = ['V3', 'Otro'];
 
   constructor(opts = {}) {
     this.onScan = opts.onScan;
@@ -5469,8 +5473,43 @@ class BarreduraSession {
       btn.textContent = opt;
       btn.addEventListener('click', () => {
         if (opt === 'Otro') this.pickLugarOtro();
+        else if (opt === 'Despacho') this.pickTipoRuta();
         else this.setLugar(opt);
       });
+      options.appendChild(btn);
+    });
+  }
+
+  /**
+   * Sub-enum de "Despacho": tipo de ruta. A diferencia del "Otro" de zona,
+   * el "Otro" aquí no abre entrada manual — se guarda literal.
+   */
+  pickTipoRuta() {
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Barredura — Despacho</div>
+        </div>
+        <h1 class="step-question">¿Cuál es el tipo de ruta?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.pickLugar();
+    });
+
+    BarreduraSession.TIPO_RUTA_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => this.setLugar(`Despacho - ${opt}`));
       options.appendChild(btn);
     });
   }
@@ -5863,12 +5902,12 @@ class BarreduraSession {
 
   async saveFound(id, meta, caso = '') {
     this.recentMap.set(id, new Date().toISOString());
-    this.flash('ok', `${id} · En catálogo`);
+    this.flash('ok', `${id} · Backlog esperado`);
     if (this.onScan) {
       await this.onScan({
         shipment_id: id,
         lugar: this.lugar,
-        estado: 'En catálogo',
+        estado: 'Backlog esperado',
         dias_en_sitio: this.diasEnSitio(meta.fecha_inbound),
         hub_status: meta.hub_status || '',
         ultimo_nodo: meta.ultimo_nodo || '',
@@ -5995,7 +6034,7 @@ class BarreduraSession {
       await this.onScan({
         shipment_id: id,
         lugar: this.lugar,
-        estado: 'Fuera de catálogo',
+        estado: 'Backlog inesperado',
         dias_en_sitio: '',
         hub_status: '',
         ultimo_nodo: '',
