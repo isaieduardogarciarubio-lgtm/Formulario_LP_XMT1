@@ -676,6 +676,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
     #debug-console-panel { max-height: 0; }
     #debug-console-panel.open { max-height: 320px; }
+    #recovery-panel.open { max-height: 560px; }
     #field-error-logs-panel { max-height: 0; }
     #field-error-logs-panel.open { max-height: 380px; }
   </style>
@@ -727,6 +728,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <line x1="12" y1="15" x2="12" y2="3"/>
       </svg>
     </button>
+    <button class="btn-icon" id="btn-recovery" title="Recovery de contingencia" style="position: relative;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/><path d="M12 7v5l3 2"/>
+      </svg>
+      <span id="recovery-badge" style="display:none; position:absolute; top:-2px; right:-2px; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--accent); color:#111; font-size:10px; font-weight:800; align-items:center; justify-content:center;"></span>
+    </button>
     <button class="btn-icon" id="btn-debug-console" title="Consola de errores" style="position: relative;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <polyline points="4 17 10 11 4 5"/>
@@ -770,6 +777,33 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     padding: 12px 16px; font-family: monospace; font-size: 12px; line-height: 1.6;
     max-height: 320px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
   "></div>
+</div>
+
+<!-- Recovery de contingencia: CSVs inmutables creados por Captura cuando
+     un *_master no puede leerse con confianza. La reconciliación por UID se
+     hace desde aquí y NUNCA escribe sobre un master vacío ambiguo. -->
+<div id="recovery-panel" style="
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 520;
+  background: var(--surface); border-top: 1px solid var(--border);
+  box-shadow: 0 -18px 40px -20px rgba(0,0,0,.7);
+  max-height: 0; overflow: hidden; transition: max-height .2s ease;
+">
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 16px; border-bottom:1px solid var(--border);">
+    <div>
+      <div style="font-size:13px; font-weight:800;">Recovery de contingencia</div>
+      <div style="font-size:11px; color:var(--text-mut);">CSV en Grid → dedupe por UID → master con OCC</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-secondary" style="font-size:12px; padding:6px 12px;" id="btn-recovery-refresh">Actualizar</button>
+      <button class="btn-secondary" style="font-size:12px; padding:6px 12px;" id="btn-recovery-close">Cerrar</button>
+    </div>
+  </div>
+  <div id="recovery-body" style="padding:12px 16px; max-height:430px; overflow:auto; font-size:12px;">
+    <div class="empty-state" style="padding:20px;">Abre el panel para revisar respaldos.</div>
+  </div>
+  <div style="padding:8px 16px 12px; color:var(--text-mut); font-size:11px; border-top:1px solid var(--border);">
+    Retención objetivo: 7 días después de confirmarse 100% en master. La eliminación física queda deshabilitada hasta confirmar un endpoint DELETE soportado por Grid.
+  </div>
 </div>
 
 <!-- Panel de consola de depuración (Grid bloquea DevTools en su iframe) -->
@@ -1061,6 +1095,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
 
+    async downloadDocumentText(docId) {
+      const metaRes = await fetch(`${this.baseUrl}/api/v1/documents/${docId}/download`, { credentials: 'include' });
+      if (!metaRes.ok) throw new Error(`Download metadata HTTP ${metaRes.status}`);
+      const meta = await metaRes.json();
+      const url = meta.download_url || meta.agent_download_url;
+      if (!url) throw new Error('No se encontró download_url');
+      const fileRes = await fetch(url, { credentials: 'include' });
+      if (!fileRes.ok) throw new Error(`Download CSV HTTP ${fileRes.status}`);
+      return fileRes.text();
+    }
+
+    /** Contrato confirmado por la Biblia: listado global de documentos. */
+    async listDocuments() {
+      const res = await fetch(`${this.baseUrl}/api/v1/documents`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`Listado de documentos HTTP ${res.status}`);
+      const body = await res.json();
+      if (Array.isArray(body)) return body;
+      for (const key of ['documents', 'items', 'results', 'data']) {
+        if (Array.isArray(body && body[key])) return body[key];
+      }
+      return [];
+    }
+
     /**
      * Sube un archivo a Grid como documento PÚBLICO y devuelve su doc ID.
      * Las fotos no caben inline en un State Bucket (~1 MB total), así que
@@ -1160,6 +1217,58 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         data = await this.getStateBucket(name);
       }
       return data;
+    }
+
+    /**
+     * Variante estricta: a diferencia de getStateBucket(), NO convierte
+     * errores de red/HTTP en null. Recovery necesita distinguir "vacío" de
+     * "no pude leer" antes de tocar un master.
+     */
+    async getStateBucketStrict(name, attempt = 0) {
+      const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
+        credentials: 'include',
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '');
+        if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+          await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+          return this.getStateBucketStrict(name, attempt + 1);
+        }
+        throw new Error(`GET ${name} HTTP ${res.status}`);
+      }
+      const body = await res.json();
+      this._updatedAtByName[name] = body.updated_at || '';
+      return body.state ?? null;
+    }
+
+    async getProtectedMasterForWrite(name, confirmations = 3) {
+      for (let i = 0; i < confirmations; i++) {
+        const data = await this.getStateBucketStrict(name);
+        const valid = !!data && Array.isArray(data.records);
+        if (valid && (data.initialized === true || data.records.length > 0)) {
+          return data.initialized === true ? data : { ...data, initialized: true };
+        }
+        if (i < confirmations - 1) {
+          await new Promise((r) => setTimeout(r, 700 + Math.random() * 300));
+        }
+      }
+      const err = new Error(`${name} sigue vacío/no inicializado: recuperación bloqueada por seguridad`);
+      err.isAmbiguousMaster = true;
+      throw err;
+    }
+
+    async confirmUidsPresent(name, uids, attempts = 3) {
+      const wanted = new Set(uids);
+      for (let i = 0; i < attempts; i++) {
+        const data = await this.getStateBucketStrict(name);
+        if (data && Array.isArray(data.records)) {
+          const found = new Set(data.records.map((r) => r && r.uid).filter(Boolean));
+          if ([...wanted].every((uid) => found.has(uid))) return true;
+        }
+        if (i < attempts - 1) await new Promise((r) => setTimeout(r, 600 + Math.random() * 300));
+      }
+      return false;
     }
 
     async setStateBucket(name, data, attempt = 0) {
@@ -1363,6 +1472,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       this.displayedCount = 10;
       // Revisión (segundo check de Incorrectos) + alertas
       this._knownPendingUids = null; // null = todavía no se estableció la línea base
+      this.recoveryBatches = [];
+      this.recoveryRegistry = {};
+      this.RECOVERY_PREFIX = 'RECOVERY_AUDITORIAS__';
+      this.RECOVERY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
       this.init();
     }
 
@@ -1387,6 +1500,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       this.renderRevisionPermissionUI();
       this.pollForRevisionAlerts(); // primer poll: establece la línea base sin alertar
       setInterval(() => this.pollForRevisionAlerts(), 15000);
+      this.refreshRecoveryBadge().catch((e) => DebugConsole.log(`Recovery badge: ${e.message}`, 'warn'));
     }
 
     async isAdmin() {
@@ -1430,6 +1544,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
       document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
       document.getElementById('btn-debug-console').addEventListener('click', () => DebugConsole.toggle());
+      document.getElementById('btn-recovery').addEventListener('click', () => this.openRecoveryPanel());
+      document.getElementById('btn-recovery-refresh').addEventListener('click', () => this.loadRecoveryPanel());
+      document.getElementById('btn-recovery-close').addEventListener('click', () => {
+        document.getElementById('recovery-panel').classList.remove('open');
+      });
 
       document.getElementById('btn-field-error-logs').addEventListener('click', () => {
         document.getElementById('field-error-logs-panel').classList.add('open');
@@ -2179,6 +2298,253 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     }
 
+    recoveryDocId(doc) {
+      return doc && (doc.id || doc.doc_id || doc.document_id || (doc.document && (doc.document.id || doc.document.doc_id)));
+    }
+
+    recoveryDocTitle(doc) {
+      return String(doc && (doc.title || doc.name || doc.filename || doc.file_name || '') || '');
+    }
+
+    async listRecoveryMetas() {
+      const docs = await this.gridClient.listDocuments();
+      return docs.filter((doc) => this.recoveryDocTitle(doc).startsWith(this.RECOVERY_PREFIX) && this.recoveryDocId(doc));
+    }
+
+    async refreshRecoveryBadge() {
+      const docs = await this.listRecoveryMetas();
+      const badge = document.getElementById('recovery-badge');
+      if (!badge) return;
+      badge.textContent = String(docs.length);
+      badge.style.display = docs.length ? 'flex' : 'none';
+    }
+
+    async openRecoveryPanel() {
+      document.getElementById('recovery-panel').classList.add('open');
+      await this.loadRecoveryPanel();
+    }
+
+    async loadRecoveryRegistry() {
+      try {
+        const state = await this.gridClient.getStateBucket('recovery_registry');
+        this.recoveryRegistry = state && state.items ? state.items : {};
+      } catch (e) {
+        this.recoveryRegistry = {};
+      }
+    }
+
+    async saveRecoveryRegistryEntry(docId, entry) {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const state = (await this.gridClient.getStateBucket('recovery_registry')) || { version: 1, items: {} };
+        state.version = 1;
+        state.items = state.items || {};
+        state.items[docId] = { ...(state.items[docId] || {}), ...entry };
+        const result = await this.gridClient.setStateBucket('recovery_registry', state);
+        if (result?.ok) {
+          this.recoveryRegistry = state.items;
+          return true;
+        }
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 250 + Math.random() * 300));
+          continue;
+        }
+        return false;
+      }
+      return false;
+    }
+
+    async loadRecoveryPanel() {
+      const body = document.getElementById('recovery-body');
+      body.innerHTML = '<div class="empty-state" style="padding:20px;">Leyendo respaldos de Grid…</div>';
+
+      try {
+        await this.loadRecoveryRegistry();
+        const metas = await this.listRecoveryMetas();
+        await this.refreshRecoveryBadge();
+        if (!metas.length) {
+          this.recoveryBatches = [];
+          body.innerHTML = '<div class="empty-state" style="padding:20px;">No hay CSV de recovery.</div>';
+          return;
+        }
+
+        const batches = [];
+        for (const doc of metas) {
+          const docId = this.recoveryDocId(doc);
+          const title = this.recoveryDocTitle(doc);
+          try {
+            const text = await this.gridClient.downloadDocumentText(docId);
+            const parsed = parseRecoveryCsv(text);
+            batches.push({ docId, title, doc, ...parsed, error: null });
+          } catch (e) {
+            batches.push({ docId, title, doc, meta: {}, records: [], error: e.message });
+          }
+        }
+
+        // Un GET protegido por master, no uno por CSV.
+        const masterByForm = {};
+        const forms = [...new Set(batches.map((b) => b.meta && b.meta.formId).filter(Boolean))];
+        for (const formId of forms) {
+          try {
+            const bucket = await this.gridClient.getProtectedMasterForWrite(`${formId}_master`, 3);
+            const dashboardHighWater = Array.isArray(this.logs[formId]) ? this.logs[formId].length : 0;
+            if (bucket.records.length === 0 && dashboardHighWater > 0) {
+              throw new Error(`${formId}_master llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
+            }
+            masterByForm[formId] = { reliable: true, bucket };
+          } catch (e) {
+            masterByForm[formId] = { reliable: false, error: e.message, bucket: null };
+          }
+        }
+
+        for (const batch of batches) {
+          if (batch.error || !batch.meta.formId) continue;
+          const masterState = masterByForm[batch.meta.formId];
+          batch.masterReliable = !!masterState?.reliable;
+          batch.masterError = masterState?.error || '';
+          if (batch.masterReliable) {
+            const existing = new Set(masterState.bucket.records.map((r) => r && r.uid).filter(Boolean));
+            batch.missingRecords = batch.records.filter((r) => !existing.has(r.uid));
+            batch.existingCount = batch.records.length - batch.missingRecords.length;
+            if (batch.missingRecords.length === 0) {
+              const prior = this.recoveryRegistry[batch.docId] || {};
+              if (!prior.recovered_at) {
+                const recoveredAt = new Date().toISOString();
+                await this.saveRecoveryRegistryEntry(batch.docId, {
+                  status: 'recovered',
+                  recovered_at: recoveredAt,
+                  last_verified_at: recoveredAt,
+                  formId: batch.meta.formId,
+                  batchId: batch.meta.batchId || '',
+                  recordCount: batch.records.length,
+                });
+              }
+            }
+          }
+        }
+
+        this.recoveryBatches = batches;
+        this.renderRecoveryPanel();
+      } catch (e) {
+        body.innerHTML = `<div class="empty-state" style="padding:20px; color:var(--c-red);">${e.message}</div>`;
+        DebugConsole.log(`Recovery panel: ${e.message}`, 'error');
+      }
+    }
+
+    renderRecoveryPanel() {
+      const body = document.getElementById('recovery-body');
+      if (!this.recoveryBatches.length) {
+        body.innerHTML = '<div class="empty-state" style="padding:20px;">No hay CSV de recovery.</div>';
+        return;
+      }
+
+      const esc = (v) => String(v ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+      const rows = this.recoveryBatches.map((batch) => {
+        if (batch.error) {
+          return `<tr><td>${esc(batch.title)}</td><td colspan="5" style="color:var(--c-red);">No se pudo leer: ${esc(batch.error)}</td></tr>`;
+        }
+        const total = batch.records.length;
+        const missing = batch.masterReliable ? batch.missingRecords.length : null;
+        const registry = this.recoveryRegistry[batch.docId] || {};
+        let statusHtml;
+        let actionHtml = '';
+
+        if (!batch.masterReliable) {
+          statusHtml = `<span style="color:var(--c-red);">Bloqueado</span><div style="color:var(--text-mut); max-width:280px;">${esc(batch.masterError)}</div>`;
+        } else if (missing === 0) {
+          const recoveredAt = registry.recovered_at ? new Date(registry.recovered_at) : null;
+          const eligibleAt = recoveredAt ? new Date(recoveredAt.getTime() + this.RECOVERY_RETENTION_MS) : null;
+          const eligible = eligibleAt && Date.now() >= eligibleAt.getTime();
+          statusHtml = `<span style="color:var(--c-green);">${total}/${total} en master</span>` +
+            (eligible
+              ? '<div style="color:var(--text-mut);">Elegible para limpieza física*</div>'
+              : `<div style="color:var(--text-mut);">${eligibleAt ? `retener hasta ${eligibleAt.toLocaleDateString()}` : 'verificado'}</div>`);
+        } else {
+          statusHtml = `<span style="color:var(--accent);">${total - missing}/${total} en master · ${missing} faltan</span>`;
+          actionHtml = `<button class="btn-secondary" style="font-size:11px; padding:5px 9px;" onclick="window.dashboard.recoverBatch('${esc(batch.docId)}')">Recuperar ${missing}</button>`;
+        }
+
+        return `<tr>
+          <td><div style="font-weight:700;">${esc(batch.meta.batchId || batch.title)}</div><div style="color:var(--text-mut);">${esc(batch.meta.deviceId || '—')}</div></td>
+          <td>${esc(batch.meta.formId || '—')}</td>
+          <td>${total}</td>
+          <td>${statusHtml}</td>
+          <td style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${esc(batch.title)}">${esc(batch.title)}</td>
+          <td>${actionHtml}</td>
+        </tr>`;
+      }).join('');
+
+      body.innerHTML = `<div class="table-wrapper"><table>
+        <thead><tr><th>Lote / dispositivo</th><th>Log</th><th>Filas</th><th>Estado</th><th>CSV Grid</th><th>Acción</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <div style="margin-top:10px; color:var(--text-mut); font-size:11px;">* La retención se calcula desde recovered_at. El borrado automático no se ejecuta porque la Biblia V11.5 suministrada no confirma un endpoint DELETE de documentos.</div>`;
+    }
+
+    async recoverBatch(docId) {
+      const batch = this.recoveryBatches.find((b) => b.docId === docId);
+      if (!batch || batch.error || !batch.meta?.formId) return;
+      const formId = batch.meta.formId;
+      const bucketName = `${formId}_master`;
+
+      try {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          // Siempre releer master fresco; jamás usar this.logs ni el snapshot
+          // calculado al abrir el panel.
+          const bucket = await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
+          const dashboardHighWater = Array.isArray(this.logs[formId]) ? this.logs[formId].length : 0;
+          if (bucket.records.length === 0 && dashboardHighWater > 0) {
+            throw new Error(`${bucketName} llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
+          }
+          const existing = new Set(bucket.records.map((r) => r && r.uid).filter(Boolean));
+          const missing = batch.records.filter((r) => r && r.uid && !existing.has(r.uid));
+
+          if (missing.length === 0) {
+            const now = new Date().toISOString();
+            await this.saveRecoveryRegistryEntry(docId, {
+              status: 'recovered', recovered_at: (this.recoveryRegistry[docId]?.recovered_at || now),
+              last_verified_at: now, formId, batchId: batch.meta.batchId || '', recordCount: batch.records.length,
+            });
+            this.showNotification('Recovery ya estaba 100% presente en master', 'success');
+            await this.loadRecoveryPanel();
+            return;
+          }
+
+          const next = {
+            ...bucket,
+            version: bucket.version || 1,
+            initialized: true,
+            records: [...bucket.records, ...missing],
+          };
+          const result = await this.gridClient.setStateBucket(bucketName, next);
+          if (result?.conflict) {
+            await new Promise((r) => setTimeout(r, 350 + Math.random() * 350));
+            continue;
+          }
+          if (!result?.ok) throw new Error('Grid no confirmó el PUT del recovery');
+
+          const verified = await this.gridClient.confirmUidsPresent(bucketName, batch.records.map((r) => r.uid), 3);
+          if (!verified) throw new Error('PUT aceptado, pero todavía no se pueden verificar todos los UID; no se marca como recuperado');
+
+          const now = new Date().toISOString();
+          await this.saveRecoveryRegistryEntry(docId, {
+            status: 'recovered', recovered_at: now, last_verified_at: now,
+            formId, batchId: batch.meta.batchId || '', recordCount: batch.records.length,
+          });
+          this.showNotification(`${missing.length} registro(s) recuperados al master`, 'success');
+          await this.refreshLogs();
+          await this.loadRecoveryPanel();
+          return;
+        }
+        throw new Error('Demasiados conflictos 409 durante recovery');
+      } catch (e) {
+        DebugConsole.log(`Recovery ${docId}: ${e.message}`, 'error');
+        this.showNotification(`Recovery bloqueado: ${e.message}`, 'error');
+        await this.loadRecoveryPanel();
+      }
+    }
+
     /**
      * CRÍTICO: nunca escribir this.logs[logType] tal cual al bucket — es la
      * copia en memoria del dashboard, cargada una vez al abrir/actualizar.
@@ -2198,8 +2564,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       LoadingOverlay.show('Borrando...');
 
       for (let attempt = 0; attempt < 3; attempt++) {
-        const bucket = await this.gridClient.getStateBucket(`${logType}_master`);
-        const records = (bucket && bucket.records) || [];
+        let bucket;
+        try {
+          bucket = await this.gridClient.getProtectedMasterForWrite(`${logType}_master`, 3);
+        } catch (e) {
+          this.showNotification(`No se puede validar el master: ${e.message}`, 'error');
+          LoadingOverlay.error('Master no confiable');
+          return;
+        }
+        const records = [...bucket.records];
         const recordIndex = records.findIndex(r => r.uid === uid);
         if (recordIndex < 0) {
           const localIndex = this.logs[logType].findIndex(r => r.uid === uid);
@@ -2211,7 +2584,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
         records.splice(recordIndex, 1);
 
-        const result = await this.gridClient.setStateBucket(`${logType}_master`, { version: 1, records });
+        const result = await this.gridClient.setStateBucket(`${logType}_master`, {
+          ...bucket,
+          version: bucket.version || 1,
+          initialized: true,
+          records,
+        });
         if (result?.ok) {
           const localIndex = this.logs[logType].findIndex(r => r.uid === uid);
           if (localIndex >= 0) this.logs[logType].splice(localIndex, 1);
@@ -2746,6 +3124,47 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     return { headers, records };
   }
 
+  /**
+   * Parsea un CSV de recovery (subido por Captura cuando el master no es
+   * confiable). __record_json trae el registro completo tal cual se iba a
+   * escribir al master; las columnas __recovery_* son metadata del lote.
+   */
+  function parseRecoveryCsv(text) {
+    const { headers, records } = parseCSV(String(text || ''));
+    if (!headers.length) throw new Error('Recovery CSV vacío');
+    if (!headers.includes('__record_json') && !headers.includes('uid')) {
+      throw new Error('CSV no tiene __record_json ni uid');
+    }
+
+    const parsedRecords = [];
+    let meta = null;
+    records.forEach((row) => {
+      let record;
+      if (row.__record_json) {
+        record = JSON.parse(row.__record_json);
+      } else {
+        record = {};
+        headers.forEach((h) => {
+          if (!h.startsWith('__recovery_') && h !== '__record_json') record[h] = row[h] || '';
+        });
+      }
+      if (!record || !record.uid) return;
+      parsedRecords.push(record);
+      if (!meta) {
+        meta = {
+          formId: row.__recovery_form_id || record.formId,
+          batchId: row.__recovery_batch_id || '',
+          deviceId: row.__recovery_device_id || '',
+          createdAt: row.__recovery_created_at || '',
+          dataDocId: row.__recovery_data_doc_id || '',
+        };
+      }
+    });
+    if (!parsedRecords.length) throw new Error('Recovery CSV no contiene registros válidos');
+    if (!meta || !meta.formId) meta = { ...(meta || {}), formId: parsedRecords[0].formId };
+    return { meta, records: parsedRecords };
+  }
+
   function detectLogTypeFromHeaders(headers) {
     const normalized = headers.map(normalizeText);
     // Substring, no coincidencia exacta: encabezados como "Shipment ID" no
@@ -2842,7 +3261,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   // Initialize
   DebugConsole.setup();
-  const dashboard = new AuditDashboard();
+  window.dashboard = new AuditDashboard();
 </script>
 <script>
 /* Grid: only allow approved Grid domains to open unsandboxed tabs */
