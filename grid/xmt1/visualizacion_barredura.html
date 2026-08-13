@@ -587,8 +587,12 @@ class BarreduraViewer {
       }],
       layout: {
         title: 'Costo USD por Caso',
-        xaxis: { title: 'Caso' },
-        yaxis: { title: 'USD' },
+        // automargin: los nombres de caso ('Con estatus BPP', etc.) son
+        // largos y se cortaban contra el overflow:hidden del contenedor —
+        // esto hace que Plotly encoja el área de la gráfica para que las
+        // etiquetas siempre quepan, en vez de desbordarse.
+        xaxis: { title: 'Caso', automargin: true, tickangle: -30 },
+        yaxis: { title: 'USD', automargin: true },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
@@ -615,8 +619,8 @@ class BarreduraViewer {
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
         showlegend: true,
-        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
-        margin: { l: 20, r: 20, t: 40, b: 20 },
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.1 },
+        margin: { l: 20, r: 20, t: 40, b: 50 },
       },
     };
   }
@@ -632,8 +636,8 @@ class BarreduraViewer {
       }],
       layout: {
         title: 'Escaneos por lugar',
-        xaxis: { title: 'Lugar' },
-        yaxis: { title: 'Cantidad' },
+        xaxis: { title: 'Lugar', automargin: true, tickangle: -30 },
+        yaxis: { title: 'Cantidad', automargin: true },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
