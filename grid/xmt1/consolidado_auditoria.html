@@ -1106,6 +1106,48 @@
       return false;
     }
 
+    /**
+     * Variante shard-aware de getProtectedMasterForWrite (ver mismo método
+     * en captura_auditoria.html): un shard diario que nunca recibió una
+     * escritura confirmada es legítimamente vacío, no ambiguo. Sin esto, la
+     * reconciliación de recovery quedaría bloqueada para siempre en
+     * cualquier shard cuyas ÚNICAS capturas del día hayan ido a recovery
+     * (es decir, el shard normal nunca llegó a crearse).
+     */
+    async getShardBucketForWrite(formId, shardName, dateKey, confirmations = 3) {
+      const registry = await this.getStateBucket(`${formId}_shard_registry`);
+      const knownToExist = !!(registry && registry.dates && registry.dates[dateKey]);
+
+      if (!knownToExist) {
+        const data = await this.getStateBucketStrict(shardName);
+        if (data && Array.isArray(data.records) && (data.initialized === true || data.records.length > 0)) {
+          return data.initialized === true ? data : { ...data, initialized: true };
+        }
+        return { version: 1, initialized: true, records: [] };
+      }
+
+      return this.getProtectedMasterForWrite(shardName, confirmations);
+    }
+
+    async markShardCreated(formId, dateKey) {
+      const registryName = `${formId}_shard_registry`;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const state = (await this.getStateBucket(registryName)) || { version: 1, dates: {} };
+        if (state.dates && state.dates[dateKey]) return true;
+        state.version = 1;
+        state.dates = state.dates || {};
+        state.dates[dateKey] = true;
+        const result = await this.setStateBucket(registryName, state);
+        if (result?.ok) return true;
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 200 + Math.random() * 250));
+          continue;
+        }
+        return false;
+      }
+      return false;
+    }
+
     async setStateBucket(name, data, attempt = 0) {
       try {
         const ifUpdatedAt = this._updatedAtByName[name] || '';
@@ -1192,6 +1234,73 @@
       rows.push(row);
     }
     return rows.filter(r => r.some(c => c.trim() !== ''));
+  }
+
+  /**
+   * Mismo mecanismo de sharding diario que captura_auditoria.html (ver
+   * comentario allá): barredura/destino_doca/inbound_drivers ya no viven en
+   * un único {formId}_master, sino en {formId}_master_YYYY-MM-DD por día
+   * (hora de México). Todo lo anterior al cutover sigue en el bucket
+   * legacy, congelado — nunca se reescribió ni se migró.
+   */
+  const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'inbound_drivers']);
+  const SHARD_CUTOVER_DATE = '2026-08-14';
+
+  function shardDateKeyMexico(ts) {
+    const instant = new Date(ts);
+    const mx = new Date(instant.getTime() - 6 * 60 * 60 * 1000);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${mx.getUTCFullYear()}-${pad(mx.getUTCMonth() + 1)}-${pad(mx.getUTCDate())}`;
+  }
+
+  function masterBucketNameFor(formId, tsOrDateKey) {
+    if (!SHARDED_FORMS.has(formId)) return `${formId}_master`;
+    const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(tsOrDateKey)) ? tsOrDateKey : shardDateKeyMexico(tsOrDateKey);
+    return dateKey < SHARD_CUTOVER_DATE ? `${formId}_master` : `${formId}_master_${dateKey}`;
+  }
+
+  /**
+   * Nombres de shard para cubrir un rango de fechas de calendario (las que
+   * el usuario eligió en los inputs date-from/date-to, sin conversión de
+   * huso horario — se trata el Y/M/D tal cual se seleccionó). Fechas
+   * anteriores al cutover colapsan todas al mismo bucket legacy.
+   */
+  function shardNamesForRange(formId, fromDate, toDate) {
+    const names = new Set();
+    const pad = (n) => String(n).padStart(2, '0');
+    let cursor = Date.UTC(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+    const end = Date.UTC(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+    while (cursor <= end) {
+      const d = new Date(cursor);
+      const dateKey = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+      names.add(masterBucketNameFor(formId, dateKey));
+      cursor += 24 * 60 * 60 * 1000;
+    }
+    return names;
+  }
+
+  /** Fecha (hora de México) embebida en un uid generado por RecordStore.genUid: `${formId}_${Date.now()}_${rand}`. */
+  function shardDateKeyFromUid(uid) {
+    const parts = String(uid || '').split('_');
+    const ms = parseInt(parts[1], 10);
+    if (!Number.isFinite(ms)) return null;
+    return shardDateKeyMexico(new Date(ms).toISOString());
+  }
+
+  /**
+   * Agrupa registros (de un lote de recovery, por ejemplo) por el shard
+   * real al que pertenecen según su propio ts — un lote puede cruzar
+   * medianoche y tener registros de más de un día.
+   */
+  function groupRecordsByShard(formId, records) {
+    const groups = new Map(); // bucketName -> { dateKey, records[] }
+    records.forEach((r) => {
+      const dateKey = SHARDED_FORMS.has(formId) ? shardDateKeyMexico(r.ts) : null;
+      const bucketName = masterBucketNameFor(formId, r.ts);
+      if (!groups.has(bucketName)) groups.set(bucketName, { dateKey, records: [] });
+      groups.get(bucketName).records.push(r);
+    });
+    return groups;
   }
 
   function parseRecoveryCsv(text) {
@@ -1562,22 +1671,25 @@
         document.getElementById('photo-modal').classList.remove('active');
       });
 
-      document.getElementById('date-from').addEventListener('change', (e) => {
+      document.getElementById('date-from').addEventListener('change', async (e) => {
         this.dateFrom = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
+        await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
-      document.getElementById('date-to').addEventListener('change', (e) => {
+      document.getElementById('date-to').addEventListener('change', async (e) => {
         this.dateTo = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
+        await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
-      document.getElementById('btn-clear-filters').addEventListener('click', () => {
+      document.getElementById('btn-clear-filters').addEventListener('click', async () => {
         this.dateFrom = null;
         this.dateTo = null;
         document.getElementById('date-from').value = '';
         document.getElementById('date-to').value = '';
         this.displayedCount = 10;
+        await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
       document.getElementById('btn-load-more').addEventListener('click', () => {
@@ -1603,6 +1715,11 @@
     async loadAllLogs() {
       DebugConsole.log(`Cargando logs desde documento: ${this.docId}`, 'info');
       for (const logType of Object.keys(this.logs)) {
+        if (SHARDED_FORMS.has(logType)) {
+          this.logs[logType] = await this.loadShardedLog(logType);
+          DebugConsole.log(`${logType} (shardeado): ${this.logs[logType].length} registro(s)`, 'info');
+          continue;
+        }
         const bucket = `${logType}_master`;
         const data = await this.gridClient.getStateBucketConfirmedNonEmpty(bucket);
         if (data && data.records) {
@@ -1616,6 +1733,65 @@
       const total = Object.values(this.logs).reduce((sum, r) => sum + r.length, 0);
       DebugConsole.log(`Total combinado: ${total} registro(s)`, 'info');
       this.render();
+    }
+
+    /**
+     * Los logs no shardeados ya tienen todo su historial en memoria (se
+     * cargan completos siempre) — cambiar el filtro de fecha ahí solo
+     * necesita re-renderizar. Los shardeados sí dependen del rango elegido
+     * (esa es la ganancia: no se trae todo el histórico), así que ampliar
+     * el rango exige volver a pedir los shards que falten.
+     */
+    async reloadShardedLogsForCurrentFilter() {
+      const btn = document.getElementById('btn-refresh');
+      btn?.classList.add('spinning');
+      try {
+        for (const logType of Object.keys(this.logs)) {
+          if (!SHARDED_FORMS.has(logType)) continue;
+          this.logs[logType] = await this.loadShardedLog(logType);
+        }
+      } catch (e) {
+        DebugConsole.log(`Recarga por filtro de fecha: ${e.message}`, 'error');
+      } finally {
+        btn?.classList.remove('spinning');
+      }
+    }
+
+    /**
+     * Lee los shards diarios de un log shardeado que caen dentro del rango
+     * de fechas actual (this.dateFrom/this.dateTo; sin dateFrom = "todo lo
+     * que alguna vez tuvo datos", vía {formId}_shard_registry — ese bucket
+     * es minúsculo, no crece con el volumen de registros). Concurrencia
+     * limitada para no lanzar decenas de GET simultáneos si el rango es
+     * amplio. Una lectura vacía de un shard puntual no es sospechosa (a
+     * diferencia del master legacy): un día sin capturas es normal.
+     */
+    async loadShardedLog(formId) {
+      let shardNames;
+      if (!this.dateFrom) {
+        const registry = await this.gridClient.getStateBucket(`${formId}_shard_registry`);
+        const dates = registry && registry.dates ? Object.keys(registry.dates) : [];
+        shardNames = new Set([`${formId}_master`, ...dates.map((d) => masterBucketNameFor(formId, d))]);
+      } else {
+        shardNames = shardNamesForRange(formId, this.dateFrom, this.dateTo || new Date());
+      }
+
+      const names = [...shardNames];
+      const CONCURRENCY = 4;
+      const records = [];
+      for (let i = 0; i < names.length; i += CONCURRENCY) {
+        const batch = names.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.all(batch.map((name) =>
+          this.gridClient.getStateBucket(name).catch((e) => {
+            DebugConsole.log(`${name}: ${e.message}`, 'warn');
+            return null;
+          })
+        ));
+        batchResults.forEach((data) => {
+          if (data && Array.isArray(data.records)) records.push(...data.records);
+        });
+      }
+      return records;
     }
 
     /**
@@ -2556,31 +2732,56 @@
           }
         }
 
-        // Un GET protegido por master, no uno por CSV.
-        const masterByForm = {};
-        const forms = [...new Set(batches.map((b) => b.meta && b.meta.formId).filter(Boolean))];
-        for (const formId of forms) {
-          try {
-            const bucket = await this.gridClient.getProtectedMasterForWrite(`${formId}_master`, 3);
-            const dashboardHighWater = Array.isArray(this.logs[formId]) ? this.logs[formId].length : 0;
-            if (bucket.records.length === 0 && dashboardHighWater > 0) {
-              throw new Error(`${formId}_master llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
+        // Cada batch se agrupa por el shard REAL de sus registros (un lote
+        // de recovery puede tener capturas de más de un día si cruzó
+        // medianoche) — un GET protegido por shard, no uno por formId ni
+        // uno por CSV.
+        batches.forEach((batch) => {
+          batch.shardGroups = (batch.error || !batch.meta.formId)
+            ? new Map()
+            : groupRecordsByShard(batch.meta.formId, batch.records);
+        });
+
+        const bucketCache = {}; // bucketName -> { reliable, bucket, error }
+        for (const batch of batches) {
+          if (batch.error || !batch.meta.formId) continue;
+          for (const [bucketName, group] of batch.shardGroups) {
+            if (bucketCache[bucketName]) continue;
+            try {
+              const bucket = SHARDED_FORMS.has(batch.meta.formId)
+                ? await this.gridClient.getShardBucketForWrite(batch.meta.formId, bucketName, group.dateKey, 3)
+                : await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
+              const dashboardHighWater = Array.isArray(this.logs[batch.meta.formId]) ? this.logs[batch.meta.formId].length : 0;
+              if (bucket.records.length === 0 && dashboardHighWater > 0 && !SHARDED_FORMS.has(batch.meta.formId)) {
+                throw new Error(`${bucketName} llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
+              }
+              bucketCache[bucketName] = { reliable: true, bucket };
+            } catch (e) {
+              bucketCache[bucketName] = { reliable: false, error: e.message, bucket: null };
             }
-            masterByForm[formId] = { reliable: true, bucket };
-          } catch (e) {
-            masterByForm[formId] = { reliable: false, error: e.message, bucket: null };
           }
         }
 
         for (const batch of batches) {
           if (batch.error || !batch.meta.formId) continue;
-          const masterState = masterByForm[batch.meta.formId];
-          batch.masterReliable = !!masterState?.reliable;
-          batch.masterError = masterState?.error || '';
-          if (batch.masterReliable) {
-            const existing = new Set(masterState.bucket.records.map((r) => r && r.uid).filter(Boolean));
-            batch.missingRecords = batch.records.filter((r) => !existing.has(r.uid));
-            batch.existingCount = batch.records.length - batch.missingRecords.length;
+          let allReliable = true;
+          const errorMsgs = [];
+          const missingRecords = [];
+          for (const [bucketName, group] of batch.shardGroups) {
+            const state = bucketCache[bucketName];
+            if (!state || !state.reliable) {
+              allReliable = false;
+              errorMsgs.push(`${bucketName}: ${state?.error || 'desconocido'}`);
+              continue;
+            }
+            const existing = new Set(state.bucket.records.map((r) => r && r.uid).filter(Boolean));
+            missingRecords.push(...group.records.filter((r) => !existing.has(r.uid)));
+          }
+          batch.masterReliable = allReliable;
+          batch.masterError = errorMsgs.join(' · ');
+          if (allReliable) {
+            batch.missingRecords = missingRecords;
+            batch.existingCount = batch.records.length - missingRecords.length;
             if (batch.missingRecords.length === 0) {
               const prior = this.recoveryRegistry[batch.docId] || {};
               if (!prior.recovered_at) {
@@ -2658,62 +2859,68 @@
       <div style="margin-top:10px; color:var(--text-mut); font-size:11px;">* La retención se calcula desde recovered_at. El borrado automático no se ejecuta porque la Biblia V11.5 suministrada no confirma un endpoint DELETE de documentos.</div>`;
     }
 
+    /** Reconcilia un solo shard-group de un batch (todos sus registros van al mismo bucket). */
+    async recoverShardGroup(formId, bucketName, dateKey, records) {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const bucket = SHARDED_FORMS.has(formId)
+          ? await this.gridClient.getShardBucketForWrite(formId, bucketName, dateKey, 3)
+          : await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
+        const dashboardHighWater = Array.isArray(this.logs[formId]) ? this.logs[formId].length : 0;
+        if (bucket.records.length === 0 && dashboardHighWater > 0 && !SHARDED_FORMS.has(formId)) {
+          throw new Error(`${bucketName} llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
+        }
+        const existing = new Set(bucket.records.map((r) => r && r.uid).filter(Boolean));
+        const missing = records.filter((r) => r && r.uid && !existing.has(r.uid));
+
+        if (missing.length === 0) return { recovered: 0 };
+
+        const next = {
+          ...bucket,
+          version: bucket.version || 1,
+          initialized: true,
+          records: [...bucket.records, ...missing],
+        };
+        const result = await this.gridClient.setStateBucket(bucketName, next);
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 350 + Math.random() * 350));
+          continue;
+        }
+        if (!result?.ok) throw new Error(`Grid no confirmó el PUT del recovery en ${bucketName}`);
+
+        const verified = await this.gridClient.confirmUidsPresent(bucketName, missing.map((r) => r.uid), 3);
+        if (!verified) throw new Error(`PUT aceptado en ${bucketName}, pero todavía no se pueden verificar todos los UID`);
+
+        if (SHARDED_FORMS.has(formId)) await this.gridClient.markShardCreated(formId, dateKey);
+        return { recovered: missing.length };
+      }
+      throw new Error(`Demasiados conflictos 409 durante recovery en ${bucketName}`);
+    }
+
     async recoverBatch(docId) {
       const batch = this.recoveryBatches.find((b) => b.docId === docId);
       if (!batch || batch.error || !batch.meta?.formId) return;
       const formId = batch.meta.formId;
-      const bucketName = `${formId}_master`;
 
       try {
-        for (let attempt = 0; attempt < 6; attempt++) {
-          // Siempre releer master fresco; jamás usar this.logs ni el snapshot
-          // calculado al abrir el panel.
-          const bucket = await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
-          const dashboardHighWater = Array.isArray(this.logs[formId]) ? this.logs[formId].length : 0;
-          if (bucket.records.length === 0 && dashboardHighWater > 0) {
-            throw new Error(`${bucketName} llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
-          }
-          const existing = new Set(bucket.records.map((r) => r && r.uid).filter(Boolean));
-          const missing = batch.records.filter((r) => r && r.uid && !existing.has(r.uid));
-
-          if (missing.length === 0) {
-            const now = new Date().toISOString();
-            await this.saveRecoveryRegistryEntry(docId, {
-              status: 'recovered', recovered_at: (this.recoveryRegistry[docId]?.recovered_at || now),
-              last_verified_at: now, formId, batchId: batch.meta.batchId || '', recordCount: batch.records.length,
-            });
-            this.showNotification('Recovery ya estaba 100% presente en master', 'success');
-            await this.loadRecoveryPanel();
-            return;
-          }
-
-          const next = {
-            ...bucket,
-            version: bucket.version || 1,
-            initialized: true,
-            records: [...bucket.records, ...missing],
-          };
-          const result = await this.gridClient.setStateBucket(bucketName, next);
-          if (result?.conflict) {
-            await new Promise((r) => setTimeout(r, 350 + Math.random() * 350));
-            continue;
-          }
-          if (!result?.ok) throw new Error('Grid no confirmó el PUT del recovery');
-
-          const verified = await this.gridClient.confirmUidsPresent(bucketName, batch.records.map((r) => r.uid), 3);
-          if (!verified) throw new Error('PUT aceptado, pero todavía no se pueden verificar todos los UID; no se marca como recuperado');
-
-          const now = new Date().toISOString();
-          await this.saveRecoveryRegistryEntry(docId, {
-            status: 'recovered', recovered_at: now, last_verified_at: now,
-            formId, batchId: batch.meta.batchId || '', recordCount: batch.records.length,
-          });
-          this.showNotification(`${missing.length} registro(s) recuperados al master`, 'success');
-          await this.refreshLogs();
-          await this.loadRecoveryPanel();
-          return;
+        let totalRecovered = 0;
+        for (const [bucketName, group] of batch.shardGroups) {
+          const result = await this.recoverShardGroup(formId, bucketName, group.dateKey, group.records);
+          totalRecovered += result.recovered;
         }
-        throw new Error('Demasiados conflictos 409 durante recovery');
+
+        const now = new Date().toISOString();
+        await this.saveRecoveryRegistryEntry(docId, {
+          status: 'recovered', recovered_at: (this.recoveryRegistry[docId]?.recovered_at || now),
+          last_verified_at: now, formId, batchId: batch.meta.batchId || '', recordCount: batch.records.length,
+        });
+
+        if (totalRecovered === 0) {
+          this.showNotification('Recovery ya estaba 100% presente en master', 'success');
+        } else {
+          this.showNotification(`${totalRecovered} registro(s) recuperados al master`, 'success');
+          await this.refreshLogs();
+        }
+        await this.loadRecoveryPanel();
       } catch (e) {
         DebugConsole.log(`Recovery ${docId}: ${e.message}`, 'error');
         this.showNotification(`Recovery bloqueado: ${e.message}`, 'error');
@@ -2731,15 +2938,31 @@
      * servidor justo antes de mutar y escribir — nunca se muta la copia en
      * memoria del dashboard.
      */
+    /**
+     * Bucket real donde vive (o debería vivir) un uid: para logs shardeados
+     * se deriva la fecha del propio uid (RecordStore.genUid embebe
+     * Date.now() en la 2a parte); si el uid no siguiera ese formato, se cae
+     * al ts del registro ya cargado en memoria como respaldo.
+     */
+    bucketNameForUid(logType, uid) {
+      if (!SHARDED_FORMS.has(logType)) return `${logType}_master`;
+      const dateKey = shardDateKeyFromUid(uid);
+      if (dateKey) return masterBucketNameFor(logType, dateKey);
+      const record = (this.logs[logType] || []).find((r) => r && r.uid === uid);
+      if (record && record.ts) return masterBucketNameFor(logType, record.ts);
+      return `${logType}_master`;
+    }
+
     async deleteRecord(logType, uid) {
       if (!confirm('¿Estás seguro de que quieres borrar este registro? Se eliminará tanto de la tabla como del consolidado.')) {
         return;
       }
 
+      const bucketName = this.bucketNameForUid(logType, uid);
       for (let attempt = 0; attempt < 3; attempt++) {
         let bucket;
         try {
-          bucket = await this.gridClient.getProtectedMasterForWrite(`${logType}_master`, 3);
+          bucket = await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
         } catch (e) {
           this.showNotification(`No se puede validar el master: ${e.message}`, 'error');
           return;
@@ -2755,7 +2978,7 @@
         }
         records.splice(recordIndex, 1);
 
-        const result = await this.gridClient.setStateBucket(`${logType}_master`, {
+        const result = await this.gridClient.setStateBucket(bucketName, {
           ...bucket,
           version: bucket.version || 1,
           initialized: true,
@@ -2832,10 +3055,11 @@
       // escribir, nunca reusar this.logs[logType] — evita borrar en
       // silencio registros capturados por otros dispositivos después de
       // que este dashboard cargó.
+      const bucketName = this.bucketNameForUid(logType, uid);
       for (let attempt = 0; attempt < 3; attempt++) {
         let bucket;
         try {
-          bucket = await this.gridClient.getProtectedMasterForWrite(logType + '_master', 3);
+          bucket = await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
         } catch (e) {
           this.showNotification(`No se puede validar el master: ${e.message}`, 'error');
           return false;
@@ -2848,7 +3072,7 @@
         }
         record[field] = value;
 
-        const result = await this.gridClient.setStateBucket(logType + '_master', {
+        const result = await this.gridClient.setStateBucket(bucketName, {
           ...bucket,
           version: bucket.version || 1,
           initialized: true,
@@ -3011,14 +3235,21 @@
      * la pestaña activa — misma idea que "Descargar" (todo, consolidado)
      * pero acotado al día en curso.
      */
-    downloadToday() {
+    async downloadToday() {
       const now = new Date();
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
 
       const allRecords = [];
       for (const [logType, records] of Object.entries(this.logs)) {
-        records.forEach((rec) => {
+        // Los logs shardeados pueden tener this.logs acotado al filtro de
+        // fecha actual (esa es la ganancia de leer solo lo necesario) — si
+        // el filtro no incluye hoy, this.logs no trae el shard de hoy. Se
+        // lee directo en vez de asumir que ya está en memoria.
+        const source = SHARDED_FORMS.has(logType)
+          ? (await this.gridClient.getStateBucket(masterBucketNameFor(logType, shardDateKeyMexico(now.toISOString()))))?.records || []
+          : records;
+        source.forEach((rec) => {
           const recDate = rec.ts ? new Date(rec.ts) : null;
           if (!recDate || recDate < startOfDay || recDate >= endOfDay) return;
           allRecords.push({ 'Tipo de Log': FORMS_CONFIG[logType].title, ...rec });

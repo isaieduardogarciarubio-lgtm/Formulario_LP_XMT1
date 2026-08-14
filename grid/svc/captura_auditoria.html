@@ -1847,6 +1847,42 @@ function buildDedupeKey(formId, type, rawValue) {
 }
 
 /**
+ * Sharding diario para Contenedor (el único log de escaneo rápido en loop
+ * de SVC): en vez de un único contenedor_master que crece sin límite y se
+ * lee/escribe completo en cada operación protegida, cada día calendario
+ * (hora de México) tiene su propio bucket contenedor_master_YYYY-MM-DD.
+ *
+ * SHARD_CUTOVER_DATE es el día en que este mecanismo entra en vigor: todo
+ * lo capturado ANTES sigue viviendo en contenedor_master legacy (nunca se
+ * reescribe ni se migra — no hay endpoint DELETE confirmado para deshacer
+ * un error de migración, así que congelarlo como un shard histórico más es
+ * la opción segura).
+ */
+const SHARDED_FORMS = new Set(['contenedor']);
+const SHARD_CUTOVER_DATE = '2026-08-14';
+
+/** Fecha calendario (hora de México, UTC-6 fijo) de un ts ISO, sea "Z" o con offset explícito. */
+function shardDateKeyMexico(ts) {
+  const instant = new Date(ts);
+  const mx = new Date(instant.getTime() - 6 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${mx.getUTCFullYear()}-${pad(mx.getUTCMonth() + 1)}-${pad(mx.getUTCDate())}`;
+}
+
+/**
+ * Nombre del bucket master que corresponde a un formId + fecha (o ts de un
+ * registro). Formularios no shardeados siempre resuelven a su
+ * {formId}_master de siempre. Fechas anteriores al cutover resuelven al
+ * mismo bucket legacy, aunque se pidan varias — el llamador puede meter el
+ * resultado en un Set para deduplicar sin lógica extra.
+ */
+function masterBucketNameFor(formId, tsOrDateKey) {
+  if (!SHARDED_FORMS.has(formId)) return `${formId}_master`;
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(tsOrDateKey)) ? tsOrDateKey : shardDateKeyMexico(tsOrDateKey);
+  return dateKey < SHARD_CUTOVER_DATE ? `${formId}_master` : `${formId}_master_${dateKey}`;
+}
+
+/**
  * Timestamp de registro en Hora del Centro de México (UTC-6 fijo — México
  * eliminó el horario de verano en 2022 para la Zona Centro, así que no hay
  * cambio de offset a lo largo del año). Se guarda con el offset explícito
@@ -4617,6 +4653,66 @@ class GridClient {
     return false;
   }
 
+  /** Variante batch de confirmRecordPresent: confirma varios UIDs en una sola pasada de lecturas. */
+  async confirmRecordsPresent(name, uids, attempts = 3) {
+    const wanted = new Set(uids);
+    for (let i = 0; i < attempts; i++) {
+      const data = await this.getStateBucket(name);
+      if (data && Array.isArray(data.records)) {
+        const found = new Set(data.records.map((r) => r && r.uid).filter(Boolean));
+        if ([...wanted].every((uid) => found.has(uid))) return true;
+      }
+      if (i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 500 + Math.random() * 350));
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Variante shard-aware de getStateBucketForProtectedMasterWrite: un shard
+   * diario nuevo (nadie escribió ahí todavía, en ningún dispositivo) es
+   * legítimamente vacío y no debe activar el fail-closed — se crearía un
+   * falso circuito de contingencia cada medianoche. {formId}_shard_registry
+   * es un bucket minúsculo (una fecha -> true por día, nunca crece con el
+   * volumen de registros) que recuerda qué shards ya tuvieron al menos una
+   * escritura confirmada; solo esos shards usan el fail-closed de verdad.
+   */
+  async getShardBucketForWrite(formId, shardName, dateKey, confirmations = 3) {
+    const registry = await this.getStateBucket(`${formId}_shard_registry`);
+    const knownToExist = !!(registry && registry.dates && registry.dates[dateKey]);
+
+    if (!knownToExist) {
+      const data = await this.getStateBucket(shardName);
+      if (data && Array.isArray(data.records) && (data.initialized === true || data.records.length > 0)) {
+        return data.initialized === true ? data : { ...data, initialized: true };
+      }
+      return { version: 1, initialized: true, records: [] };
+    }
+
+    return this.getStateBucketForProtectedMasterWrite(shardName, confirmations);
+  }
+
+  /** Marca una fecha como confirmada en el registro de shards. Idempotente y con OCC. */
+  async markShardCreated(formId, dateKey) {
+    const registryName = `${formId}_shard_registry`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const state = (await this.getStateBucket(registryName)) || { version: 1, dates: {} };
+      if (state.dates && state.dates[dateKey]) return true;
+      state.version = 1;
+      state.dates = state.dates || {};
+      state.dates[dateKey] = true;
+      const result = await this.setStateBucket(registryName, state);
+      if (result?.ok) return true;
+      if (result?.conflict) {
+        await new Promise((r) => setTimeout(r, 200 + Math.random() * 250));
+        continue;
+      }
+      return false;
+    }
+    return false;
+  }
+
   async setStateBucket(name, data, attempt = 0) {
     const ifUpdatedAt = this._updatedAtByName[name] || '';
     const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
@@ -4670,13 +4766,24 @@ class CapturaApp {
     // Resiliencia de sincronización. El operador nunca decide entre master y
     // recovery: Captura conmuta automáticamente y sigue guardando local.
     this.deviceId = null;
-    this.masterCircuit = {}; // formId -> { openUntil, openedAt, reason }
+    this.masterCircuit = {}; // bucketName -> { openUntil, openedAt, reason }
     this.MASTER_CIRCUIT_MS = 60 * 1000;
     this.RECOVERY_BATCH_THRESHOLD = 50;
     this.RECOVERY_MAX_WAIT_MS = 5 * 60 * 1000;
     this.RECOVERY_BATCH_MAX = 100;
     this.RECOVERY_PREFIX = 'RECOVERY_AUDITORIAS';
     this._maintenanceTimer = null;
+    // Shards ya confirmados como existentes en esta sesión — evita releer
+    // {formId}_shard_registry en cada lote una vez que ya se sabe que el
+    // shard de hoy existe (ver GridClient.getShardBucketForWrite).
+    this._knownShards = new Set();
+    // Debounce de sincronización para Contenedor (el único log de escaneo
+    // en loop de SVC): agrupa varios escaneos seguidos en un solo GET+PUT
+    // por shard en vez de uno por registro. Dispara al primero que ocurra
+    // de: 10 pendientes o 5s desde el primer pendiente sin sincronizar.
+    this._syncDebounceTimer = null;
+    this.SYNC_BATCH_MAX = 10;
+    this.SYNC_BATCH_DEBOUNCE_MS = 5000;
 
     // Guard de historial: intercepta el botón/gesto "atrás" del sistema
     // (Android, o el back del navegador) para navegar dentro de la app
@@ -4901,29 +5008,30 @@ class CapturaApp {
     DebugConsole.log(`Recovery device_id: ${this.deviceId}`, 'info');
   }
 
-  isMasterCircuitOpen(formId) {
-    const state = this.masterCircuit[formId];
+  /** bucketName es el nombre real del bucket (ya incluye _master o _master_YYYY-MM-DD). */
+  isMasterCircuitOpen(bucketName) {
+    const state = this.masterCircuit[bucketName];
     return !!state && Date.now() < state.openUntil;
   }
 
-  openMasterCircuit(formId, reason) {
-    const current = this.masterCircuit[formId];
+  openMasterCircuit(bucketName, reason) {
+    const current = this.masterCircuit[bucketName];
     const wasOpen = !!current && Date.now() < current.openUntil;
-    this.masterCircuit[formId] = {
+    this.masterCircuit[bucketName] = {
       openedAt: wasOpen ? current.openedAt : Date.now(),
       openUntil: Date.now() + this.MASTER_CIRCUIT_MS,
       reason: reason || 'lectura ambigua',
     };
     if (!wasOpen) {
-      DebugConsole.log(`Circuit breaker ${formId}_master ABIERTO: ${reason}`, 'warn');
+      DebugConsole.log(`Circuit breaker ${bucketName} ABIERTO: ${reason}`, 'warn');
     }
     return !wasOpen;
   }
 
-  closeMasterCircuit(formId) {
-    if (this.masterCircuit[formId]) {
-      DebugConsole.log(`Circuit breaker ${formId}_master CERRADO: master saludable`, 'info');
-      delete this.masterCircuit[formId];
+  closeMasterCircuit(bucketName) {
+    if (this.masterCircuit[bucketName]) {
+      DebugConsole.log(`Circuit breaker ${bucketName} CERRADO: master saludable`, 'info');
+      delete this.masterCircuit[bucketName];
     }
   }
 
@@ -4938,6 +5046,32 @@ class CapturaApp {
         DebugConsole.log(`Mantenimiento de sync: ${e.message}`, 'warn')
       );
     }, 60 * 1000);
+  }
+
+  /**
+   * Debounce de sincronización para Contenedor: dispara flushOutbox al
+   * primero que ocurra de 10 registros pendientes o 5s desde el primer
+   * pendiente. Sin esto, cada escaneo dispararía su propio flush casi
+   * inmediato si la red responde rápido, perdiendo el ahorro de agrupar
+   * varios registros en un solo GET+PUT por shard.
+   */
+  scheduleSyncDebounced() {
+    const totalPending = Object.values(this.outboxRecords).reduce((acc, arr) => acc + arr.length, 0);
+    if (totalPending >= this.SYNC_BATCH_MAX) {
+      clearTimeout(this._syncDebounceTimer);
+      this._syncDebounceTimer = null;
+      this.flushOutbox({ silent: true }).catch((e) =>
+        DebugConsole.log(`Sync (umbral de lote): ${e.message}`, 'warn')
+      );
+      return;
+    }
+    if (this._syncDebounceTimer) return;
+    this._syncDebounceTimer = setTimeout(() => {
+      this._syncDebounceTimer = null;
+      this.flushOutbox({ silent: true }).catch((e) =>
+        DebugConsole.log(`Sync (debounce): ${e.message}`, 'warn')
+      );
+    }, this.SYNC_BATCH_DEBOUNCE_MS);
   }
 
   sanitizeRecordForRemote(record) {
@@ -5277,7 +5411,9 @@ class CapturaApp {
           await this.flushOutbox();
           LoadingOverlay.success('Guardado');
         } else {
-          this.flushOutbox().catch((e) => DebugConsole.log(`flushOutbox en segundo plano falló: ${e.message}`, 'warn'));
+          // Debounce (10 pendientes o 5s) en vez de flush inmediato: agrupa
+          // varios escaneos seguidos en un solo GET+PUT por shard.
+          this.scheduleSyncDebounced();
         }
       } else if (!stayInSession) {
         LoadingOverlay.success('Guardado local');
@@ -5463,14 +5599,35 @@ class CapturaApp {
   }
 
   /**
-   * Sube un registro al master con fail-closed + OCC + confirmación de UID.
-   * Nunca convierte null/[] ambiguo en {records:[]}.
+   * Bucket protegido para escribir: shard diario si el formId está
+   * shardeado (con el atajo de "shard nuevo legítimo" vía shard_registry),
+   * o el {formId}_master de siempre para el resto. dateKey es la fecha
+   * (hora de México) de los registros que se van a escribir — todos los
+   * registros de un mismo lote comparten shard porque flushOutbox ya los
+   * agrupa por bucketName antes de llamar aquí.
    */
-  async syncOneRecord(formId, record, attempt = 0) {
-    await this.prepareRecordAssets(formId, record);
+  async getProtectedBucketForWrite(formId, bucketName, dateKey) {
+    if (!SHARDED_FORMS.has(formId)) {
+      return this.gridClient.getStateBucketForProtectedMasterWrite(bucketName, 3);
+    }
+    if (this._knownShards.has(bucketName)) {
+      return this.gridClient.getStateBucketForProtectedMasterWrite(bucketName, 3);
+    }
+    return this.gridClient.getShardBucketForWrite(formId, bucketName, dateKey, 3);
+  }
 
-    const bucketName = `${formId}_master`;
-    if (this.isMasterCircuitOpen(formId)) {
+  /**
+   * Sube un lote de registros (todos del mismo formId + mismo bucket) con
+   * fail-closed + OCC + confirmación de UIDs. Reemplaza al syncOneRecord de
+   * antes: para formularios no shardeados el "lote" casi siempre es de 1
+   * registro (se comporta igual que antes), y para Contenedor agrupa
+   * varios escaneos en un solo GET+PUT en vez de uno por registro. Nunca
+   * convierte null/[] ambiguo en {records:[]}.
+   */
+  async syncRecordsBatch(formId, bucketName, dateKey, records, attempt = 0) {
+    for (const record of records) await this.prepareRecordAssets(formId, record);
+
+    if (this.isMasterCircuitOpen(bucketName)) {
       const err = new Error(`Circuit breaker abierto para ${bucketName}`);
       err.isMasterCircuitOpen = true;
       err.formId = formId;
@@ -5479,44 +5636,54 @@ class CapturaApp {
 
     let bucket;
     try {
-      bucket = await this.gridClient.getStateBucketForProtectedMasterWrite(bucketName, 3);
+      bucket = await this.getProtectedBucketForWrite(formId, bucketName, dateKey);
     } catch (e) {
       if (e.isAmbiguousMaster) {
         e.formId = formId;
-        e.circuitJustOpened = this.openMasterCircuit(formId, e.message);
+        e.circuitJustOpened = this.openMasterCircuit(bucketName, e.message);
       }
       throw e;
     }
 
-    const alreadyThere = bucket.records.some((r) => r && r.uid === record.uid);
-    if (alreadyThere) {
-      this.closeMasterCircuit(formId);
-      return { ok: true, alreadyThere: true };
+    const existing = new Set(bucket.records.map((r) => r && r.uid).filter(Boolean));
+    const toAdd = records.filter((r) => !existing.has(r.uid));
+    const alreadyThereUids = records.filter((r) => existing.has(r.uid)).map((r) => r.uid);
+
+    if (toAdd.length === 0) {
+      this.closeMasterCircuit(bucketName);
+      this._knownShards.add(bucketName);
+      return alreadyThereUids;
     }
 
     bucket.initialized = true;
     if (!bucket.version) bucket.version = 1;
-    bucket.records.push(this.sanitizeRecordForRemote(record));
+    bucket.records.push(...toAdd.map((r) => this.sanitizeRecordForRemote(r)));
 
     const result = await this.gridClient.setStateBucket(bucketName, bucket);
     if (result?.conflict) {
       if (attempt >= 5) throw new Error('Demasiados conflictos de escritura simultánea — intenta de nuevo');
       await new Promise((r) => setTimeout(r, 400 + Math.random() * 400));
-      return this.syncOneRecord(formId, record, attempt + 1);
+      return this.syncRecordsBatch(formId, bucketName, dateKey, records, attempt + 1);
     }
     if (!result?.ok) throw new Error(`No se confirmó la escritura de ${bucketName}`);
 
-    const confirmed = await this.gridClient.confirmRecordPresent(bucketName, record.uid, 3);
+    const confirmed = await this.gridClient.confirmRecordsPresent(bucketName, toAdd.map((r) => r.uid), 3);
     if (!confirmed) {
-      const err = new Error(`PUT aceptado pero UID ${record.uid} aún no es visible en ${bucketName}`);
+      const err = new Error(`PUT aceptado pero algunos UID aún no son visibles en ${bucketName}`);
       err.isWriteUnconfirmed = true;
       err.formId = formId;
-      err.circuitJustOpened = this.openMasterCircuit(formId, err.message);
+      err.circuitJustOpened = this.openMasterCircuit(bucketName, err.message);
       throw err;
     }
 
-    this.closeMasterCircuit(formId);
-    return { ok: true };
+    this.closeMasterCircuit(bucketName);
+    this._knownShards.add(bucketName);
+    if (SHARDED_FORMS.has(formId)) {
+      this.gridClient.markShardCreated(formId, dateKey).catch((e) =>
+        DebugConsole.log(`markShardCreated ${formId}/${dateKey}: ${e.message}`, 'warn')
+      );
+    }
+    return [...alreadyThereUids, ...toAdd.map((r) => r.uid)];
   }
 
   async flushOutbox({ silent = false } = {}) {
@@ -5547,34 +5714,46 @@ class CapturaApp {
       let networkDown = false;
       let recoveryBacked = 0;
 
+      // Agrupar por (formId, bucketName real) — para Contenedor, bucketName
+      // incluye la fecha del registro, así que puede haber varios grupos si
+      // el lote cruza medianoche. El grupo entero se sube en un solo
+      // GET+PUT en vez de uno por registro (ver syncRecordsBatch).
+      const groups = new Map(); // bucketName -> { formId, dateKey, records[] }
       for (const formId of Object.keys(this.outboxRecords)) {
         if (blockedForms.has(formId)) continue;
-        const records = [...this.outboxRecords[formId]];
-        for (const record of records) {
-          try {
-            await this.syncOneRecord(formId, record);
-            synced.push(record.uid);
-            await RecordStore.markHistorySynced(record.uid);
-            DebugConsole.log(`Sincronizado: ${record.uid}`, 'info');
-          } catch (e) {
-            if (e.isNetworkError || e.isTimeout) {
-              DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
-              networkDown = true;
-              break;
-            }
-
-            if (e.isAmbiguousMaster || e.isMasterCircuitOpen || e.isWriteUnconfirmed) {
-              const errFormId = e.formId || formId;
-              blockedForms.add(errFormId);
-              if (e.circuitJustOpened) forceRecoveryForms.add(errFormId);
-              DebugConsole.log(`${errFormId}: master no confiable — se conmuta a recovery sin escribir el master`, 'warn');
-              continue;
-            }
-
-            DebugConsole.log(`Error al sincronizar ${record.uid}: ${e.message}`, 'error');
-          }
+        for (const record of [...this.outboxRecords[formId]]) {
+          const dateKey = shardDateKeyMexico(record.ts);
+          const bucketName = masterBucketNameFor(formId, dateKey);
+          if (!groups.has(bucketName)) groups.set(bucketName, { formId, dateKey, records: [] });
+          groups.get(bucketName).records.push(record);
         }
+      }
+
+      for (const [bucketName, group] of groups) {
         if (networkDown) break;
+        if (blockedForms.has(group.formId)) continue;
+        try {
+          const okUids = await this.syncRecordsBatch(group.formId, bucketName, group.dateKey, group.records);
+          synced.push(...okUids);
+          for (const uid of okUids) await RecordStore.markHistorySynced(uid);
+          DebugConsole.log(`Sincronizados ${okUids.length} en ${bucketName}`, 'info');
+        } catch (e) {
+          if (e.isNetworkError || e.isTimeout) {
+            DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
+            networkDown = true;
+            break;
+          }
+
+          if (e.isAmbiguousMaster || e.isMasterCircuitOpen || e.isWriteUnconfirmed) {
+            const errFormId = e.formId || group.formId;
+            blockedForms.add(errFormId);
+            if (e.circuitJustOpened) forceRecoveryForms.add(errFormId);
+            DebugConsole.log(`${bucketName}: master no confiable — se conmuta a recovery sin escribir el master`, 'warn');
+            continue;
+          }
+
+          DebugConsole.log(`Error al sincronizar lote de ${bucketName}: ${e.message}`, 'error');
+        }
       }
 
       // Eliminar SOLO UIDs confirmados presentes en master.
