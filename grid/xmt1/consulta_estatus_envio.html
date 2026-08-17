@@ -269,12 +269,23 @@
 
 <script>
 // ═════════════════════════════════════════════════════════════════════════
-// CONFIG — ajustar antes de usar. Ver boveda_estatus_envio.html para el
-// procedimiento de puesta en marcha (crear el documento bóveda y copiar su
-// doc_id aquí, o pasarlo por ?data_doc_id=<doc_id> en la URL).
+// CONFIG — app autocontenida: el Dataset (BigQuery) y el State bucket viven
+// en el MISMO documento que este HTML, no en un documento aparte.
+//
+// Grid sirve el HTML de un documento en rutas con el patrón /d/{doc_id}
+// (y /d/{doc_id}/raw) — detectSelfDocId() infiere el doc_id propio a partir
+// de esa ruta. Esto es inferencia best-effort a partir del patrón de URL
+// documentado, no un dato inyectado por Grid en runtime; por eso se puede
+// forzar con ?data_doc_id=<doc_id> si la detección automática fallara en
+// algún modo de visualización distinto.
 // ═════════════════════════════════════════════════════════════════════════
+function detectSelfDocId() {
+  const m = location.pathname.match(/\/d\/([A-Za-z0-9_-]{6,})/);
+  return m ? m[1] : null;
+}
+
 const CONFIG = {
-  DATA_DOC_ID: new URLSearchParams(location.search).get('data_doc_id') || 'CONFIGURAR_DOC_ID',
+  DATA_DOC_ID: new URLSearchParams(location.search).get('data_doc_id') || detectSelfDocId(),
   DATASET_NAME: 'estatus_envio_lookup',
   STATE_BUCKET: 'estatus_envio_log',
   BQ_TABLE: 'meli-bi-data.WHOWNER.BT_SHP_LG_SHIPMENTS',
@@ -1048,19 +1059,19 @@ async function handleSaveClick() {
 function renderSetupBlocker() {
   appEl.innerHTML = `
     <div class="setup-blocker">
-      <h1>Falta configurar el documento de datos</h1>
-      <p>Esta app necesita un <code>doc_id</code> estable donde vivan el Dataset de BigQuery y el
-        State bucket de guardado.</p>
-      <p>Sube <code>boveda_estatus_envio.html</code> a Grid, copia su <code>doc_id</code> y ábrela con
-        <code>?data_doc_id=&lt;doc_id&gt;</code>, o reemplaza la constante
-        <code>CONFIG.DATA_DOC_ID</code> en este archivo.</p>
+      <h1>No se pudo detectar el documento</h1>
+      <p>Esta app guarda sus datos (Dataset de BigQuery y State bucket) en el mismo documento
+        donde vive este HTML, y detecta su propio <code>doc_id</code> a partir de la URL con la
+        que Grid lo sirve (<code>/d/&lt;doc_id&gt;</code>).</p>
+      <p>Si estás probando el archivo fuera de Grid (por ejemplo abriéndolo como archivo local),
+        agrega <code>?data_doc_id=&lt;doc_id&gt;</code> a la URL para forzarlo manualmente.</p>
     </div>
   `;
 }
 
 (async function init() {
-  if (CONFIG.DATA_DOC_ID === 'CONFIGURAR_DOC_ID') {
-    topbarSub.textContent = 'Sin configurar';
+  if (!CONFIG.DATA_DOC_ID) {
+    topbarSub.textContent = 'Sin detectar';
     renderSetupBlocker();
     return;
   }
