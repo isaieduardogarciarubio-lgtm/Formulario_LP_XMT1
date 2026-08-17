@@ -386,6 +386,18 @@ function buildSql(shipmentId) {
   return `SELECT\n  SHP_LG_STATUS,\n  SHP_LG_SUB_STATUS\nFROM \`${CONFIG.BQ_TABLE}\`\nWHERE SHP_SHIPMENT_ID = ${shipmentId}`;
 }
 
+// Grid puede devolver source_config con distinto casing/anidamiento según el
+// backend; se revisan las variantes plausibles sin asumir una sola forma.
+function extractDefSql(def) {
+  const sc = def?.source_config ?? def?.sourceConfig ?? def?.config ?? {};
+  return sc.sql ?? sc.SQL ?? sc.query ?? sc.Query ?? '';
+}
+
+function sqlMatchesShipment(sql, shipmentId) {
+  const re = new RegExp(`SHP_SHIPMENT_ID\\s*=\\s*${shipmentId}(?!\\d)`);
+  return re.test(sql);
+}
+
 // Heurística de color para badges de estatus. No hay vocabulario cerrado
 // confirmado en runtime para SHP_LG_STATUS/SHP_LG_SUB_STATUS — ajustar esta
 // lista si en la práctica aparecen otros valores relevantes.
@@ -579,8 +591,7 @@ class LookupService {
     const t0 = performance.now();
 
     const sql = buildSql(shipmentId);
-    const expectedFingerprint = await sha256Hex(sql.trim());
-    diag.sql_fingerprint = expectedFingerprint.slice(0, 12);
+    diag.sql_fingerprint = (await sha256Hex(sql.trim())).slice(0, 12);
 
     onPhase && onPhase('definiendo');
     const existing = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
@@ -589,7 +600,7 @@ class LookupService {
 
     onPhase && onPhase('verificando');
     const t1 = performance.now();
-    await this._waitForDefinitionVisible(expectedFingerprint, 15000);
+    await this._waitForDefinitionVisible(shipmentId, 15000);
     diag.phases.visibility_ms = Math.round(performance.now() - t1);
 
     onPhase && onPhase('refrescando');
@@ -611,20 +622,31 @@ class LookupService {
     return { rows, diag };
   }
 
-  async _waitForDefinitionVisible(expectedFingerprint, timeoutMs) {
+  // No comparamos el SQL devuelto por Grid contra un hash exacto del SQL
+  // local: si el backend reformatea el texto al guardarlo (espacios,
+  // comillas, saltos de línea), un hash byte-a-byte nunca calza y la espera
+  // expira siempre aunque la definición sí se haya propagado. En vez de eso
+  // verificamos que el SQL visible contenga ESTE shipmentId como valor del
+  // WHERE (shipmentId ya viene validado como solo dígitos por
+  // parseScannedShipmentId, así que el límite de dígito es seguro), lo que
+  // confirma que no estamos leyendo la definición de un escaneo anterior.
+  async _waitForDefinitionVisible(shipmentId, timeoutMs) {
     const deadline = Date.now() + timeoutMs;
     let intervalMs = 400;
+    let lastSeen = { hadSql: false };
     while (Date.now() < deadline) {
       const def = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
-      const sql = def?.source_config?.sql || def?.source_config?.SQL || '';
+      const sql = extractDefSql(def);
       if (sql) {
-        const fp = await sha256Hex(sql.trim());
-        if (fp === expectedFingerprint) return;
+        lastSeen = { hadSql: true, sqlLen: sql.length };
+        if (sqlMatchesShipment(sql, shipmentId)) return;
+      } else {
+        lastSeen = { hadSql: false, keys: def ? Object.keys(def).slice(0, 8) : [] };
       }
       await sleep(intervalMs);
       intervalMs = Math.min(intervalMs + 200, 1200);
     }
-    throw new Error('La definición del Dataset no se propagó a tiempo');
+    throw new Error(`La definición del Dataset no se propagó a tiempo (diagnóstico: ${JSON.stringify(lastSeen)})`);
   }
 
   _materializationMarker(def) {
