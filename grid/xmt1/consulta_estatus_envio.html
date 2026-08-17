@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Estatus de Envío · XMT1</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23000'/><circle cx='11' cy='24' r='3' stroke='%23fff' stroke-width='2' fill='none'/><circle cx='23' cy='24' r='3' stroke='%23fff' stroke-width='2' fill='none'/><path d='M4 10h16v12H4zM20 15h6l4 5v2h-2' stroke='%23fff' stroke-width='2' stroke-linejoin='round' fill='none'/></svg>">
+
+<style>
+  :root {
+    --bg:          #000000;
+    --surface:     #1c1c1e;
+    --surface-2:   #2c2c2e;
+    --border:      #2c2c2e;
+    --text:        #ffffff;
+    --text-muted:  #8e8e93;
+    --text-faint:  #48484a;
+    --success:     #34c759;
+    --success-bg:  rgba(52,199,89,.14);
+    --error:       #ff453a;
+    --error-bg:    rgba(255,69,58,.14);
+    --warn:        #ffd60a;
+    --warn-bg:     rgba(255,214,10,.14);
+    --info:        #0a84ff;
+    --info-bg:     rgba(10,132,255,.14);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+
+  :focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+
+  .icon { display: block; flex-shrink: 0; }
+
+  /* ── Topbar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 20;
+  }
+  .topbar-title { font-size: 15px; font-weight: 700; flex: 1; letter-spacing: -.01em; }
+  .topbar-sub   { font-size: 11px; color: var(--text-muted); }
+  .identity-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; transition: background .3s; }
+  .identity-dot.ok { background: var(--success); }
+  .identity-dot.err { background: var(--error); }
+
+  /* ── Main scan screen ── */
+  .scan-screen {
+    min-height: 52dvh;
+    min-height: 52vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 32px 24px 20px;
+    cursor: default;
+    user-select: none;
+  }
+
+  .hero-icon {
+    width: 88px; height: 88px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text);
+    margin-bottom: 28px;
+    transition: color .25s ease;
+  }
+  .hero-icon svg { width: 72px; height: 72px; }
+  .hero-icon.idle { animation: hero-float 4s ease-in-out infinite; }
+  .hero-icon.loading { color: var(--text-muted); animation: hero-pulse .9s ease-in-out infinite alternate; }
+  .hero-icon.success { color: var(--success); }
+  .hero-icon.error { color: var(--error); }
+
+  @keyframes hero-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+  @keyframes hero-pulse { from { opacity: 1; } to { opacity: .4; } }
+
+  .screen-label        { font-size: 22px; font-weight: 400; color: var(--text-muted); line-height: 1.25; }
+  .screen-label-strong { font-size: 34px; font-weight: 700; color: var(--text); line-height: 1.15; letter-spacing: -.01em; margin-top: 2px; }
+  .screen-hint { font-size: 13px; color: var(--text-faint); margin-top: 14px; }
+
+  /* ── Skeleton loaders ── */
+  .skeleton {
+    background: linear-gradient(90deg, #1c1c1e 25%, #2c2c2e 37%, #1c1c1e 63%);
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+    border-radius: 8px;
+  }
+  @keyframes skeleton-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+  .skeleton-block { width: 100%; max-width: 380px; margin: 0 auto 10px; }
+  .skeleton-badge { height: 40px; border-radius: 12px; }
+  .skeleton-line  { height: 12px; width: 60%; margin: 6px auto 0; }
+
+  /* ── Result card ── */
+  .result-wrap { width: 100%; max-width: 420px; margin: 22px auto 0; display: flex; flex-direction: column; gap: 10px; }
+  .result-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    text-align: left;
+    animation: row-in .22s ease;
+  }
+  @keyframes row-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+  .result-row-idx { font-size: 11px; color: var(--text-faint); font-weight: 700; margin-bottom: 8px; letter-spacing: .04em; text-transform: uppercase; }
+  .field-pair { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+  .field-label { font-size: 12px; color: var(--text-muted); }
+  .field-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 700;
+    padding: 5px 12px; border-radius: 9999px;
+    white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .field-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+  .field-badge.st-green  { color: var(--success); background: var(--success-bg); }
+  .field-badge.st-red    { color: var(--error);   background: var(--error-bg); }
+  .field-badge.st-yellow { color: var(--warn);    background: var(--warn-bg); }
+  .field-badge.st-blue   { color: var(--info);    background: var(--info-bg); }
+  .field-badge.st-gray   { color: var(--text-muted); background: var(--surface-2); }
+
+  .shipment-tag { font-size: 12px; color: var(--text-faint); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+  /* ── Alert (reemplaza alert()) ── */
+  .alert {
+    width: 100%; max-width: 420px; margin: 22px auto 0;
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 14px 16px; border-radius: 14px; border: 1px solid;
+    font-size: 13.5px; text-align: left; line-height: 1.4;
+  }
+  .alert-error { border-color: rgba(255,69,58,.35); background: var(--error-bg); color: #ff8a80; }
+  .alert-warn  { border-color: rgba(255,214,10,.35); background: var(--warn-bg); color: #ffe066; }
+  .alert-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── Action buttons ── */
+  .actions { width: 100%; max-width: 420px; margin: 20px auto 0; display: flex; gap: 10px; }
+  .btn {
+    flex: 1;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    font-family: inherit; font-size: 15px; font-weight: 700;
+    border-radius: 12px; padding: 13px 18px; border: none; cursor: pointer;
+    transition: opacity .15s, transform .1s;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+  .btn-primary   { background: var(--success); color: #04140a; }
+  .btn-secondary { background: var(--surface-2); color: var(--text); }
+  .btn-danger    { background: var(--error-bg); color: var(--error); }
+  .btn .spinner-sm { width: 15px; height: 15px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .65s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Manual entry ── */
+  .manual-panel {
+    width: 100%; max-width: 380px; margin: 18px auto 0;
+    display: none;
+    gap: 8px;
+  }
+  .manual-panel.visible { display: flex; }
+  .manual-input {
+    flex: 1;
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    font-family: inherit; font-size: 17px; font-variant-numeric: tabular-nums;
+    border-radius: 12px; padding: 12px 14px;
+  }
+  .manual-input:focus { outline: none; border-color: var(--info); }
+  .manual-go { background: var(--info); color: #fff; border: none; border-radius: 12px; width: 48px; display:flex; align-items:center; justify-content:center; cursor: pointer; }
+
+  #hidInput {
+    position: fixed; top: 0; left: 0; width: 100%; height: 0;
+    overflow: hidden; border: 0; outline: 0; padding: 0; margin: 0;
+    opacity: 0; pointer-events: none; font-size: 16px;
+  }
+
+  /* ── Mode toggle (scanner / teclado) ── */
+  .mode-toggle {
+    position: fixed; right: 16px; bottom: 16px;
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 30;
+  }
+
+  #focusIndicator {
+    position: fixed; top: 12px; right: 16px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-faint); transition: background .3s; z-index: 25;
+  }
+  #focusIndicator.armed { background: var(--success); }
+
+  /* ── Session log ── */
+  .log-panel { width: 100%; max-width: 560px; margin: 0 auto; padding: 8px 16px 100px; }
+  .log-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 20px 4px 12px; border-top: 1px solid var(--border); margin-bottom: 12px;
+  }
+  .log-header h2 { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; flex: 1; }
+  .log-badge { background: var(--surface); color: var(--text-muted); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9999px; min-width: 24px; text-align: center; }
+  .log-badge.has-entries { background: var(--surface-2); color: var(--text); }
+  .log-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .log-empty { text-align: center; color: var(--text-faint); font-size: 13px; padding: 24px 0; }
+  .log-entry { background: var(--surface); border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; animation: row-in .22s ease; }
+  .log-entry.saved-error { background: var(--error-bg); }
+  .log-entry-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+  .log-entry.saved-error .log-entry-dot { background: var(--error); }
+  .log-entry-body { flex: 1; min-width: 0; }
+  .log-entry-code { font-size: 14px; font-weight: 600; color: var(--text); }
+  .log-entry-meta { font-size: 11px; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log-entry-time { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  /* ── Diagnóstico (colapsable, sin datos sensibles) ── */
+  .diag-toggle { display: block; margin: 18px auto 0; background: none; border: none; color: var(--text-faint); font-size: 11px; font-family: inherit; cursor: pointer; text-decoration: underline; }
+  .diag-panel { display: none; width: 100%; max-width: 420px; margin: 10px auto 0; background: var(--surface); border-radius: 12px; padding: 12px 14px; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .diag-panel.visible { display: block; }
+  .diag-panel div { display: flex; justify-content: space-between; padding: 2px 0; gap: 10px; }
+  .diag-panel span:last-child { color: var(--text); text-align: right; word-break: break-all; }
+
+  /* ── Toast ── */
+  #toast-area { position: fixed; bottom: 84px; left: 16px; right: 16px; z-index: 200; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); padding: 12px 14px; display: flex; align-items: center; gap: 10px; pointer-events: all; animation: toast-in .22s ease; transition: opacity .3s, transform .3s; }
+  .toast.out { opacity: 0; transform: translateY(8px); }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .toast-msg { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); }
+
+  /* ── Setup blocker ── */
+  .setup-blocker { padding: 60px 24px; text-align: center; max-width: 460px; margin: 0 auto; }
+  .setup-blocker h1 { font-size: 18px; margin-bottom: 12px; }
+  .setup-blocker p { font-size: 13.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 10px; }
+  .setup-blocker code { background: var(--surface); padding: 2px 6px; border-radius: 4px; font-size: .9em; }
+</style>
+</head>
+<body>
+
+  <input id="hidInput" type="text" autofocus
+         autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+         aria-label="Lector de código de barras" tabindex="0">
+  <div id="focusIndicator" title="Identidad / lector"></div>
+
+  <header class="topbar">
+    <div>
+      <div class="topbar-title">Estatus de Envío</div>
+      <div class="topbar-sub" id="topbarSub">Conectando…</div>
+    </div>
+    <div class="identity-dot" id="identityDot"></div>
+  </header>
+
+  <div id="app"></div>
+
+  <button class="mode-toggle" id="modeToggle" aria-label="Cambiar a entrada manual" title="Entrada manual"></button>
+
+  <div id="toast-area"></div>
+
+<script>
+// ═════════════════════════════════════════════════════════════════════════
+// CONFIG — ajustar antes de usar. Ver boveda_estatus_envio.html para el
+// procedimiento de puesta en marcha (crear el documento bóveda y copiar su
+// doc_id aquí, o pasarlo por ?data_doc_id=<doc_id> en la URL).
+// ═════════════════════════════════════════════════════════════════════════
+const CONFIG = {
+  DATA_DOC_ID: new URLSearchParams(location.search).get('data_doc_id') || 'CONFIGURAR_DOC_ID',
+  DATASET_NAME: 'estatus_envio_lookup',
+  STATE_BUCKET: 'estatus_envio_log',
+  BQ_TABLE: 'meli-bi-data.WHOWNER.BT_SHP_LG_SHIPMENTS',
+};
+
+// ═════════════════════════════════════════════════════════════════════════
+// Utilidades
+// ═════════════════════════════════════════════════════════════════════════
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const nowISO = () => new Date().toISOString();
+const jitter = (baseMs) => baseMs + Math.random() * baseMs * 0.5;
+
+function randomId() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Extrae SOLO un escalar estable de /api/v1/me, en el orden canónico.
+// El payload completo de /me se descarta inmediatamente después de esto.
+function extractIdentityMaterial(me) {
+  if (!me || typeof me !== 'object') return { source_field: 'fallback_scalar', material: String(me) };
+  const candidates = [
+    ['id', me.id], ['user_id', me.user_id], ['userId', me.userId],
+    ['username', me.username], ['nickname', me.nickname],
+    ['login', me.login], ['email', me.email],
+  ];
+  for (const [key, value] of candidates) {
+    if (value != null && String(value).trim() !== '') return { source_field: key, material: String(value) };
+  }
+  return { source_field: 'stable_object_fallback', material: JSON.stringify(me) };
+}
+
+// Acepta texto plano numérico o el envoltorio JSON MeLi ({"id":"...","t":"lm"}).
+// Rechaza cualquier cosa no numérica: el ID se inyecta directo en el SQL,
+// así que esta validación es también la barrera anti-inyección.
+function parseScannedShipmentId(raw) {
+  let candidate = String(raw ?? '').trim();
+  try {
+    const parsed = JSON.parse(candidate);
+    if (parsed && parsed.id != null) candidate = String(parsed.id).trim();
+  } catch (e) { /* texto plano, ok */ }
+  if (!/^\d{1,15}$/.test(candidate)) {
+    throw new Error('El dato escaneado no es un número de envío válido');
+  }
+  return candidate;
+}
+
+function buildSql(shipmentId) {
+  return `SELECT\n  SHP_LG_STATUS,\n  SHP_LG_SUB_STATUS\nFROM \`${CONFIG.BQ_TABLE}\`\nWHERE SHP_SHIPMENT_ID = ${shipmentId}`;
+}
+
+// Heurística de color para badges de estatus. No hay vocabulario cerrado
+// confirmado en runtime para SHP_LG_STATUS/SHP_LG_SUB_STATUS — ajustar esta
+// lista si en la práctica aparecen otros valores relevantes.
+function statusColorClass(value) {
+  const v = String(value || '').toLowerCase();
+  if (!v) return 'st-gray';
+  if (/(delivered|entregad|confirm|complet)/.test(v)) return 'st-green';
+  if (/(cancel|not_delivered|problem|except|error|fail|rechaz)/.test(v)) return 'st-red';
+  if (/(pending|hold|delay|retras|espera)/.test(v)) return 'st-yellow';
+  return 'st-blue';
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Backpressure global — un solo gate de 429 para toda la app (Biblia §5,
+// §15.17-8). Ninguna rama debe seguir pidiendo mientras otra está en espera.
+// ═════════════════════════════════════════════════════════════════════════
+const Backpressure = (() => {
+  let blockedUntil = 0;
+  return {
+    observe(retryAfterMs) { blockedUntil = Math.max(blockedUntil, Date.now() + retryAfterMs); },
+    async wait() {
+      const remaining = blockedUntil - Date.now();
+      if (remaining > 0) await sleep(remaining);
+    },
+  };
+})();
+
+// ═════════════════════════════════════════════════════════════════════════
+// GridClient — wrapper mínimo sobre la API de Grid: identidad, Dataset
+// Definitions (grid_sql/BigQuery) y Named State. credentials:'include' en
+// todo, timeout propio, 429 → Backpressure, 503 → reintento con backoff.
+// ═════════════════════════════════════════════════════════════════════════
+class GridClient {
+  constructor(docId) {
+    this.docId = docId;
+    this.baseUrl = location.origin;
+  }
+
+  async _fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+    await Backpressure.wait();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, credentials: 'include', signal: controller.signal });
+      if (res.status === 429) {
+        const retryAfterSec = Number(res.headers.get('Retry-After')) || 3;
+        Backpressure.observe(retryAfterSec * 1000);
+      }
+      return res;
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        const err = new Error(`Tiempo de espera agotado (${timeoutMs / 1000}s)`);
+        err.isTimeout = true;
+        throw err;
+      }
+      const err = new Error('Sin conexión con el servidor');
+      err.isNetworkError = true;
+      err.cause = e;
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  async _requestJsonWithRetry(url, options, { attempts = 5, timeoutMs = 15000 } = {}) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      let res;
+      try {
+        res = await this._fetchWithTimeout(url, options, timeoutMs);
+      } catch (e) {
+        if ((e.isTimeout || e.isNetworkError) && attempt < attempts - 1) {
+          await sleep(jitter(500 * (attempt + 1)));
+          continue;
+        }
+        throw e;
+      }
+      if (res.status === 429) {
+        if (attempt < attempts - 1) { await Backpressure.wait(); continue; }
+        const err = new Error('Grid está limitando las solicitudes, reintenta en unos segundos');
+        err.status = 429;
+        throw err;
+      }
+      if (res.status === 503 && attempt < attempts - 1) {
+        await sleep(jitter(500 * (attempt + 1)));
+        continue;
+      }
+      return res;
+    }
+    throw new Error('No se pudo completar la solicitud tras varios intentos');
+  }
+
+  async getMe() {
+    try {
+      const res = await this._fetchWithTimeout(`${this.baseUrl}/api/v1/me`, {}, 8000);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.warn('GET /me falló:', e.message);
+      return null;
+    }
+  }
+
+  // ── Dataset Definitions (grid_sql / BigQuery) ─────────────────────────
+  async getDatasetDefinition(name) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${name}`;
+    const res = await this._requestJsonWithRetry(url, { method: 'GET' });
+    if (res.status === 404) return null;
+    if (!res.ok) throw this._httpError(res, 'No se pudo leer la definición del Dataset');
+    return await res.json();
+  }
+
+  async upsertDatasetDefinition(name, sql, existing) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${name}`;
+    const body = {
+      source_type: 'grid_sql',
+      refresh_mode: 'grid_refresh',
+      format: 'json_rows',
+      description: 'Estatus/sub-estatus de envío por SHP_SHIPMENT_ID (app de prueba)',
+      source: 'bigquery',
+      source_config: { sql },
+    };
+    const method = existing ? 'PATCH' : 'POST';
+    const res = await this._requestJsonWithRetry(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.status === 403) throw this._httpError(res, 'Tu usuario no tiene permiso de edición sobre el documento de datos (se requiere editor u owner)');
+    if (!res.ok) throw this._httpError(res, 'No se pudo crear/actualizar la definición del Dataset');
+    return await res.json().catch(() => ({}));
+  }
+
+  async refreshDataset(name) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${name}/refresh`;
+    const res = await this._requestJsonWithRetry(url, { method: 'POST' });
+    if (res.status === 403) throw this._httpError(res, 'Tu usuario no tiene permiso para refrescar el Dataset (se requiere editor u owner)');
+    if (!res.ok) throw this._httpError(res, 'No se pudo disparar el refresh del Dataset');
+    return await res.json().catch(() => ({}));
+  }
+
+  async getDatasetContent(name) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/data/${name}/content`;
+    const res = await this._requestJsonWithRetry(url, { method: 'GET' });
+    if (!res.ok) throw this._httpError(res, 'No se pudo leer el contenido del Dataset');
+    return await res.json();
+  }
+
+  // ── Named State ────────────────────────────────────────────────────────
+  async getNamedState(name) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+    const res = await this._requestJsonWithRetry(url, { method: 'GET' });
+    if (res.status === 404) return { state: {}, updatedAt: '' };
+    if (!res.ok) throw this._httpError(res, 'No se pudo leer el bucket de guardado');
+    const body = await res.json();
+    return { state: body.state || {}, updatedAt: body.updated_at || '' };
+  }
+
+  async patchNamedState(name, patchObj, ifUpdatedAt) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+    const res = await this._requestJsonWithRetry(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...patchObj, if_updated_at: ifUpdatedAt }),
+    });
+    return res; // el caller inspecciona status (200/409/etc.)
+  }
+
+  _httpError(res, friendlyMsg) {
+    const err = new Error(friendlyMsg);
+    err.status = res.status;
+    return err;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// LookupService — orquesta el flujo grid_sql: actualizar la definición del
+// Dataset con el SQL de este escaneo, esperar la barrera de visibilidad,
+// disparar refresh, esperar materialización y leer el contenido.
+//
+// No existe un endpoint SQL ad-hoc documentado (Biblia §4.6/§15.7) — el
+// único camino a BigQuery gestionado por Grid es Dataset Definition +
+// refresh, por eso cada escaneo reescribe la definición.
+// ═════════════════════════════════════════════════════════════════════════
+class LookupService {
+  constructor(client) {
+    this.client = client;
+  }
+
+  async lookup(shipmentId, onPhase) {
+    const diag = { shipment_id: shipmentId, phases: {} };
+    const t0 = performance.now();
+
+    const sql = buildSql(shipmentId);
+    const expectedFingerprint = await sha256Hex(sql.trim());
+    diag.sql_fingerprint = expectedFingerprint.slice(0, 12);
+
+    onPhase && onPhase('definiendo');
+    const existing = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
+    await this.client.upsertDatasetDefinition(CONFIG.DATASET_NAME, sql, !!existing);
+    diag.phases.define_ms = Math.round(performance.now() - t0);
+
+    onPhase && onPhase('verificando');
+    const t1 = performance.now();
+    await this._waitForDefinitionVisible(expectedFingerprint, 15000);
+    diag.phases.visibility_ms = Math.round(performance.now() - t1);
+
+    onPhase && onPhase('refrescando');
+    const t2 = performance.now();
+    const baselineDef = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
+    const baselineMarker = this._materializationMarker(baselineDef);
+    await this.client.refreshDataset(CONFIG.DATASET_NAME);
+    await this._waitForRefreshComplete(baselineMarker, 45000);
+    diag.phases.refresh_ms = Math.round(performance.now() - t2);
+
+    onPhase && onPhase('leyendo');
+    const t3 = performance.now();
+    const content = await this.client.getDatasetContent(CONFIG.DATASET_NAME);
+    const rows = this._extractRows(content);
+    diag.phases.read_ms = Math.round(performance.now() - t3);
+    diag.row_count = rows.length;
+    diag.total_ms = Math.round(performance.now() - t0);
+
+    return { rows, diag };
+  }
+
+  async _waitForDefinitionVisible(expectedFingerprint, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    let intervalMs = 400;
+    while (Date.now() < deadline) {
+      const def = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
+      const sql = def?.source_config?.sql || def?.source_config?.SQL || '';
+      if (sql) {
+        const fp = await sha256Hex(sql.trim());
+        if (fp === expectedFingerprint) return;
+      }
+      await sleep(intervalMs);
+      intervalMs = Math.min(intervalMs + 200, 1200);
+    }
+    throw new Error('La definición del Dataset no se propagó a tiempo');
+  }
+
+  _materializationMarker(def) {
+    if (!def) return '';
+    return String(def.refresh_count ?? def.last_refreshed_at ?? def.updated_at ?? '');
+  }
+
+  async _waitForRefreshComplete(baselineMarker, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    let intervalMs = 600;
+    while (Date.now() < deadline) {
+      const def = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
+      const errMsg = def?.last_error || def?.error;
+      if (errMsg) throw new Error('BigQuery reportó un error al refrescar (revisa el SQL/tabla)');
+      const marker = this._materializationMarker(def);
+      const status = String(def?.status || '').toLowerCase();
+      if (marker && marker !== baselineMarker && (!status || status === 'published' || status === 'ready')) {
+        return;
+      }
+      await sleep(Math.min(intervalMs, 2000));
+      intervalMs += 300;
+    }
+    throw new Error('El refresh de BigQuery tardó demasiado, intenta de nuevo');
+  }
+
+  _extractRows(content) {
+    if (Array.isArray(content)) return content;
+    if (Array.isArray(content?.rows)) return content.rows;
+    if (Array.isArray(content?.data)) return content.data;
+    if (Array.isArray(content?.records)) return content.records;
+    if (Array.isArray(content?.content)) return content.content;
+    return [];
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// SaveService — protocolo canónico V20.2 (Biblia §5.8/§15.18): 1 escritura
+// lógica in-flight, clave única por evento, verificación inmediata + estable
+// después de 2xx, 409 → reread+jitter+retry, ambiguo → reread por _write_id.
+// ═════════════════════════════════════════════════════════════════════════
+class SaveService {
+  constructor(client) {
+    this.client = client;
+    this.inFlight = false;
+  }
+
+  async save({ shipmentId, rows, actorHash }) {
+    if (this.inFlight) throw new Error('Ya hay un guardado en curso');
+    this.inFlight = true;
+    try {
+      const eventId = randomId();
+      const key = `event:${eventId}`;
+      const event = {
+        event_id: eventId,
+        _write_id: eventId,
+        entity_id: shipmentId,
+        kind: 'lookup_saved',
+        actor_hash: actorHash,
+        created_at: nowISO(),
+        payload: {
+          shipment_id: shipmentId,
+          rows: rows.map((r) => ({
+            SHP_LG_STATUS: r.SHP_LG_STATUS ?? r.shp_lg_status ?? null,
+            SHP_LG_SUB_STATUS: r.SHP_LG_SUB_STATUS ?? r.shp_lg_sub_status ?? null,
+          })),
+        },
+      };
+
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const { state, updatedAt } = await this.client.getNamedState(CONFIG.STATE_BUCKET);
+        const res = await this.client.patchNamedState(CONFIG.STATE_BUCKET, { [key]: event }, updatedAt);
+
+        if (res.status === 409) {
+          await sleep(jitter(300 * (attempt + 1)));
+          continue;
+        }
+        if (res.status === 429) {
+          await Backpressure.wait();
+          continue;
+        }
+        if (!res.ok && res.status >= 500) {
+          // 503/5xx: commit ambiguo — releer y buscar el mismo _write_id
+          await sleep(jitter(400));
+          const verify = await this.client.getNamedState(CONFIG.STATE_BUCKET);
+          if (verify.state?.[key]?._write_id === eventId) return { ok: true, eventId };
+          continue;
+        }
+        if (!res.ok) {
+          throw new Error(`No se pudo guardar (HTTP ${res.status})`);
+        }
+
+        // 2xx: no confiar sin releer. Verificación inmediata + estable.
+        const immediate = await this.client.getNamedState(CONFIG.STATE_BUCKET);
+        if (immediate.state?.[key]?._write_id !== eventId) {
+          await sleep(jitter(300));
+          continue;
+        }
+        await sleep(250);
+        const stable = await this.client.getNamedState(CONFIG.STATE_BUCKET);
+        if (stable.state?.[key]?._write_id !== eventId) {
+          await sleep(jitter(300));
+          continue;
+        }
+        return { ok: true, eventId };
+      }
+      throw new Error('No se pudo confirmar el guardado tras varios intentos');
+    } finally {
+      this.inFlight = false;
+    }
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Íconos — Material Symbols (Outlined), extraídos como SVG estático, cero
+// dependencia de Google Fonts en runtime (mismo criterio que captura_
+// auditoria.html). viewBox y fill:currentColor consistentes con el set.
+// ═════════════════════════════════════════════════════════════════════════
+const Icons = (() => {
+  const PATHS = {
+    truck: '<path d="M280-160q-50 0-85-35t-35-85H60l18-80h113q17-19 40-29.5t49-10.5q26 0 49 10.5t40 29.5h167l84-360H262l17-80h441l-37 160h117l120 160-40 200h-80q0 50-35 85t-85 35q-50 0-85-35t-35-85H400q0 50-35 85t-85 35Zm357-280h193l4-21-74-99h-95l-28 120Zm-17-280-84 360 2-7 82-353ZM140-440v-120H40l140-200v120h100L140-440Zm140 200q17 0 28.5-11.5T320-280q0-17-11.5-28.5T280-320q-17 0-28.5 11.5T240-280q0 17 11.5 28.5T280-240Zm400 0q17 0 28.5-11.5T720-280q0-17-11.5-28.5T680-320q-17 0-28.5 11.5T640-280q0 17 11.5 28.5T680-240Z"/>',
+    checkCircle: '<path d="m424-296 282-282-56-56-226 226-114-114-56 56 170 170Zm56 216q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/>',
+    alertCircle: '<path d="m40-120 440-760 440 760H40Zm138-80h604L480-720 178-200Zm302-40q17 0 28.5-11.5T520-280q0-17-11.5-28.5T480-320q-17 0-28.5 11.5T440-280q0 17 11.5 28.5T480-240Zm-40-120h80v-200h-80v200Zm40-100Z"/>',
+    close: '<path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/>',
+    keyboard: '<path d="M480-40 320-200h320L480-40ZM160-280q-33 0-56.5-23.5T80-360v-400q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v400q0 33-23.5 56.5T800-280H160Zm0-80h640v-400H160v400Zm160-40h320v-80H320v80ZM200-520h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80ZM200-640h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80ZM160-360v-400 400Z"/>',
+    save: '<path d="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM565-275q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z"/>',
+    history: '<path d="M480-120q-138 0-240.5-91.5T122-440h82q14 104 92.5 172T480-200q117 0 198.5-81.5T760-480q0-117-81.5-198.5T480-760q-69 0-129 32t-101 88h110v80H120v-240h80v94q51-64 124.5-99T480-840q75 0 140.5 28.5t114 77q48.5 48.5 77 114T840-480q0 75-28.5 140.5t-77 114q-48.5 48.5-114 77T480-120Zm112-192L440-464v-216h80v184l128 128-56 56Z"/>',
+    scan: '<path d="M40-120v-200h80v120h120v80H40Zm680 0v-80h120v-120h80v200H720ZM160-240v-480h80v480h-80Zm120 0v-480h40v480h-40Zm120 0v-480h80v480h-80Zm120 0v-480h120v480H520Zm160 0v-480h40v480h-40Zm80 0v-480h40v480h-40ZM40-640v-200h200v80H120v120H40Zm800 0v-120H720v-80h200v200h-80Z"/>',
+    cloudOff: '<path d="M792-56 686-160H260q-92 0-156-64T40-380q0-77 47.5-137T210-594q3-8 6-15.5t6-16.5L56-792l56-56 736 736-56 56ZM260-240h346L284-562q-2 11-3 21t-1 21h-20q-58 0-99 41t-41 99q0 58 41 99t99 41Zm185-161Zm419 191-58-56q17-14 25.5-32.5T840-340q0-42-29-71t-71-29h-60v-80q0-83-58.5-141.5T480-720q-27 0-52 6.5T380-693l-58-58q35-24 74.5-36.5T480-800q117 0 198.5 81.5T760-520q69 8 114.5 59.5T920-340q0 39-15 72.5T864-210ZM593-479Z"/>',
+  };
+
+  function svg(name, opts = {}) {
+    const path = PATHS[name];
+    if (!path) { console.warn(`Icon "${name}" not found`); return ''; }
+    const size = opts.size || 24;
+    const className = opts.className ? ` ${opts.className}` : '';
+    return `<svg class="icon${className}" width="${size}" height="${size}" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true">${path}</svg>`;
+  }
+  return { svg };
+})();
+
+// ═════════════════════════════════════════════════════════════════════════
+// UI
+// ═════════════════════════════════════════════════════════════════════════
+const appEl          = document.getElementById('app');
+const hidInput        = document.getElementById('hidInput');
+const focusIndicator  = document.getElementById('focusIndicator');
+const modeToggleBtn   = document.getElementById('modeToggle');
+const topbarSub       = document.getElementById('topbarSub');
+const identityDot     = document.getElementById('identityDot');
+const toastArea       = document.getElementById('toast-area');
+
+const STATE = { IDLE: 'idle', LOADING: 'loading', RESULT: 'result', ERROR: 'error' };
+
+let currentState = STATE.IDLE;
+let manualMode = false;
+let scanCount = 0;
+let identityHash = null;
+let lastResult = null;   // { shipmentId, rows, diag }
+let client = null;
+let lookupService = null;
+let saveService = null;
+
+function showToast(msg, type = 'info') {
+  const colors = { success: '#34c759', error: '#ff453a', warn: '#ffd60a', info: '#0a84ff' };
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.innerHTML = `<div class="toast-dot" style="background:${colors[type]}"></div><span class="toast-msg">${msg}</span>`;
+  toastArea.appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 3200);
+}
+
+function renderIdle() {
+  currentState = STATE.IDLE;
+  appEl.innerHTML = `
+    <main class="scan-screen" id="scanScreen">
+      <div class="hero-icon idle">${Icons.svg('truck', { size: 72 })}</div>
+      <p class="screen-label">Escanea un</p>
+      <strong class="screen-label-strong">envío</strong>
+      <p class="screen-hint">SHP_SHIPMENT_ID (numérico)</p>
+    </main>
+    ${renderLogPanel()}
+  `;
+  bindManualPanel();
+  bindLogClear();
+  armScanner();
+}
+
+function renderLoading(phaseLabel) {
+  currentState = STATE.LOADING;
+  appEl.innerHTML = `
+    <main class="scan-screen">
+      <div class="hero-icon loading">${Icons.svg('truck', { size: 72 })}</div>
+      <p class="screen-label">Consultando</p>
+      <strong class="screen-label-strong" id="phaseLabel">${phaseLabel || 'BigQuery…'}</strong>
+      <div class="result-wrap">
+        <div class="skeleton skeleton-block skeleton-badge"></div>
+        <div class="skeleton skeleton-block skeleton-badge"></div>
+      </div>
+    </main>
+  `;
+}
+
+function updateLoadingPhase(label) {
+  const el = document.getElementById('phaseLabel');
+  if (el) el.textContent = label;
+}
+
+function renderResult(shipmentId, rows) {
+  currentState = STATE.RESULT;
+  const rowsHtml = rows.length
+    ? rows.map((r, i) => {
+        const status = r.SHP_LG_STATUS ?? r.shp_lg_status ?? '—';
+        const sub = r.SHP_LG_SUB_STATUS ?? r.shp_lg_sub_status ?? '—';
+        return `
+          <div class="result-row">
+            ${rows.length > 1 ? `<div class="result-row-idx">Registro ${i + 1}</div>` : ''}
+            <div class="field-pair">
+              <span class="field-label">SHP_LG_STATUS</span>
+              <span class="field-badge ${statusColorClass(status)}">${escapeHtml(status)}</span>
+            </div>
+            <div class="field-pair">
+              <span class="field-label">SHP_LG_SUB_STATUS</span>
+              <span class="field-badge ${statusColorClass(sub)}">${escapeHtml(sub)}</span>
+            </div>
+          </div>`;
+      }).join('')
+    : '';
+
+  appEl.innerHTML = `
+    <main class="scan-screen">
+      <div class="hero-icon ${rows.length ? 'success' : 'error'}">
+        ${Icons.svg(rows.length ? 'checkCircle' : 'alertCircle', { size: 72 })}
+      </div>
+      <p class="screen-label">${rows.length ? 'Envío encontrado' : 'Sin resultados'}</p>
+      <strong class="screen-label-strong">#${escapeHtml(shipmentId)}</strong>
+
+      ${rows.length ? `<div class="result-wrap">${rowsHtml}</div>` : `
+        <div class="alert alert-warn">
+          ${Icons.svg('alertCircle', { className: 'alert-icon', size: 18 })}
+          <span>No se encontraron registros para este número de envío en BT_SHP_LG_SHIPMENTS.</span>
+        </div>`}
+
+      <div class="actions">
+        ${rows.length ? `
+          <button class="btn btn-primary" id="btnSave">${Icons.svg('save', { size: 18 })} Guardar</button>
+        ` : ''}
+        <button class="btn ${rows.length ? 'btn-secondary' : 'btn-primary'}" id="btnAnother">
+          ${Icons.svg('scan', { size: 18 })} Escanear otro
+        </button>
+      </div>
+
+      <button class="diag-toggle" id="diagToggle">Diagnóstico</button>
+      <div class="diag-panel" id="diagPanel"></div>
+    </main>
+  `;
+
+  document.getElementById('btnAnother').addEventListener('click', () => { renderIdle(); });
+  const btnSave = document.getElementById('btnSave');
+  if (btnSave) btnSave.addEventListener('click', handleSaveClick);
+
+  document.getElementById('diagToggle').addEventListener('click', () => {
+    const panel = document.getElementById('diagPanel');
+    panel.classList.toggle('visible');
+    if (panel.classList.contains('visible') && lastResult) panel.innerHTML = renderDiag(lastResult.diag);
+  });
+}
+
+function renderDiag(diag) {
+  if (!diag) return '';
+  const rows = [
+    ['identity_hash', identityHash ? identityHash.slice(0, 12) + '…' : '—'],
+    ['sql_fingerprint', diag.sql_fingerprint || '—'],
+    ['row_count', diag.row_count ?? '—'],
+    ['define_ms', diag.phases?.define_ms ?? '—'],
+    ['visibility_ms', diag.phases?.visibility_ms ?? '—'],
+    ['refresh_ms', diag.phases?.refresh_ms ?? '—'],
+    ['read_ms', diag.phases?.read_ms ?? '—'],
+    ['total_ms', diag.total_ms ?? '—'],
+  ];
+  return rows.map(([k, v]) => `<div><span>${k}</span><span>${v}</span></div>`).join('');
+}
+
+function renderError(message) {
+  currentState = STATE.ERROR;
+  appEl.innerHTML = `
+    <main class="scan-screen">
+      <div class="hero-icon error">${Icons.svg('alertCircle', { size: 72 })}</div>
+      <p class="screen-label">No se pudo consultar</p>
+      <div class="alert alert-error">
+        ${Icons.svg('cloudOff', { className: 'alert-icon', size: 18 })}
+        <span>${escapeHtml(message)}</span>
+      </div>
+      <div class="actions">
+        <button class="btn btn-secondary" id="btnRetry">Reintentar</button>
+        <button class="btn btn-primary" id="btnAnother2">Escanear otro</button>
+      </div>
+    </main>
+  `;
+  document.getElementById('btnAnother2').addEventListener('click', () => renderIdle());
+  document.getElementById('btnRetry').addEventListener('click', () => {
+    if (lastResult?.shipmentId) handleCode(lastResult.shipmentId, true);
+    else renderIdle();
+  });
+}
+
+function renderLogPanel() {
+  return `
+    <section class="log-panel">
+      <header class="log-header">
+        <h2>Guardados en esta sesión</h2>
+        <span class="log-badge ${scanCount ? 'has-entries' : ''}" id="logBadge">${scanCount}</span>
+        <button class="log-clear-btn" id="btnClearLog" style="background:none;border:none;color:var(--text-muted);font-size:12px;font-family:inherit;cursor:pointer;">Limpiar</button>
+      </header>
+      <ul class="log-list" id="logList">${sessionLogHtml()}</ul>
+    </section>
+  `;
+}
+
+let sessionLog = []; // { shipmentId, statusLabel, time, error }
+
+function sessionLogHtml() {
+  if (!sessionLog.length) return `<li class="log-empty">Sin guardados aún</li>`;
+  return sessionLog.map((e) => `
+    <li class="log-entry ${e.error ? 'saved-error' : ''}">
+      <span class="log-entry-dot"></span>
+      <div class="log-entry-body">
+        <div class="log-entry-code">#${escapeHtml(e.shipmentId)}</div>
+        <div class="log-entry-meta">${escapeHtml(e.error ? e.error : e.statusLabel)}</div>
+      </div>
+      <span class="log-entry-time">${e.time}</span>
+    </li>
+  `).join('');
+}
+
+function pushLogEntry(entry) {
+  scanCount++;
+  sessionLog.unshift(entry);
+  const list = document.getElementById('logList');
+  const badge = document.getElementById('logBadge');
+  if (list) list.innerHTML = sessionLogHtml();
+  if (badge) { badge.textContent = scanCount; badge.className = 'log-badge has-entries'; }
+}
+
+function bindLogClear() {
+  const btn = document.getElementById('btnClearLog');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    scanCount = 0;
+    sessionLog = [];
+    const list = document.getElementById('logList');
+    const badge = document.getElementById('logBadge');
+    if (list) list.innerHTML = sessionLogHtml();
+    if (badge) { badge.textContent = '0'; badge.className = 'log-badge'; }
+  });
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── Manual entry panel ───────────────────────────────────────────────────
+function bindManualPanel() {
+  const wrap = document.getElementById('scanScreen');
+  if (!wrap || document.getElementById('manualPanel')) return;
+  const panel = document.createElement('div');
+  panel.className = `manual-panel${manualMode ? ' visible' : ''}`;
+  panel.id = 'manualPanel';
+  panel.innerHTML = `
+    <input class="manual-input" id="manualInput" type="text" inputmode="numeric" pattern="[0-9]*"
+           placeholder="Número de envío" autocomplete="off">
+    <button class="manual-go" id="manualGo" aria-label="Consultar">${Icons.svg('scan', { size: 20 })}</button>
+  `;
+  wrap.appendChild(panel);
+  const input = document.getElementById('manualInput');
+  const go = document.getElementById('manualGo');
+  const submit = () => {
+    const v = input.value.trim();
+    input.value = '';
+    if (v) handleCode(v);
+  };
+  go.addEventListener('click', submit);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+}
+
+modeToggleBtn.addEventListener('click', () => {
+  manualMode = !manualMode;
+  modeToggleBtn.innerHTML = Icons.svg(manualMode ? 'scan' : 'keyboard', { size: 22 });
+  const panel = document.getElementById('manualPanel');
+  if (panel) panel.classList.toggle('visible', manualMode);
+  if (manualMode) {
+    document.getElementById('manualInput')?.focus();
+    setArmed(false);
+  } else {
+    armScanner();
+  }
+});
+modeToggleBtn.innerHTML = Icons.svg('keyboard', { size: 22 });
+
+// ── HID scanner ───────────────────────────────────────────────────────────
+function armScanner() {
+  if (manualMode) return;
+  hidInput.focus({ preventScroll: true });
+}
+function setArmed(v) { focusIndicator.className = v ? 'armed' : ''; }
+
+hidInput.addEventListener('focus', () => setArmed(true));
+hidInput.addEventListener('blur', () => {
+  setArmed(false);
+  if (!manualMode) requestAnimationFrame(armScanner);
+});
+document.body.addEventListener('click', (e) => {
+  if (!manualMode && currentState === STATE.IDLE && !e.target.closest('.mode-toggle')) armScanner();
+});
+hidInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const code = hidInput.value.trim();
+  hidInput.value = '';
+  if (code) handleCode(code);
+});
+
+// ── Core scan handler ─────────────────────────────────────────────────────
+async function handleCode(rawCode, isRetry) {
+  if (currentState === STATE.LOADING) return; // 1 lookup lógico in-flight
+
+  let shipmentId;
+  try {
+    shipmentId = isRetry ? rawCode : parseScannedShipmentId(rawCode);
+  } catch (e) {
+    renderError(e.message);
+    return;
+  }
+
+  renderLoading('Definiendo…');
+  try {
+    const { rows, diag } = await lookupService.lookup(shipmentId, (phase) => {
+      const labels = { definiendo: 'Definiendo…', verificando: 'Verificando…', refrescando: 'Refrescando…', leyendo: 'Leyendo…' };
+      updateLoadingPhase(labels[phase] || phase);
+    });
+    lastResult = { shipmentId, rows, diag };
+    renderResult(shipmentId, rows);
+  } catch (e) {
+    lastResult = { shipmentId };
+    renderError(e.message || 'Error desconocido al consultar BigQuery');
+  }
+}
+
+async function handleSaveClick() {
+  const btn = document.getElementById('btnSave');
+  if (!btn || !lastResult) return;
+  btn.disabled = true;
+  const original = btn.innerHTML;
+  btn.innerHTML = `<div class="spinner-sm"></div> Guardando…`;
+
+  try {
+    await saveService.save({
+      shipmentId: lastResult.shipmentId,
+      rows: lastResult.rows,
+      actorHash: identityHash,
+    });
+    const first = lastResult.rows[0] || {};
+    const label = `${first.SHP_LG_STATUS ?? '—'} / ${first.SHP_LG_SUB_STATUS ?? '—'}`;
+    pushLogEntry({ shipmentId: lastResult.shipmentId, statusLabel: label, time: new Date().toLocaleTimeString('es-MX', { hour12: false }) });
+    showToast('Guardado en Grid State', 'success');
+    setTimeout(() => renderIdle(), 900);
+  } catch (e) {
+    pushLogEntry({ shipmentId: lastResult.shipmentId, error: e.message, time: new Date().toLocaleTimeString('es-MX', { hour12: false }) });
+    showToast(e.message || 'No se pudo guardar', 'error');
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Arranque — identidad y verificación de configuración
+// ═════════════════════════════════════════════════════════════════════════
+function renderSetupBlocker() {
+  appEl.innerHTML = `
+    <div class="setup-blocker">
+      <h1>Falta configurar el documento de datos</h1>
+      <p>Esta app necesita un <code>doc_id</code> estable donde vivan el Dataset de BigQuery y el
+        State bucket de guardado.</p>
+      <p>Sube <code>boveda_estatus_envio.html</code> a Grid, copia su <code>doc_id</code> y ábrela con
+        <code>?data_doc_id=&lt;doc_id&gt;</code>, o reemplaza la constante
+        <code>CONFIG.DATA_DOC_ID</code> en este archivo.</p>
+    </div>
+  `;
+}
+
+(async function init() {
+  if (CONFIG.DATA_DOC_ID === 'CONFIGURAR_DOC_ID') {
+    topbarSub.textContent = 'Sin configurar';
+    renderSetupBlocker();
+    return;
+  }
+
+  client = new GridClient(CONFIG.DATA_DOC_ID);
+  lookupService = new LookupService(client);
+  saveService = new SaveService(client);
+
+  const me = await client.getMe();
+  const { material } = extractIdentityMaterial(me); // el payload de /me se descarta aquí mismo
+  identityHash = me ? await sha256Hex(material) : null;
+
+  if (identityHash) {
+    identityDot.classList.add('ok');
+    topbarSub.textContent = 'Listo para escanear';
+  } else {
+    identityDot.classList.add('err');
+    topbarSub.textContent = 'Identidad no disponible';
+  }
+
+  renderIdle();
+})();
+</script>
+
+</body>
+</html>
