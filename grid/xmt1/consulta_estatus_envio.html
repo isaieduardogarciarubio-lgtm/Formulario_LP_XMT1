@@ -386,16 +386,34 @@ function buildSql(shipmentId) {
   return `SELECT\n  SHP_LG_STATUS,\n  SHP_LG_SUB_STATUS\nFROM \`${CONFIG.BQ_TABLE}\`\nWHERE SHP_SHIPMENT_ID = ${shipmentId}`;
 }
 
-// Grid puede devolver source_config con distinto casing/anidamiento según el
-// backend; se revisan las variantes plausibles sin asumir una sola forma.
-function extractDefSql(def) {
-  const sc = def?.source_config ?? def?.sourceConfig ?? def?.config ?? {};
+// GET de la definición del Dataset viene envuelto en runtime como
+// { doc_id, dataset: {...campos reales...}, download_url, content_url } —
+// no en la raíz. Este desempaquetado replica el ya validado contra Grid real.
+function unwrapDatasetMeta(raw, name) {
+  if (!raw || typeof raw !== 'object') return null;
+  if (raw.dataset && typeof raw.dataset === 'object') return raw.dataset;
+  if (raw.datasets && typeof raw.datasets === 'object') return raw.datasets[name] || null;
+  if (raw.name === name) return raw;
+  return (raw.source_config || raw.sourceConfig) ? raw : null;
+}
+
+function extractDefSql(meta) {
+  const sc = meta?.source_config ?? meta?.sourceConfig ?? meta?.config ?? {};
   return sc.sql ?? sc.SQL ?? sc.query ?? sc.Query ?? '';
 }
 
 function sqlMatchesShipment(sql, shipmentId) {
   const re = new RegExp(`SHP_SHIPMENT_ID\\s*=\\s*${shipmentId}(?!\\d)`);
   return re.test(sql);
+}
+
+function definitionMarker(meta) {
+  return JSON.stringify([
+    meta?.refresh_count ?? null,
+    meta?.last_refresh_attempt_at ?? null,
+    meta?.updated_at ?? null,
+    meta?.revision ?? null,
+  ]);
 }
 
 // Heurística de color para badges de estatus. No hay vocabulario cerrado
@@ -594,19 +612,21 @@ class LookupService {
     diag.sql_fingerprint = (await sha256Hex(sql.trim())).slice(0, 12);
 
     onPhase && onPhase('definiendo');
-    const existing = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
-    await this.client.upsertDatasetDefinition(CONFIG.DATASET_NAME, sql, !!existing);
+    const existingRaw = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
+    const existingMeta = unwrapDatasetMeta(existingRaw, CONFIG.DATASET_NAME);
+    await this.client.upsertDatasetDefinition(CONFIG.DATASET_NAME, sql, !!existingMeta);
     diag.phases.define_ms = Math.round(performance.now() - t0);
 
     onPhase && onPhase('verificando');
     const t1 = performance.now();
-    await this._waitForDefinitionVisible(shipmentId, 15000);
+    // El propio meta que confirma visibilidad sirve como baseline del
+    // refresh — evita una llamada GET extra solo para leer el baseline.
+    const visibleMeta = await this._waitForDefinitionVisible(shipmentId, 15000);
     diag.phases.visibility_ms = Math.round(performance.now() - t1);
 
     onPhase && onPhase('refrescando');
     const t2 = performance.now();
-    const baselineDef = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
-    const baselineMarker = this._materializationMarker(baselineDef);
+    const baselineMarker = definitionMarker(visibleMeta);
     await this.client.refreshDataset(CONFIG.DATASET_NAME);
     await this._waitForRefreshComplete(baselineMarker, 45000);
     diag.phases.refresh_ms = Math.round(performance.now() - t2);
@@ -630,44 +650,42 @@ class LookupService {
   // WHERE (shipmentId ya viene validado como solo dígitos por
   // parseScannedShipmentId, así que el límite de dígito es seguro), lo que
   // confirma que no estamos leyendo la definición de un escaneo anterior.
+  // Devuelve el meta desempaquetado para reusarlo como baseline del refresh.
   async _waitForDefinitionVisible(shipmentId, timeoutMs) {
     const deadline = Date.now() + timeoutMs;
-    let intervalMs = 400;
+    let intervalMs = 300;
     let lastSeen = { hadSql: false };
     while (Date.now() < deadline) {
-      const def = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
-      const sql = extractDefSql(def);
+      const raw = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
+      const meta = unwrapDatasetMeta(raw, CONFIG.DATASET_NAME);
+      const sql = extractDefSql(meta);
       if (sql) {
         lastSeen = { hadSql: true, sqlLen: sql.length };
-        if (sqlMatchesShipment(sql, shipmentId)) return;
+        if (sqlMatchesShipment(sql, shipmentId)) return meta;
       } else {
-        lastSeen = { hadSql: false, keys: def ? Object.keys(def).slice(0, 8) : [] };
+        lastSeen = { hadSql: false, keys: meta ? Object.keys(meta).slice(0, 8) : (raw ? Object.keys(raw).slice(0, 8) : []) };
       }
       await sleep(intervalMs);
-      intervalMs = Math.min(intervalMs + 200, 1200);
+      intervalMs = Math.min(intervalMs + 150, 900);
     }
     throw new Error(`La definición del Dataset no se propagó a tiempo (diagnóstico: ${JSON.stringify(lastSeen)})`);
   }
 
-  _materializationMarker(def) {
-    if (!def) return '';
-    return String(def.refresh_count ?? def.last_refreshed_at ?? def.updated_at ?? '');
-  }
-
   async _waitForRefreshComplete(baselineMarker, timeoutMs) {
     const deadline = Date.now() + timeoutMs;
-    let intervalMs = 600;
+    let intervalMs = 500;
     while (Date.now() < deadline) {
-      const def = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
-      const errMsg = def?.last_error || def?.error;
+      const raw = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
+      const meta = unwrapDatasetMeta(raw, CONFIG.DATASET_NAME);
+      const errMsg = meta?.last_refresh_error || meta?.last_error || meta?.error;
       if (errMsg) throw new Error('BigQuery reportó un error al refrescar (revisa el SQL/tabla)');
-      const marker = this._materializationMarker(def);
-      const status = String(def?.status || '').toLowerCase();
-      if (marker && marker !== baselineMarker && (!status || status === 'published' || status === 'ready')) {
+      const marker = definitionMarker(meta);
+      const publishState = String(meta?.publish_state ?? meta?.status ?? '').toLowerCase();
+      if (marker !== baselineMarker && (!publishState || publishState === 'published' || publishState === 'ready')) {
         return;
       }
-      await sleep(Math.min(intervalMs, 2000));
-      intervalMs += 300;
+      await sleep(Math.min(intervalMs, 1800));
+      intervalMs += 250;
     }
     throw new Error('El refresh de BigQuery tardó demasiado, intenta de nuevo');
   }
