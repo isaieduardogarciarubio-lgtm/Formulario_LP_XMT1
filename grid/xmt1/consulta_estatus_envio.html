@@ -333,7 +333,7 @@ const CONFIG = {
   DATA_DOC_ID: new URLSearchParams(location.search).get('data_doc_id') || detectSelfDocId(),
   DATASET_NAME: 'estatus_envio_lookup',
   STATE_BUCKET: 'estatus_envio_log',
-  BQ_TABLE: 'meli-bi-data.WHOWNER.BT_SHP_LG_SHIPMENTS',
+  BQ_TABLE: 'meli-bi-data.WHOWNER.BT_SHP_LG_SHIPMENT_CHECKPOINTS',
 };
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -577,10 +577,23 @@ class GridClient {
   async getNamedState(name) {
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
     const res = await this._requestJsonWithRetry(url, { method: 'GET' });
-    if (res.status === 404) return { state: {}, updatedAt: '' };
+    if (res.status === 404) return { state: {}, updatedAt: '', missing: true };
     if (!res.ok) throw this._httpError(res, 'No se pudo leer el bucket de guardado');
     const body = await res.json();
-    return { state: body.state || {}, updatedAt: body.updated_at || '' };
+    return { state: body.state || {}, updatedAt: body.updated_at || '', missing: false };
+  }
+
+  // El bucket todavía no existe (primer guardado de este documento) — hay
+  // que crearlo con PUT { state: {...} }; PATCH a un named state inexistente
+  // no lo crea.
+  async putNamedState(name, stateObj) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`;
+    const res = await this._requestJsonWithRetry(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state: stateObj }),
+    });
+    return res; // el caller inspecciona status (200/409/etc.)
   }
 
   async patchNamedState(name, patchObj, ifUpdatedAt) {
@@ -588,7 +601,7 @@ class GridClient {
     const res = await this._requestJsonWithRetry(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...patchObj, if_updated_at: ifUpdatedAt }),
+      body: JSON.stringify({ patch: patchObj, if_updated_at: ifUpdatedAt }),
     });
     return res; // el caller inspecciona status (200/409/etc.)
   }
@@ -744,8 +757,10 @@ class SaveService {
       };
 
       for (let attempt = 0; attempt < 6; attempt++) {
-        const { state, updatedAt } = await this.client.getNamedState(CONFIG.STATE_BUCKET);
-        const res = await this.client.patchNamedState(CONFIG.STATE_BUCKET, { [key]: event }, updatedAt);
+        const { state, updatedAt, missing } = await this.client.getNamedState(CONFIG.STATE_BUCKET);
+        const res = missing
+          ? await this.client.putNamedState(CONFIG.STATE_BUCKET, { [key]: event })
+          : await this.client.patchNamedState(CONFIG.STATE_BUCKET, { [key]: event }, updatedAt);
 
         if (res.status === 409) {
           await sleep(jitter(300 * (attempt + 1)));
@@ -977,7 +992,7 @@ function renderResult(shipmentId, rows) {
       ${rows.length ? `<div class="result-wrap">${rowsHtml}</div>` : `
         <div class="alert alert-warn">
           ${Icons.svg('alertCircle', { className: 'alert-icon', size: 18 })}
-          <span>No se encontraron registros para este número de envío en BT_SHP_LG_SHIPMENTS.</span>
+          <span>No se encontraron registros para este número de envío.</span>
         </div>`}
 
       <div class="actions">
