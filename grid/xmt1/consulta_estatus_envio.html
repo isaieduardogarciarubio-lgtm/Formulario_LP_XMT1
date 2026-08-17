@@ -558,9 +558,19 @@ class GridClient {
 
   async getDatasetContent(name) {
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/data/${name}/content`;
-    const res = await this._requestJsonWithRetry(url, { method: 'GET' });
-    if (!res.ok) throw this._httpError(res, 'No se pudo leer el contenido del Dataset');
-    return await res.json();
+    // La ruta de contenido puede tardar en propagarse justo después de que
+    // la definición ya se marcó "published" (barrera de visibilidad propia
+    // del contenido, análoga a la de la definición) — un 404 inmediato no
+    // es necesariamente definitivo, se tolera con reintentos acotados.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await this._requestJsonWithRetry(url, { method: 'GET' });
+      if (res.status === 404 && attempt < 4) {
+        await sleep(400 + attempt * 300);
+        continue;
+      }
+      if (!res.ok) throw this._httpError(res, 'No se pudo leer el contenido del Dataset');
+      return await res.json();
+    }
   }
 
   // ── Named State ────────────────────────────────────────────────────────
@@ -584,7 +594,7 @@ class GridClient {
   }
 
   _httpError(res, friendlyMsg) {
-    const err = new Error(friendlyMsg);
+    const err = new Error(`${friendlyMsg} (HTTP ${res.status})`);
     err.status = res.status;
     return err;
   }
