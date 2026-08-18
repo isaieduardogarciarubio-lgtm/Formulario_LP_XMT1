@@ -7773,22 +7773,20 @@ class GridClient {
     return res.json();
   }
 
-  /** Marca de cambio del refresh: intenta campos conocidos y cae al JSON completo si no existen. */
-  _datasetRefreshMarker(def) {
-    if (!def) return null;
-    if (def.refresh_count !== undefined) return `rc:${def.refresh_count}`;
-    if (def.last_refreshed_at) return `lr:${def.last_refreshed_at}`;
-    if (def.updated_at) return `ua:${def.updated_at}`;
-    if (def.revision !== undefined) return `rv:${def.revision}`;
-    return JSON.stringify(def);
+  /**
+   * Extrae el SQL de una Dataset Definition tolerando variantes de forma
+   * (source_config.sql, source_config.query, o sql en la raíz) — la Biblia
+   * no fija un schema exacto de lectura, solo el de escritura.
+   */
+  _extractDatasetSql(def) {
+    return def?.source_config?.sql ?? def?.source_config?.query ?? def?.sql ?? null;
   }
 
-  /**
-   * Crea o actualiza la Dataset Definition con el SQL dado, y confirma (con
-   * reintentos) que la escritura ya es visible antes de refrescar — barrera
-   * de visibilidad de definición (Biblia §15.11): sin esto, un refresh
-   * disparado justo después del PATCH podría ejecutar todavía el SQL viejo.
-   */
+  /** Colapsa espacios para comparar SQL tolerando reformateo (Grid/BigQuery pueden normalizar el texto guardado). */
+  _normalizeSql(sql) {
+    return String(sql ?? '').replace(/\s+/g, ' ').trim();
+  }
+
   async upsertDatasetDefinition(name, sql) {
     const existing = await this.getDatasetDefinition(name);
     const method = existing ? 'PATCH' : 'POST';
@@ -7807,17 +7805,43 @@ class GridClient {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      DebugConsole.log(`${method} dataset ${name}: HTTP ${res.status} — ${bodyText}`, 'error');
       const err = new Error(`No se pudo definir el dataset ${name}: HTTP ${res.status}`);
       if (res.status === 403) err.isForbidden = true;
       throw err;
     }
+    const writeBody = await res.json().catch(() => null);
+    DebugConsole.log(`${method} dataset ${name}: OK`, 'info');
 
-    for (let attempt = 0; attempt < 6; attempt++) {
+    const target = this._normalizeSql(sql);
+
+    // Si la respuesta del propio POST/PATCH ya trae el SQL actualizado, no
+    // hace falta releer — evita una vuelta extra y el riesgo de pegarle a
+    // una réplica de lectura desactualizada.
+    const writeSql = this._extractDatasetSql(writeBody);
+    if (writeSql && this._normalizeSql(writeSql) === target) return writeBody;
+
+    // Best-effort: el POST/PATCH ya devolvió HTTP OK (la escritura fue
+    // aceptada), así que no confirmar el eco exacto del SQL no es motivo
+    // para abortar el lookup completo — el contrato de lectura de
+    // datasets/{name} no está confirmado (Biblia §15.7) y podría no traer
+    // el SQL de vuelta en ninguna forma reconocible. Se intenta un rato
+    // corto por las dudas y se sigue de largo con solo un warning.
+    let lastSeen = writeBody;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise((r) => setTimeout(r, 400 + attempt * 300));
       const check = await this.getDatasetDefinition(name);
-      if (check && check.source_config && check.source_config.sql === sql) return check;
-      await new Promise((r) => setTimeout(r, 300 + attempt * 200));
+      lastSeen = check;
+      const seenSql = this._extractDatasetSql(check);
+      DebugConsole.log(
+        `Confirmación definición ${name} (intento ${attempt + 1}): ${seenSql ? this._normalizeSql(seenSql).slice(0, 120) + '…' : '(sin SQL en la respuesta)'}`,
+        'info'
+      );
+      if (seenSql && this._normalizeSql(seenSql) === target) return check;
     }
-    throw new Error(`El dataset ${name} no confirmó la definición nueva a tiempo`);
+    DebugConsole.log(`${name}: no se pudo confirmar el eco del SQL — continúo de todas formas (la escritura ya fue HTTP OK). Última respuesta: ${JSON.stringify(lastSeen).slice(0, 500)}`, 'warn');
+    return lastSeen;
   }
 
   /** POST /refresh requiere rol editor sobre el documento — un viewer recibe 403 (Biblia §15.13). */
@@ -7833,21 +7857,6 @@ class GridClient {
     }
   }
 
-  /**
-   * Espera a que el refresh dispare un cambio observable en la definición.
-   * Sin webhook/push documentado (Biblia §15.14) — solo queda hacer polling.
-   */
-  async waitForDatasetRefresh(name, beforeMarker, { timeoutMs = 60000, intervalMs = 1500 } = {}) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, intervalMs));
-      const def = await this.getDatasetDefinition(name);
-      const marker = this._datasetRefreshMarker(def);
-      if (marker !== null && marker !== beforeMarker) return def;
-    }
-    throw new Error(`El refresh de ${name} no terminó en ${Math.round(timeoutMs / 1000)}s`);
-  }
-
   async getDatasetContent(name) {
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/data/${encodeURIComponent(name)}/content`;
     const res = await this._fetchWithTimeout(url, { credentials: 'include' });
@@ -7861,20 +7870,60 @@ class GridClient {
   }
 
   /**
+   * Espera el resultado fresco del refresh comparando el CONTENIDO
+   * materializado (no metadata de la definición): el contrato observado
+   * (Biblia §15.7) no confirma un campo de estado/nonce de refresh en la
+   * definición, así que confiar en uno inventado podría no cambiar nunca
+   * aunque el refresh sí haya terminado. Si el contenido cambió respecto al
+   * leído antes del refresh, se acepta de inmediato; si sigue igual tras
+   * minPolls intentos (puede pasar al re-escanear la MISMA posición/
+   * shipment dos veces), se acepta igual — mejor devolver datos
+   * potencialmente un poll "viejos" que bloquear al operador indefinidamente
+   * por una comparación de igualdad que nunca iba a cumplirse.
+   */
+  async waitForFreshContent(name, beforeSignature, { timeoutMs = 60000, intervalMs = 1500, minPolls = 4 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastRows = null;
+    let polls = 0;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      polls++;
+      let rows;
+      try {
+        rows = await this.getDatasetContent(name);
+      } catch (e) {
+        DebugConsole.log(`Esperando refresh de ${name} (intento ${polls}): ${e.message}`, 'warn');
+        continue;
+      }
+      lastRows = rows;
+      const signature = JSON.stringify(rows);
+      DebugConsole.log(`Contenido de ${name} (intento ${polls}): ${rows.length} fila(s)`, 'info');
+      if (beforeSignature === null || signature !== beforeSignature || polls >= minPolls) {
+        return rows;
+      }
+    }
+    if (lastRows !== null) return lastRows;
+    throw new Error(`El refresh de ${name} no terminó en ${Math.round(timeoutMs / 1000)}s`);
+  }
+
+  /**
    * Ciclo completo de un lookup grid_sql ad hoc: reescribe la definición de
-   * ESTE dispositivo con el SQL dado, dispara el refresh y espera a que
-   * termine, y devuelve las filas materializadas. El nombre de dataset es
-   * estable por deviceId (no por escaneo) para que dos dispositivos
-   * escaneando posiciones distintas al mismo tiempo nunca compartan ni se
-   * pisen la misma definición.
+   * ESTE dispositivo con el SQL dado, dispara el refresh y espera el
+   * contenido fresco. El nombre de dataset es estable por deviceId (no por
+   * escaneo) para que dos dispositivos escaneando posiciones distintas a la
+   * vez nunca compartan ni se pisen la misma definición.
    */
   async runGridSqlLookup(datasetName, sql) {
-    const before = await this.getDatasetDefinition(datasetName);
-    const beforeMarker = this._datasetRefreshMarker(before);
+    let beforeSignature = null;
+    try {
+      beforeSignature = JSON.stringify(await this.getDatasetContent(datasetName));
+    } catch (e) {
+      beforeSignature = null; // dataset nuevo o sin contenido todavía — cualquier resultado cuenta como fresco
+    }
+
     await this.upsertDatasetDefinition(datasetName, sql);
     await this.refreshDataset(datasetName);
-    await this.waitForDatasetRefresh(datasetName, beforeMarker);
-    return this.getDatasetContent(datasetName);
+    return this.waitForFreshContent(datasetName, beforeSignature);
   }
 }
 
