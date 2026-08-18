@@ -1196,6 +1196,48 @@
       return this.getProtectedMasterForWrite(shardName, confirmations);
     }
 
+    /**
+     * Variante para masters NO shardeados, análoga a getShardBucketForWrite:
+     * el "primera vez" se resuelve con un registro por formId en vez de por
+     * fecha, porque un master plano solo es legítimamente vacío una única
+     * vez en su vida (no "cada medianoche" como los shards). Sin esto,
+     * cualquier formId cuyo master jamás se haya escrito queda bloqueado
+     * para siempre — incluyendo la reconciliación de recovery, que
+     * necesita poder escribir ahí la primera vez tanto como captura.
+     */
+    async getMasterBucketForWrite(formId, bucketName, confirmations = 3) {
+      const registry = await this.getStateBucket(`${formId}_master_registry`);
+      const knownToExist = !!(registry && registry.created === true);
+
+      if (!knownToExist) {
+        const data = await this.getStateBucket(bucketName);
+        if (data && Array.isArray(data.records) && (data.initialized === true || data.records.length > 0)) {
+          return data.initialized === true ? data : { ...data, initialized: true };
+        }
+        return { version: 1, initialized: true, records: [] };
+      }
+
+      return this.getProtectedMasterForWrite(bucketName, confirmations);
+    }
+
+    async markMasterCreated(formId) {
+      const registryName = `${formId}_master_registry`;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const state = (await this.getStateBucket(registryName)) || { version: 1, created: false };
+        if (state.created === true) return true;
+        state.version = 1;
+        state.created = true;
+        const result = await this.setStateBucket(registryName, state);
+        if (result?.ok) return true;
+        if (result?.conflict) {
+          await new Promise((r) => setTimeout(r, 200 + Math.random() * 250));
+          continue;
+        }
+        return false;
+      }
+      return false;
+    }
+
     async markShardCreated(formId, dateKey) {
       const registryName = `${formId}_shard_registry`;
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -2819,7 +2861,7 @@
             try {
               const bucket = SHARDED_FORMS.has(batch.meta.formId)
                 ? await this.gridClient.getShardBucketForWrite(batch.meta.formId, bucketName, group.dateKey, 3)
-                : await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
+                : await this.gridClient.getMasterBucketForWrite(batch.meta.formId, bucketName, 3);
               const dashboardHighWater = Array.isArray(this.logs[batch.meta.formId]) ? this.logs[batch.meta.formId].length : 0;
               if (bucket.records.length === 0 && dashboardHighWater > 0 && !SHARDED_FORMS.has(batch.meta.formId)) {
                 throw new Error(`${bucketName} llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
@@ -2933,7 +2975,7 @@
       for (let attempt = 0; attempt < 6; attempt++) {
         const bucket = SHARDED_FORMS.has(formId)
           ? await this.gridClient.getShardBucketForWrite(formId, bucketName, dateKey, 3)
-          : await this.gridClient.getProtectedMasterForWrite(bucketName, 3);
+          : await this.gridClient.getMasterBucketForWrite(formId, bucketName, 3);
         const dashboardHighWater = Array.isArray(this.logs[formId]) ? this.logs[formId].length : 0;
         if (bucket.records.length === 0 && dashboardHighWater > 0 && !SHARDED_FORMS.has(formId)) {
           throw new Error(`${bucketName} llegó vacío pero el dashboard ya había visto ${dashboardHighWater} registro(s)`);
@@ -2959,7 +3001,11 @@
         const verified = await this.gridClient.confirmUidsPresent(bucketName, missing.map((r) => r.uid), 3);
         if (!verified) throw new Error(`PUT aceptado en ${bucketName}, pero todavía no se pueden verificar todos los UID`);
 
-        if (SHARDED_FORMS.has(formId)) await this.gridClient.markShardCreated(formId, dateKey);
+        if (SHARDED_FORMS.has(formId)) {
+          await this.gridClient.markShardCreated(formId, dateKey);
+        } else {
+          await this.gridClient.markMasterCreated(formId);
+        }
         return { recovered: missing.length };
       }
       throw new Error(`Demasiados conflictos 409 durante recovery en ${bucketName}`);

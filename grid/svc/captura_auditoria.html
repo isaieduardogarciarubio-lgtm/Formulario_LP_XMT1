@@ -4746,6 +4746,50 @@ class GridClient {
     return this.getStateBucketForProtectedMasterWrite(shardName, confirmations);
   }
 
+  /**
+   * Variante para masters NO shardeados, análoga a getShardBucketForWrite:
+   * el "primera vez" se resuelve con un registro por formId en vez de por
+   * fecha, porque un master plano solo es legítimamente vacío una única
+   * vez en su vida (no "cada medianoche" como los shards). Sin esto,
+   * cualquier formId cuyo master jamás se haya escrito queda bloqueado
+   * para siempre: el fail-closed exige ver datos ya confirmados antes de
+   * permitir la primera escritura, y un master nuevo nunca los tendrá.
+   */
+  async getMasterBucketForWrite(formId, bucketName, confirmations = 3) {
+    const registry = await this.getStateBucket(`${formId}_master_registry`);
+    const knownToExist = !!(registry && registry.created === true);
+
+    if (!knownToExist) {
+      const data = await this.getStateBucket(bucketName);
+      if (data && Array.isArray(data.records) && (data.initialized === true || data.records.length > 0)) {
+        // Otro dispositivo lo creó justo entre que se leyó el registro y ahora.
+        return data.initialized === true ? data : { ...data, initialized: true };
+      }
+      return { version: 1, initialized: true, records: [] };
+    }
+
+    return this.getStateBucketForProtectedMasterWrite(bucketName, confirmations);
+  }
+
+  /** Marca un master no shardeado como creado. Idempotente y con OCC. */
+  async markMasterCreated(formId) {
+    const registryName = `${formId}_master_registry`;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const state = (await this.getStateBucket(registryName)) || { version: 1, created: false };
+      if (state.created === true) return true;
+      state.version = 1;
+      state.created = true;
+      const result = await this.setStateBucket(registryName, state);
+      if (result?.ok) return true;
+      if (result?.conflict) {
+        await new Promise((r) => setTimeout(r, 200 + Math.random() * 250));
+        continue;
+      }
+      return false;
+    }
+    return false;
+  }
+
   /** Marca una fecha como confirmada en el registro de shards. Idempotente y con OCC. */
   async markShardCreated(formId, dateKey) {
     const registryName = `${formId}_shard_registry`;
@@ -5662,11 +5706,11 @@ class CapturaApp {
    * agrupa por bucketName antes de llamar aquí.
    */
   async getProtectedBucketForWrite(formId, bucketName, dateKey) {
-    if (!SHARDED_FORMS.has(formId)) {
-      return this.gridClient.getStateBucketForProtectedMasterWrite(bucketName, 3);
-    }
     if (this._knownShards.has(bucketName)) {
       return this.gridClient.getStateBucketForProtectedMasterWrite(bucketName, 3);
+    }
+    if (!SHARDED_FORMS.has(formId)) {
+      return this.gridClient.getMasterBucketForWrite(formId, bucketName, 3);
     }
     return this.gridClient.getShardBucketForWrite(formId, bucketName, dateKey, 3);
   }
@@ -5736,6 +5780,10 @@ class CapturaApp {
     if (SHARDED_FORMS.has(formId)) {
       this.gridClient.markShardCreated(formId, dateKey).catch((e) =>
         DebugConsole.log(`markShardCreated ${formId}/${dateKey}: ${e.message}`, 'warn')
+      );
+    } else {
+      this.gridClient.markMasterCreated(formId).catch((e) =>
+        DebugConsole.log(`markMasterCreated ${formId}: ${e.message}`, 'warn')
       );
     }
     return [...alreadyThereUids, ...toAdd.map((r) => r.uid)];
