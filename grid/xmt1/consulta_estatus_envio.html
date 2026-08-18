@@ -694,18 +694,27 @@ class LookupService {
     throw new Error(`La definición del Dataset no se propagó a tiempo (diagnóstico: ${JSON.stringify(lastSeen)})`);
   }
 
+  // Como cada escaneo reutiliza el mismo Dataset, un last_refresh_error de
+  // un intento VIEJO puede seguir presente en la definición aunque el
+  // refresh actual vaya bien. Por eso el error/publish_state solo se evalúa
+  // una vez que el marker ya cambió respecto al baseline — así garantizamos
+  // que corresponde a ESTE refresh y no a uno anterior sin limpiar.
   async _waitForRefreshComplete(baselineMarker, timeoutMs) {
     const deadline = Date.now() + timeoutMs;
     let intervalMs = 500;
     while (Date.now() < deadline) {
       const raw = await this.client.getDatasetDefinition(CONFIG.DATASET_NAME);
       const meta = unwrapDatasetMeta(raw, CONFIG.DATASET_NAME);
-      const errMsg = meta?.last_refresh_error || meta?.last_error || meta?.error;
-      if (errMsg) throw new Error('BigQuery reportó un error al refrescar (revisa el SQL/tabla)');
       const marker = definitionMarker(meta);
-      const publishState = String(meta?.publish_state ?? meta?.status ?? '').toLowerCase();
-      if (marker !== baselineMarker && (!publishState || publishState === 'published' || publishState === 'ready')) {
-        return;
+      if (marker !== baselineMarker) {
+        const errMsg = meta?.last_refresh_error || meta?.last_error || meta?.error;
+        if (errMsg) {
+          throw new Error(`BigQuery reportó un error al refrescar: ${String(errMsg).slice(0, 200)}`);
+        }
+        const publishState = String(meta?.publish_state ?? meta?.status ?? '').toLowerCase();
+        if (!publishState || publishState === 'published' || publishState === 'ready') {
+          return;
+        }
       }
       await sleep(Math.min(intervalMs, 1800));
       intervalMs += 250;
