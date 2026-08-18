@@ -1609,59 +1609,18 @@
     return index;
   }
 
-  // Catálogo de Premissort: POS.ASSEMBLY.POSITION.NAME as POSICION,
-  // POS.CONTENT.CODE as HU, SHP.SHIPMENT_ID — una fila por shipment, con
-  // POSICION y HU repetidos para todos los shipments de la misma posición
-  // (el HU es el mismo para toda la posición). Índice { posicion: { hu,
-  // shipments: [shipment_id, ...] } }, ya que en la app la posición se
-  // escanea una vez y fija el HU + la lista de shipments esperados.
-  function buildPremissortCatalogIndex(rows) {
-    if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
-
-    const header = rows[0].map(h => cleanCell(h).toUpperCase());
-    const idx = (name) => header.indexOf(name);
-    const col = {
-      posicion: idx('POSICION'),
-      hu: idx('HU'),
-      shipment: idx('SHIPMENT_ID'),
-    };
-    const missing = Object.entries(col).filter(([, i]) => i === -1).map(([k]) => k);
-    if (missing.length > 0) {
-      throw new Error(`Faltan columnas en el CSV: ${missing.join(', ')}`);
-    }
-
-    const index = {};
-    for (let r = 1; r < rows.length; r++) {
-      const row = rows[r];
-      const posicion = cleanCell(row[col.posicion]).toUpperCase();
-      const shipmentId = cleanCell(row[col.shipment]);
-      if (!posicion || !shipmentId) continue;
-
-      if (!index[posicion]) {
-        index[posicion] = { hu: cleanCell(row[col.hu]), shipments: [] };
-      }
-      if (!index[posicion].shipments.includes(shipmentId)) {
-        index[posicion].shipments.push(shipmentId);
-      }
-    }
-
-    if (Object.keys(index).length === 0) {
-      throw new Error('No se encontraron posiciones/shipments válidos en el CSV');
-    }
-    return index;
-  }
-
   /**
    * Detecta el tipo de catálogo a partir del header del CSV (ya en
-   * mayúsculas), para que un solo botón de carga sirva para los 4
-   * catálogos publicables desde el dashboard. Inbound/Drivers y Premissort
-   * se checan antes que Barredura porque también traen SHIPMENT_ID (columna
-   * que por sí sola identificaría Barredura).
+   * mayúsculas), para que un solo botón de carga sirva para los 3
+   * catálogos publicables desde el dashboard. Inbound/Drivers se checa
+   * primero porque también trae SHIPMENT_ID (columna que por sí sola
+   * identificaría Barredura). Premissort no usa catálogo subido — consulta
+   * BigQuery en vivo por posición desde captura (ver GridClient.
+   * runGridSqlLookup en captura_auditoria.html).
    */
   function detectCatalogType(header) {
     const has = (name) => header.includes(name);
     if (has('ID_ROUTE') && has('CARRIER') && has('SHIPMENT_ID')) return 'inbound_drivers';
-    if (has('POSICION') && has('HU') && has('SHIPMENT_ID')) return 'premissort';
     if (has('DESTINO') && has('DOCA')) return 'destino_doca';
     if (has('SHIPMENT_ID')) return 'barredura';
     return null;
@@ -3527,15 +3486,8 @@
           await this.publishCatalogIndex('catalogo_barredura', index);
           this.showNotification(`Catálogo Barredura publicado · ${shipmentCount} shipments`, 'success');
           DebugConsole.log(`Catálogo Barredura publicado: ${shipmentCount} shipments`, 'info');
-        } else if (type === 'premissort') {
-          const index = buildPremissortCatalogIndex(rows);
-          const posicionCount = Object.keys(index).length;
-          const shipmentCount = Object.values(index).reduce((sum, p) => sum + p.shipments.length, 0);
-          await this.publishCatalogIndex('catalogo_premissort', index);
-          this.showNotification(`Catálogo Premissort publicado · ${posicionCount} posiciones · ${shipmentCount} shipments`, 'success');
-          DebugConsole.log(`Catálogo Premissort publicado: ${posicionCount} posiciones, ${shipmentCount} shipments`, 'info');
         } else {
-          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), ID_ROUTE+CARRIER+SHIPMENT_ID (Inbound/Drivers), POSICION+HU+SHIPMENT_ID (Premissort), o SHIPMENT_ID (Barredura).');
+          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), ID_ROUTE+CARRIER+SHIPMENT_ID (Inbound/Drivers), o SHIPMENT_ID (Barredura).');
         }
       } catch (e) {
         this.showNotification(`Error al publicar catálogo: ${e.message}`, 'error');

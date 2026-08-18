@@ -2366,6 +2366,43 @@ function masterBucketNameFor(formId, tsOrDateKey) {
 }
 
 /**
+ * Lookup en vivo de Premissort contra BigQuery vía Dataset Definition
+ * grid_sql (Biblia Grid V23.5 §15.7-15.14) — no hay endpoint de SQL ad hoc
+ * ni parámetros de query reales, así que el valor escaneado se incrusta
+ * como literal en el SQL guardado en la definición. escapeBqStringLiteral
+ * escapa backslash y comilla simple para que ese literal no rompa (ni
+ * inyecte) la query — crítico porque el valor puede venir de entrada
+ * manual, no solo del lector.
+ */
+function escapeBqStringLiteral(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+const PREMISSORT_POSITION_TABLE = '`meli-bi-data.WHOWNER.BT_SHP_MT_ASSEMBLY_CONTAINER`';
+const PREMISSORT_EVENT_TABLE = '`meli-bi-data.WHOWNER.BT_SHP_MT_ASSEMBLY_CONTAINER_MLF_EVENT`';
+
+/**
+ * filterColumn: 'POS.ASSEMBLY.POSITION.NAME' para resolver una posición
+ * escaneada (carga su HU + shipments esperados), o 'SHP.SHIPMENT_ID' para
+ * el lookup inverso de un sobrante (¿a qué posición pertenece este
+ * shipment, si a alguna?). Misma forma base en ambos casos.
+ */
+function buildPremissortLookupSql(filterColumn, filterValue) {
+  const escaped = escapeBqStringLiteral(filterValue);
+  return `SELECT
+  POS.ASSEMBLY.POSITION.NAME AS POSICION,
+  POS.CONTENT.CODE AS HU,
+  SHP.SHIPMENT_ID
+FROM ${PREMISSORT_POSITION_TABLE} AS POS
+LEFT JOIN ${PREMISSORT_EVENT_TABLE} AS SHP
+  ON POS.CONTENT.CODE = SHP.CONTENT_CODE
+  AND SHP.DATE_EVENT >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+WHERE POS.LOGISTIC_CENTER_ID = 'MXXMT1'
+  AND POS.STATUS = 'created'
+  AND ${filterColumn} = '${escaped}'`;
+}
+
+/**
  * Scan parser and validator
  */
 const ScanParser = (() => {
@@ -5386,40 +5423,38 @@ class InboundDriversSession {
 }
 
 /**
- * Premissort — escaneo rápido de posición (ej. AS1-1-1-1) que fija el HU
- * de esa posición según catalogo_premissort, y audita en loop continuo los
- * shipments esperados de esa posición:
+ * Premissort — escaneo rápido de posición (ej. AS1-1-1-1) que consulta EN
+ * VIVO contra BigQuery (Dataset Definition grid_sql, ver
+ * GridClient.runGridSqlLookup y Biblia Grid V23.5 §15.7-15.14) el HU y los
+ * shipments esperados de esa posición, y audita en loop continuo:
  *   - Esperado aquí: guarda directo sin interrumpir el loop (solo
- *     actualiza el contador de faltantes en pantalla), igual que el HU en
- *     catálogo de Barredura.
- *   - En catálogo pero de OTRA posición (sobrante ubicable): pausa y
- *     pregunta si ya se reubicó físicamente. "Sí" guarda un Encontrado
- *     bajo la posición correcta (se cuenta ahí, no aquí); "No" guarda un
- *     sobrante pendiente de reubicar bajo la posición actual.
- *   - Fuera de catálogo (sobrante sin ubicar): pide investigar en TMS y
- *     elegir una acción antes de continuar.
+ *     actualiza el contador de faltantes en pantalla).
+ *   - No esperado aquí: dispara un segundo lookup en vivo por shipment_id
+ *     para saber si pertenece a otra posición (sobrante ubicable — pausa y
+ *     pregunta si ya se reubicó físicamente) o no existe en absoluto
+ *     (sobrante fuera de catálogo — pide investigar en TMS y elegir una
+ *     acción). Ninguno de los dos lookups es instantáneo: cada uno
+ *     reescribe+refresca+lee la Dataset Definition de este dispositivo
+ *     (nombre estable por deviceId, para que dos dispositivos escaneando
+ *     posiciones distintas a la vez nunca compartan ni se pisen la misma
+ *     definición), así que sí toma unos segundos — aceptable porque ya son
+ *     pantallas de pausa, no el loop rápido de escaneo.
  * Se puede cambiar de posición en cualquier momento con "Cambiar" para
- * empezar otro HU. La deduplicación es global por día (no por posición):
- * un shipment ya resuelto hoy (en cualquier posición) no se vuelve a
- * preguntar, así cambiar de posición y volver no repite trabajo.
+ * empezar otro HU. La deduplicación es global por día (no por posición) y
+ * SÍ es local (foundToday/anyRecordToday vienen de nuestros propios
+ * registros de hoy, no de BigQuery): un shipment ya resuelto hoy (en
+ * cualquier posición) no se vuelve a preguntar.
  */
 class PremissortSession {
   static OUT_OF_CATALOG_OPTIONS = ['No es necesaria acción', 'Canalizado al área correspondiente'];
+  static POSITION_PATTERN = /^[A-Z0-9-]{2,40}$/;
 
   constructor(opts = {}) {
     this.onScan = opts.onScan;
     this.onExit = opts.onExit;
-    this.catalogIndex = opts.catalogIndex || {}; // { posicion: { hu, shipments: [id, ...] } }
-    this.catalogGeneratedAt = opts.catalogGeneratedAt || null;
-
-    // Índice inverso shipment_id -> {posicion, hu} para detectar sobrantes
-    // que sí existen en catálogo pero bajo otra posición.
-    this.shipmentIndex = {};
-    Object.entries(this.catalogIndex).forEach(([posicion, entry]) => {
-      (entry.shipments || []).forEach((sid) => {
-        this.shipmentIndex[String(sid)] = { posicion, hu: entry.hu || '' };
-      });
-    });
+    this.gridClient = opts.gridClient;
+    // Estable por dispositivo (no por escaneo): ver comentario de clase.
+    this.lookupDatasetName = `premissort_lookup_${opts.deviceId || 'default'}`;
 
     // Dedup del día: found = ya guardado como Encontrado (en cualquier
     // posición); anyRecordToday = cualquier registro de hoy (Encontrado o
@@ -5648,24 +5683,56 @@ class PremissortSession {
     this.resolvePosition(val);
   }
 
-  resolvePosition(posicion) {
-    const entry = this.catalogIndex[posicion];
-    if (!entry) {
+  renderPositionLoading(posicion) {
+    this.stopScanner();
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <div class="step-progress">Premissort</div>
+        </div>
+        <h1 class="step-question">Consultando posición ${posicion}…</h1>
+        <div class="step-support">Consultando BigQuery en vivo — puede tardar unos segundos.</div>
+      </div>
+    `;
+  }
+
+  async resolvePosition(posicion) {
+    if (!PremissortSession.POSITION_PATTERN.test(posicion)) {
       this.vibrate([40, 60, 40]);
-      this.renderPositionEntry(`Posición "${posicion}" no encontrada en el catálogo.`);
+      this.renderPositionEntry(`Posición "${posicion}" tiene un formato no válido.`);
       return;
     }
 
+    this.renderPositionLoading(posicion);
+    let rows;
+    try {
+      const sql = buildPremissortLookupSql('POS.ASSEMBLY.POSITION.NAME', posicion);
+      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql);
+    } catch (e) {
+      this.vibrate([40, 60, 40]);
+      this.renderPositionEntry(`No se pudo consultar la posición: ${e.message}`);
+      return;
+    }
+
+    const shipmentIds = [...new Set(rows.map((r) => r && r.SHIPMENT_ID).filter(Boolean).map(String))];
+    if (shipmentIds.length === 0) {
+      this.vibrate([40, 60, 40]);
+      this.renderPositionEntry(`Posición "${posicion}" no tiene shipments activos (o no existe).`);
+      return;
+    }
+    if (rows.length >= 500) {
+      DebugConsole.log(`Premissort: la posición ${posicion} devolvió 500 filas — puede estar truncada (cap de Grid, Biblia §15.10)`, 'warn');
+    }
+
     this.posicion = posicion;
-    this.hu = entry.hu || '';
+    this.hu = String((rows.find((r) => r && r.HU) || {}).HU || '');
     this.pending = new Map();
     this.handled = new Map();
-    (entry.shipments || []).forEach((sid) => {
-      const id = String(sid);
+    shipmentIds.forEach((id) => {
       if (this.foundToday.has(id)) this.handled.set(id, 'Encontrado');
       else this.pending.set(id, { shipment_id: id });
     });
-    this.total = (entry.shipments || []).length;
+    this.total = shipmentIds.length;
 
     this.vibrate(60);
     this.renderLoop();
@@ -5924,9 +5991,9 @@ class PremissortSession {
   /**
    * Coincide con lo esperado en ESTA posición -> guarda directo, sin
    * interrumpir el loop (ver saveMatch). Ya resuelto hoy (aquí o en otra
-   * posición) -> aviso, sigue escaneando. En catálogo pero de OTRA
-   * posición -> pausa a confirmar reubicación. Fuera de catálogo -> pide
-   * investigar en TMS y elegir una acción.
+   * posición) -> aviso, sigue escaneando. Cualquier otro caso -> pausa y
+   * dispara un lookup en vivo por shipment_id (ver resolveSurplus) para
+   * saber si pertenece a otra posición o no existe en absoluto.
    */
   processShipment(shipmentId) {
     if (this.pending.has(shipmentId)) {
@@ -5941,13 +6008,46 @@ class PremissortSession {
       return;
     }
 
-    const elsewhere = this.shipmentIndex[shipmentId];
     this.locked = true;
     if (this.scanner) this.scanner.pause();
     this.vibrate([40, 60, 40]);
+    this.resolveSurplus(shipmentId);
+  }
 
-    if (elsewhere) {
-      this.renderMisplaced(shipmentId, elsewhere);
+  renderSurplusLoading(shipmentId) {
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <div class="step-progress">Premissort</div>
+        </div>
+        <h1 class="step-question">Consultando ${shipmentId}…</h1>
+        <div class="step-support">Consultando BigQuery en vivo — puede tardar unos segundos.</div>
+      </div>
+    `;
+  }
+
+  /**
+   * Lookup en vivo por shipment_id (¿a qué posición pertenece, si a
+   * alguna?) para un shipment que no estaba en la lista esperada de la
+   * posición actual. Con resultado -> sobrante ubicable (renderMisplaced).
+   * Sin resultado -> sobrante fuera de catálogo (renderOutOfCatalog).
+   */
+  async resolveSurplus(shipmentId) {
+    this.renderSurplusLoading(shipmentId);
+    let rows;
+    try {
+      const sql = buildPremissortLookupSql('SHP.SHIPMENT_ID', shipmentId);
+      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql);
+    } catch (e) {
+      this.locked = false;
+      this.flash('error', `No se pudo consultar ${shipmentId}: ${e.message}`);
+      this.renderLoop();
+      return;
+    }
+
+    const match = rows.find((r) => r && r.POSICION);
+    if (match) {
+      this.renderMisplaced(shipmentId, { posicion: String(match.POSICION), hu: String(match.HU || '') });
     } else {
       this.renderOutOfCatalog(shipmentId);
     }
@@ -7645,6 +7745,137 @@ class GridClient {
     DebugConsole.log(`PUT ${name}: OK, new updated_at=${body.updated_at || '(vacío)'}`, 'info');
     return { ok: true };
   }
+
+  /* ====================================================================== */
+  /* Dataset Definitions (grid_sql / BigQuery) — Biblia Grid V23.5 §15.7.   */
+  /* Sin endpoint de SQL ad hoc: la query vive en la definición y hay que   */
+  /* reescribirla + refrescar + esperar el nonce. Requiere rol editor sobre */
+  /* el documento (viewer recibe 403 en /refresh) — decisión consciente     */
+  /* del equipo para tener datos en vivo en vez de un catálogo subido a     */
+  /* mano; ver PremissortSession para el uso.                              */
+  /* ====================================================================== */
+
+  async getDatasetDefinition(name, attempt = 0) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${encodeURIComponent(name)}`;
+    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      if (this._shouldRetryStatus(res.status, bodyText) && attempt < 5) {
+        await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
+        return this.getDatasetDefinition(name, attempt + 1);
+      }
+      const err = new Error(`GET dataset ${name}: HTTP ${res.status}`);
+      if (res.status === 429) err.isRateLimited = true;
+      if (res.status === 403) err.isForbidden = true;
+      throw err;
+    }
+    return res.json();
+  }
+
+  /** Marca de cambio del refresh: intenta campos conocidos y cae al JSON completo si no existen. */
+  _datasetRefreshMarker(def) {
+    if (!def) return null;
+    if (def.refresh_count !== undefined) return `rc:${def.refresh_count}`;
+    if (def.last_refreshed_at) return `lr:${def.last_refreshed_at}`;
+    if (def.updated_at) return `ua:${def.updated_at}`;
+    if (def.revision !== undefined) return `rv:${def.revision}`;
+    return JSON.stringify(def);
+  }
+
+  /**
+   * Crea o actualiza la Dataset Definition con el SQL dado, y confirma (con
+   * reintentos) que la escritura ya es visible antes de refrescar — barrera
+   * de visibilidad de definición (Biblia §15.11): sin esto, un refresh
+   * disparado justo después del PATCH podría ejecutar todavía el SQL viejo.
+   */
+  async upsertDatasetDefinition(name, sql) {
+    const existing = await this.getDatasetDefinition(name);
+    const method = existing ? 'PATCH' : 'POST';
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${encodeURIComponent(name)}`;
+    const body = {
+      source_type: 'grid_sql',
+      refresh_mode: 'grid_refresh',
+      format: 'json_rows',
+      source: 'bigquery',
+      source_config: { sql },
+    };
+    const res = await this._fetchWithTimeout(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = new Error(`No se pudo definir el dataset ${name}: HTTP ${res.status}`);
+      if (res.status === 403) err.isForbidden = true;
+      throw err;
+    }
+
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const check = await this.getDatasetDefinition(name);
+      if (check && check.source_config && check.source_config.sql === sql) return check;
+      await new Promise((r) => setTimeout(r, 300 + attempt * 200));
+    }
+    throw new Error(`El dataset ${name} no confirmó la definición nueva a tiempo`);
+  }
+
+  /** POST /refresh requiere rol editor sobre el documento — un viewer recibe 403 (Biblia §15.13). */
+  async refreshDataset(name) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${encodeURIComponent(name)}/refresh`;
+    const res = await this._fetchWithTimeout(url, { method: 'POST', credentials: 'include' });
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      if (res.status === 403) {
+        throw new Error('Sin permiso de editor para refrescar el dataset — Premissort necesita rol editor sobre este documento de Grid');
+      }
+      throw new Error(`No se pudo refrescar el dataset ${name}: HTTP ${res.status}${bodyText ? ` — ${bodyText}` : ''}`);
+    }
+  }
+
+  /**
+   * Espera a que el refresh dispare un cambio observable en la definición.
+   * Sin webhook/push documentado (Biblia §15.14) — solo queda hacer polling.
+   */
+  async waitForDatasetRefresh(name, beforeMarker, { timeoutMs = 60000, intervalMs = 1500 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, intervalMs));
+      const def = await this.getDatasetDefinition(name);
+      const marker = this._datasetRefreshMarker(def);
+      if (marker !== null && marker !== beforeMarker) return def;
+    }
+    throw new Error(`El refresh de ${name} no terminó en ${Math.round(timeoutMs / 1000)}s`);
+  }
+
+  async getDatasetContent(name) {
+    const url = `${this.baseUrl}/api/v1/documents/${this.docId}/data/${encodeURIComponent(name)}/content`;
+    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+    if (!res.ok) throw new Error(`No se pudo leer el contenido de ${name}: HTTP ${res.status}`);
+    const body = await res.json();
+    if (Array.isArray(body)) return body;
+    for (const key of ['rows', 'data', 'records', 'content']) {
+      if (Array.isArray(body && body[key])) return body[key];
+    }
+    return [];
+  }
+
+  /**
+   * Ciclo completo de un lookup grid_sql ad hoc: reescribe la definición de
+   * ESTE dispositivo con el SQL dado, dispara el refresh y espera a que
+   * termine, y devuelve las filas materializadas. El nombre de dataset es
+   * estable por deviceId (no por escaneo) para que dos dispositivos
+   * escaneando posiciones distintas al mismo tiempo nunca compartan ni se
+   * pisen la misma definición.
+   */
+  async runGridSqlLookup(datasetName, sql) {
+    const before = await this.getDatasetDefinition(datasetName);
+    const beforeMarker = this._datasetRefreshMarker(before);
+    await this.upsertDatasetDefinition(datasetName, sql);
+    await this.refreshDataset(datasetName);
+    await this.waitForDatasetRefresh(datasetName, beforeMarker);
+    return this.getDatasetContent(datasetName);
+  }
 }
 
 /**
@@ -7670,9 +7901,6 @@ class CapturaApp {
     this.barreduraCatalogIndex = {};
     this.barreduraCatalogGeneratedAt = null;
     this.barreduraCatalogAccessDenied = false;
-    this.premissortCatalogIndex = {};
-    this.premissortCatalogGeneratedAt = null;
-    this.premissortCatalogAccessDenied = false;
     this.folderIds = {}; // folder_id de Grid por tipo de log (cache en memoria)
 
     // Resiliencia de sincronización. El operador nunca decide entre master y
@@ -7909,7 +8137,6 @@ class CapturaApp {
       await this.loadCatalog();
       await this.loadDriversCatalog();
       await this.loadBarreduraCatalog();
-      await this.loadPremissortCatalog();
       await this.loadOutboxFromStorage();
 
       this.renderMenu();
@@ -8092,37 +8319,6 @@ class CapturaApp {
       }
     });
     return recent;
-  }
-
-  /**
-   * Catálogo de Premissort (posición -> {hu, shipments:[shipment_id,...]}),
-   * publicado desde el dashboard. A diferencia de Barredura, aquí SÍ es
-   * obligatorio (startForm bloquea el log si no hay catálogo publicado):
-   * sin él no hay forma de saber el HU ni los shipments esperados de una
-   * posición.
-   */
-  async loadPremissortCatalog() {
-    this.premissortCatalogAccessDenied = false;
-    try {
-      DebugConsole.log('Cargando catálogo Premissort...', 'info');
-      const data = await this.gridClient.getStateBucket('catalogo_premissort');
-
-      if (!data || typeof data !== 'object') {
-        DebugConsole.log('Catálogo Premissort vacío o no publicado', 'warn');
-        this.premissortCatalogIndex = {};
-        this.premissortCatalogGeneratedAt = null;
-        return;
-      }
-
-      this.premissortCatalogIndex = data.index && typeof data.index === 'object' ? data.index : data;
-      this.premissortCatalogGeneratedAt = data.generatedAt ? new Date(data.generatedAt) : null;
-      DebugConsole.log(`Catálogo Premissort cargado: ${Object.keys(this.premissortCatalogIndex).length} posiciones`, 'info');
-    } catch (e) {
-      this.premissortCatalogAccessDenied = /^403$/.test(e.message);
-      DebugConsole.log(`Error al cargar catálogo Premissort: ${e.message}`, 'warn');
-      this.premissortCatalogIndex = {};
-      this.premissortCatalogGeneratedAt = null;
-    }
   }
 
   /**
@@ -8615,16 +8811,6 @@ class CapturaApp {
       return;
     }
 
-    if (formId === 'premissort' && Object.keys(this.premissortCatalogIndex).length === 0) {
-      this.showToast(
-        this.premissortCatalogAccessDenied
-          ? 'Sin permiso para leer el catálogo de Premissort'
-          : 'Catálogo de Premissort no publicado — súbelo desde el dashboard',
-        'warn'
-      );
-      return;
-    }
-
     // Barredura necesita leer los registros recientes (dedup 12h) antes de
     // arrancar la sesión, así que se maneja por una ruta async aparte.
     if (formId === 'barredura') {
@@ -8756,8 +8942,8 @@ class CapturaApp {
 
     this.hideNavbar();
     this.currentEngine = new PremissortSession({
-      catalogIndex: this.premissortCatalogIndex,
-      catalogGeneratedAt: this.premissortCatalogGeneratedAt,
+      gridClient: this.gridClient,
+      deviceId: this.deviceId,
       foundToday: found,
       anyRecordToday: anyRecord,
       onScan: (values) => this.onFormComplete('premissort', values, { stayInSession: true }),
