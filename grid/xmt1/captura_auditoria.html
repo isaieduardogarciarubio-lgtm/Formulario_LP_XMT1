@@ -7794,8 +7794,14 @@ class GridClient {
     return meta?.query ?? sc.sql ?? sc.SQL ?? sc.query ?? sc.Query ?? null;
   }
 
-  async upsertDatasetDefinition(name, sql, existing) {
-    const method = existing ? 'PATCH' : 'POST';
+  /**
+   * existing es best-effort (viene de un GET previo) — Grid puede reportar
+   * 404 en el PATCH aunque ese GET haya devuelto algo (propagación stale,
+   * o el dataset se limpió entre sesiones), así que un 404 en PATCH se
+   * reintenta una vez como POST en vez de fallar el lookup completo.
+   */
+  async upsertDatasetDefinition(name, sql, existing, _retriedAsCreate = false) {
+    const method = existing && !_retriedAsCreate ? 'PATCH' : 'POST';
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${encodeURIComponent(name)}`;
     const body = {
       source_type: 'grid_sql',
@@ -7810,6 +7816,10 @@ class GridClient {
       credentials: 'include',
       body: JSON.stringify(body),
     });
+    if (res.status === 404 && method === 'PATCH' && !_retriedAsCreate) {
+      DebugConsole.log(`PATCH dataset ${name}: 404 (no existe en realidad) — reintentando como POST`, 'warn');
+      return this.upsertDatasetDefinition(name, sql, existing, true);
+    }
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       DebugConsole.log(`${method} dataset ${name}: HTTP ${res.status} — ${bodyText}`, 'error');
