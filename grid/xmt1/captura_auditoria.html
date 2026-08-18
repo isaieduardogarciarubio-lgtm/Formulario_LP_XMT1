@@ -2267,6 +2267,22 @@ const FORMS_CONFIG = {
       { id: 'caso', type: 'text' },
     ],
   },
+
+  // No usa el wizard genérico: la posición se escanea una vez (fija el HU
+  // de esa posición) y los shipments esperados se escanean en loop
+  // continuo contra el catálogo de esa posición (ver PremissortSession).
+  premissort: {
+    id: 'premissort',
+    title: 'Premissort',
+    description: 'Escanea la posición y audita los shipments esperados de su HU',
+    icon: 'handheldReader',
+    fields: [
+      { id: 'posicion', type: 'text' },
+      { id: 'hu', type: 'text' },
+      { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
+      { id: 'estado', type: 'text' },
+    ],
+  },
 };
 
 /**
@@ -2282,6 +2298,7 @@ const HISTORY_FIELD_MAP = {
   inbound_fm: { id: 'patente', result: 'hallazgo' },
   inbound_drivers: { id: 'shipment_id', result: 'estado' },
   barredura: { id: 'shipment_id', result: 'estado' },
+  premissort: { id: 'shipment_id', result: 'estado' },
 };
 
 /**
@@ -2300,6 +2317,7 @@ const DEDUPE_FIELD_MAP = {
   destino_doca: { type: 'hu', field: 'hu' },
   inbound_drivers: { type: 'shipment', field: 'shipment_id' },
   barredura: { type: 'shipment', field: 'shipment_id' },
+  premissort: { type: 'shipment', field: 'shipment_id' },
 };
 
 function buildDedupeKey(formId, type, rawValue) {
@@ -2323,7 +2341,7 @@ function buildDedupeKey(formId, type, rawValue) {
  * la opción segura). Desde este día en adelante, cada registro nuevo va a
  * su shard diario.
  */
-const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'inbound_drivers']);
+const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'inbound_drivers', 'premissort']);
 const SHARD_CUTOVER_DATE = '2026-08-14';
 
 /** Fecha calendario (hora de México, UTC-6 fijo) de un ts ISO, sea "Z" o con offset explícito. */
@@ -5368,6 +5386,768 @@ class InboundDriversSession {
 }
 
 /**
+ * Premissort — escaneo rápido de posición (ej. AS1-1-1-1) que fija el HU
+ * de esa posición según catalogo_premissort, y audita en loop continuo los
+ * shipments esperados de esa posición:
+ *   - Esperado aquí: guarda directo sin interrumpir el loop (solo
+ *     actualiza el contador de faltantes en pantalla), igual que el HU en
+ *     catálogo de Barredura.
+ *   - En catálogo pero de OTRA posición (sobrante ubicable): pausa y
+ *     pregunta si ya se reubicó físicamente. "Sí" guarda un Encontrado
+ *     bajo la posición correcta (se cuenta ahí, no aquí); "No" guarda un
+ *     sobrante pendiente de reubicar bajo la posición actual.
+ *   - Fuera de catálogo (sobrante sin ubicar): pide investigar en TMS y
+ *     elegir una acción antes de continuar.
+ * Se puede cambiar de posición en cualquier momento con "Cambiar" para
+ * empezar otro HU. La deduplicación es global por día (no por posición):
+ * un shipment ya resuelto hoy (en cualquier posición) no se vuelve a
+ * preguntar, así cambiar de posición y volver no repite trabajo.
+ */
+class PremissortSession {
+  static OUT_OF_CATALOG_OPTIONS = ['No es necesaria acción', 'Canalizado al área correspondiente'];
+
+  constructor(opts = {}) {
+    this.onScan = opts.onScan;
+    this.onExit = opts.onExit;
+    this.catalogIndex = opts.catalogIndex || {}; // { posicion: { hu, shipments: [id, ...] } }
+    this.catalogGeneratedAt = opts.catalogGeneratedAt || null;
+
+    // Índice inverso shipment_id -> {posicion, hu} para detectar sobrantes
+    // que sí existen en catálogo pero bajo otra posición.
+    this.shipmentIndex = {};
+    Object.entries(this.catalogIndex).forEach(([posicion, entry]) => {
+      (entry.shipments || []).forEach((sid) => {
+        this.shipmentIndex[String(sid)] = { posicion, hu: entry.hu || '' };
+      });
+    });
+
+    // Dedup del día: found = ya guardado como Encontrado (en cualquier
+    // posición); anyRecordToday = cualquier registro de hoy (Encontrado o
+    // sobrante ya resuelto), para no volver a preguntar por lo mismo.
+    this.foundToday = new Set(opts.foundToday || []);
+    this.anyRecordToday = new Set(opts.anyRecordToday || []);
+
+    this.container = null;
+    this.scanner = null;
+    this.locked = false;
+    this.inManualMode = false;
+    this.pendingPanelOpen = false;
+
+    this.posicion = null;
+    this.hu = '';
+    this.pending = new Map();
+    this.handled = new Map();
+    this.total = 0;
+  }
+
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.renderPositionEntry();
+  }
+
+  destroy() {
+    this.stopScanner();
+  }
+
+  stopScanner() {
+    if (this.scanner) {
+      this.scanner.stop();
+      this.scanner = null;
+    }
+  }
+
+  vibrate(pattern) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  normalizePosition(raw) {
+    return String(raw || '').trim().toUpperCase();
+  }
+
+  /* ====================================================================== */
+  /* Paso 1: escanear/ingresar la posición                                 */
+  /* ====================================================================== */
+
+  renderPositionEntry(message) {
+    this.stopScanner();
+    this.locked = false;
+    const camera = ScanUI.mode() === 'camera';
+
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Premissort</div>
+        </div>
+        <div class="scan-mode-slot"></div>
+        <h1 class="step-question">${camera ? 'Escanea la posición' : 'Escanea o ingresa la posición'}</h1>
+        <div class="scanner-body"></div>
+        <div class="step-support ${message ? 'error' : ''}">${message || ''}</div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.renderPositionEntry()));
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+
+    const body = this.container.querySelector('.scanner-body');
+    if (camera) {
+      body.innerHTML = `
+        <div class="scanner-viewport">
+          <video class="scanner-video" playsinline muted></video>
+          <div class="scanner-frame"><span class="scanner-line"></span></div>
+        </div>
+      `;
+      if (!this.supportEl.textContent) this.supportEl.textContent = 'Apunta la cámara al código de la posición (ej. AS1-1-1-1).';
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'session-manual-link';
+      link.textContent = 'Ingresar posición manualmente';
+      link.addEventListener('click', () => this.enterManualPositionEntry());
+      this.container.querySelector('.step-screen').appendChild(link);
+      this.startPositionCamera();
+    } else {
+      if (!this.supportEl.textContent) this.supportEl.textContent = 'Escanea con el lector o escribe la posición y Enter.';
+
+      const hidInput = document.createElement('input');
+      hidInput.type = 'text';
+      hidInput.className = 'hh-hid-input';
+      hidInput.setAttribute('inputmode', 'none');
+      body.appendChild(hidInput);
+
+      const scanArea = document.createElement('div');
+      scanArea.className = 'hh-scan-area';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'hh-icon idle';
+      iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
+      scanArea.appendChild(iconWrap);
+      const lastCodeEl = document.createElement('div');
+      lastCodeEl.className = 'hh-last-code';
+      scanArea.appendChild(lastCodeEl);
+      body.appendChild(scanArea);
+      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
+
+      let modalOpen = false;
+      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !modalOpen;
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
+
+      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
+
+      hidInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
+        e.preventDefault();
+        const raw = hidInput.value.trim();
+        if (!raw) return;
+        hidInput.value = '';
+        lastCodeEl.textContent = raw;
+        lastCodeEl.className = 'hh-last-code visible';
+        this.resolvePosition(this.normalizePosition(raw));
+      });
+
+      armHid();
+
+      const manualBtn = document.createElement('button');
+      manualBtn.type = 'button';
+      manualBtn.className = 'btn-manual-hid';
+      manualBtn.innerHTML = Icons.svg('keyboard', { size: 22 });
+      body.appendChild(manualBtn);
+
+      const modal = document.createElement('div');
+      modal.className = 'hh-manual-modal';
+      modal.innerHTML = `
+        <div class="hh-manual-inner">
+          <p class="hh-manual-label">Posición</p>
+          <input type="text" class="hh-manual-input" placeholder="Ej. AS1-1-1-1" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
+          <div class="hh-manual-actions">
+            <button type="button" class="hh-manual-cancel">Cancelar</button>
+            <button type="button" class="hh-manual-confirm">Confirmar</button>
+          </div>
+        </div>`;
+      this.container.appendChild(modal);
+
+      const modalInput = modal.querySelector('.hh-manual-input');
+      const openModal = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+      const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
+      const confirmModal = () => {
+        const val = modalInput.value.trim();
+        if (!val) return;
+        modalInput.value = '';
+        closeModal();
+        this.resolvePosition(this.normalizePosition(val));
+      };
+
+      manualBtn.addEventListener('click', openModal);
+      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
+      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
+      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+  }
+
+  enterManualPositionEntry() {
+    if (this.scanner) this.scanner.pause();
+    this.container.querySelector('.scanner-body').innerHTML = `
+      <div class="step-input-wrap">
+        <input type="text" class="step-input session-manual-input" placeholder="Ej. AS1-1-1-1" />
+      </div>
+    `;
+    const input = this.container.querySelector('.session-manual-input');
+    this.supportEl.textContent = 'Escribe la posición y presiona Enter.';
+    this.supportEl.classList.remove('error');
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const val = this.normalizePosition(input.value);
+      if (!val) return;
+      this.resolvePosition(val);
+    });
+    setTimeout(() => input.focus(), 60);
+  }
+
+  async startPositionCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — ingresa la posición manualmente.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+    try {
+      await this.scanner.start(video, (text) => this.handlePositionScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — ingresa la posición manualmente.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  handlePositionScan(rawText) {
+    const val = this.normalizePosition(rawText);
+    if (!val) return;
+    this.resolvePosition(val);
+  }
+
+  resolvePosition(posicion) {
+    const entry = this.catalogIndex[posicion];
+    if (!entry) {
+      this.vibrate([40, 60, 40]);
+      this.renderPositionEntry(`Posición "${posicion}" no encontrada en el catálogo.`);
+      return;
+    }
+
+    this.posicion = posicion;
+    this.hu = entry.hu || '';
+    this.pending = new Map();
+    this.handled = new Map();
+    (entry.shipments || []).forEach((sid) => {
+      const id = String(sid);
+      if (this.foundToday.has(id)) this.handled.set(id, 'Encontrado');
+      else this.pending.set(id, { shipment_id: id });
+    });
+    this.total = (entry.shipments || []).length;
+
+    this.vibrate(60);
+    this.renderLoop();
+  }
+
+  /* ====================================================================== */
+  /* Paso 2: loop de escaneo de shipments esperados en la posición         */
+  /* ====================================================================== */
+
+  renderLoop() {
+    this.stopScanner();
+    this.locked = false;
+    this.inManualMode = false;
+    const camera = ScanUI.mode() === 'camera';
+    this.loopHint = camera ? 'Escaneando... apunta la cámara al shipment.' : '';
+
+    const foundCount = this.handled.size;
+    const pendingCount = this.pending.size;
+
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Premissort</div>
+        </div>
+        <div class="session-pill">
+          <div class="session-pill-info">Posición ${this.posicion} · HU ${this.hu || '—'}</div>
+          <button type="button" class="btn btn-secondary session-change-btn">Cambiar</button>
+        </div>
+        <button type="button" class="driver-pending-toggle">
+          <span>${foundCount} / ${this.total} encontrados · ${pendingCount} faltantes</span>
+          ${Icons.svg(this.pendingPanelOpen ? 'arrowDown' : 'arrowRight', { size: 16 })}
+        </button>
+        <div class="driver-pending-panel" style="display: ${this.pendingPanelOpen ? 'block' : 'none'};"></div>
+        <div class="scan-mode-slot"></div>
+        <h1 class="step-question">Escanea el shipment</h1>
+        <div class="scanner-body"></div>
+        <div class="step-support"></div>
+      </div>
+      <div class="session-flash"></div>
+    `;
+
+    this.flashEl = this.container.querySelector('.session-flash');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.supportEl.textContent = this.loopHint;
+    this.pendingToggleEl = this.container.querySelector('.driver-pending-toggle span');
+    this.pendingPanelEl = this.container.querySelector('.driver-pending-panel');
+    this.renderPendingPanel();
+    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.renderLoop()));
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+    this.container.querySelector('.session-change-btn').addEventListener('click', () => {
+      this.renderPositionEntry();
+    });
+    this.container.querySelector('.driver-pending-toggle').addEventListener('click', () => {
+      this.pendingPanelOpen = !this.pendingPanelOpen;
+      this.renderLoop();
+    });
+
+    const body = this.container.querySelector('.scanner-body');
+    if (camera) {
+      body.innerHTML = `
+        <div class="scanner-viewport">
+          <video class="scanner-video" playsinline muted></video>
+          <div class="scanner-frame"><span class="scanner-line"></span></div>
+        </div>
+      `;
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'session-manual-link';
+      link.textContent = 'Entrada manual';
+      link.addEventListener('click', () => this.enterManualShipmentEntry());
+      this.supportEl.insertAdjacentElement('afterend', link);
+      this.startShipmentCamera();
+    } else {
+      const hidInput = document.createElement('input');
+      hidInput.type = 'text';
+      hidInput.className = 'hh-hid-input';
+      hidInput.setAttribute('inputmode', 'none');
+      body.appendChild(hidInput);
+
+      const scanArea = document.createElement('div');
+      scanArea.className = 'hh-scan-area';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'hh-icon idle';
+      iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
+      scanArea.appendChild(iconWrap);
+      const lastCodeEl = document.createElement('div');
+      lastCodeEl.className = 'hh-last-code';
+      scanArea.appendChild(lastCodeEl);
+      body.appendChild(scanArea);
+      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
+
+      let modalOpen = false;
+      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
+
+      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
+
+      hidInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
+        e.preventDefault();
+        const raw = hidInput.value.trim();
+        if (!raw || this.locked) return;
+        hidInput.value = '';
+        const isDup = this.handled.has(raw) || this.anyRecordToday.has(raw);
+        lastCodeEl.textContent = isDup ? `${raw} · ya escaneado` : raw;
+        lastCodeEl.className = 'hh-last-code visible';
+        lastCodeEl.classList.toggle('duplicate', isDup);
+        this.submitShipmentValue(raw, hidInput);
+      });
+
+      armHid();
+
+      const manualBtn = document.createElement('button');
+      manualBtn.type = 'button';
+      manualBtn.className = 'btn-manual-hid';
+      manualBtn.innerHTML = Icons.svg('keyboard', { size: 22 });
+      body.appendChild(manualBtn);
+
+      const modal = document.createElement('div');
+      modal.className = 'hh-manual-modal';
+      modal.innerHTML = `
+        <div class="hh-manual-inner">
+          <p class="hh-manual-label">Shipment ID</p>
+          <input type="text" class="hh-manual-input" placeholder="Shipment ID" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
+          <div class="hh-manual-actions">
+            <button type="button" class="hh-manual-cancel">Cancelar</button>
+            <button type="button" class="hh-manual-confirm">Confirmar</button>
+          </div>
+        </div>`;
+      this.container.appendChild(modal);
+
+      const modalInput = modal.querySelector('.hh-manual-input');
+      const openModal = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+      const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
+      const confirmModal = () => {
+        const val = modalInput.value.trim().toUpperCase();
+        if (!val) return;
+        modalInput.value = '';
+        closeModal();
+        this.submitShipmentValue(val, hidInput);
+      };
+
+      manualBtn.addEventListener('click', openModal);
+      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
+      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
+      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+  }
+
+  submitShipmentValue(rawText, input) {
+    const parsed = ScanParser.parse(rawText, 'shipment');
+    if (!parsed) {
+      this.vibrate(40);
+      this.flash('error', 'Código no reconocido.');
+      if (input) input.value = '';
+      return;
+    }
+    const isKnown = this.pending.has(parsed) || this.handled.has(parsed) || this.anyRecordToday.has(parsed);
+    const willNavigate = !isKnown;
+    this.processShipment(parsed);
+    if (!willNavigate && input && document.body.contains(input)) {
+      input.value = '';
+      input.focus();
+    }
+  }
+
+  async startShipmentCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — usa entrada manual.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+    try {
+      await this.scanner.start(video, (text) => this.handleShipmentScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — usa entrada manual.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  handleShipmentScan(rawText) {
+    if (this.locked) return;
+    const parsed = ScanParser.parse(rawText, 'shipment');
+    if (!parsed) {
+      this.vibrate(40);
+      this.flash('error', 'Código no reconocido.');
+      return;
+    }
+    this.processShipment(parsed);
+  }
+
+  enterManualShipmentEntry() {
+    if (this.scanner) this.scanner.pause();
+    this.inManualMode = true;
+    this.container.querySelector('.scanner-body').innerHTML = `
+      <div class="step-input-wrap">
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
+      </div>
+    `;
+    const input = this.container.querySelector('.session-manual-input');
+    this.supportEl.textContent = 'Escribe el Shipment ID y presiona Enter.';
+    this.supportEl.classList.remove('error');
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const parsed = ScanParser.parse(input.value, 'shipment');
+      if (!parsed) {
+        this.supportEl.textContent = 'Shipment inválido. Verifica el número e intenta de nuevo.';
+        this.supportEl.classList.add('error');
+        return;
+      }
+      this.processShipment(parsed);
+      input.value = '';
+    });
+    setTimeout(() => input.focus(), 60);
+  }
+
+  renderPendingPanel() {
+    if (!this.pendingPanelEl) return;
+    if (this.pending.size === 0) {
+      this.pendingPanelEl.innerHTML = '<div class="driver-pending-empty">Sin faltantes — todos los shipments esperados fueron encontrados.</div>';
+      return;
+    }
+    this.pendingPanelEl.innerHTML = Array.from(this.pending.keys()).map((sid) => `
+      <div class="driver-pending-item">
+        <div class="driver-pending-info">
+          <div class="driver-pending-id">${sid}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Coincide con lo esperado en ESTA posición -> guarda directo, sin
+   * interrumpir el loop (ver saveMatch). Ya resuelto hoy (aquí o en otra
+   * posición) -> aviso, sigue escaneando. En catálogo pero de OTRA
+   * posición -> pausa a confirmar reubicación. Fuera de catálogo -> pide
+   * investigar en TMS y elegir una acción.
+   */
+  processShipment(shipmentId) {
+    if (this.pending.has(shipmentId)) {
+      this.vibrate(60);
+      this.saveMatch(shipmentId);
+      return;
+    }
+
+    if (this.handled.has(shipmentId) || this.anyRecordToday.has(shipmentId)) {
+      this.vibrate(40);
+      this.flash('warn', `${shipmentId} · Ya escaneado hoy.`);
+      return;
+    }
+
+    const elsewhere = this.shipmentIndex[shipmentId];
+    this.locked = true;
+    if (this.scanner) this.scanner.pause();
+    this.vibrate([40, 60, 40]);
+
+    if (elsewhere) {
+      this.renderMisplaced(shipmentId, elsewhere);
+    } else {
+      this.renderOutOfCatalog(shipmentId);
+    }
+  }
+
+  /**
+   * Saca el shipment de pending DE INMEDIATO (antes del await) para que un
+   * doble escaneo rapidísimo del mismo ID no dispare dos guardados — pero
+   * sin bloquear el guardado de OTRO shipment distinto mientras este está
+   * en vuelo (por eso no hay un flag booleano único como en las pantallas
+   * de detalle). El guardado real ocurre en segundo plano; la UI ya se
+   * actualizó de forma optimista.
+   */
+  async saveMatch(shipmentId) {
+    if (!this.pending.has(shipmentId)) return;
+    this.pending.delete(shipmentId);
+    this.handled.set(shipmentId, 'Encontrado');
+    this.foundToday.add(shipmentId);
+    this.anyRecordToday.add(shipmentId);
+    this.flash('ok', `${shipmentId} · Encontrado`);
+    if (this.pendingToggleEl) {
+      this.pendingToggleEl.textContent = `${this.handled.size} / ${this.total} encontrados · ${this.pending.size} faltantes`;
+    }
+    this.renderPendingPanel();
+
+    if (this.onScan) {
+      try {
+        await this.onScan({
+          posicion: this.posicion,
+          hu: this.hu,
+          shipment_id: shipmentId,
+          estado: 'Encontrado',
+          detalle: '',
+        });
+      } catch (e) {
+        DebugConsole.log(`Premissort: error al guardar ${shipmentId}: ${e.message}`, 'error');
+      }
+    }
+  }
+
+  /* ====================================================================== */
+  /* Sobrante que SÍ existe en catálogo, pero de otra posición             */
+  /* ====================================================================== */
+
+  renderMisplaced(shipmentId, elsewhere) {
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Sobrante — otra posición</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${shipmentId}</div>
+          <div class="driver-shipment-row">
+            <span class="driver-badge driver-badge-out">Pertenece a la posición ${elsewhere.posicion} · HU ${elsewhere.hu || '—'}</span>
+          </div>
+        </div>
+        <h1 class="step-question">¿Ya lo colocaste en la posición correcta?</h1>
+        <div class="driver-status-actions">
+          <button type="button" class="driver-status-btn driver-status-btn-ok">Sí, ya lo coloqué</button>
+          <button type="button" class="driver-status-btn driver-status-btn-divergencia">No todavía</button>
+        </div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+    this.container.querySelector('.driver-status-btn-ok').addEventListener('click', () => {
+      this.saveMisplaced(shipmentId, elsewhere, true);
+    });
+    this.container.querySelector('.driver-status-btn-divergencia').addEventListener('click', () => {
+      this.saveMisplaced(shipmentId, elsewhere, false);
+    });
+  }
+
+  async saveMisplaced(shipmentId, elsewhere, alreadyRelocated) {
+    if (this.savingMisplaced) return;
+    this.savingMisplaced = true;
+    try {
+      if (this.onScan) {
+        await this.onScan(alreadyRelocated ? {
+          posicion: elsewhere.posicion,
+          hu: elsewhere.hu,
+          shipment_id: shipmentId,
+          estado: 'Encontrado',
+          detalle: `Reubicado desde ${this.posicion}`,
+        } : {
+          posicion: this.posicion,
+          hu: this.hu,
+          shipment_id: shipmentId,
+          estado: 'Sobrante - pendiente reubicar',
+          detalle: `Pertenece a la posición ${elsewhere.posicion} (HU ${elsewhere.hu || '—'})`,
+        });
+      }
+      if (alreadyRelocated) this.foundToday.add(shipmentId);
+      this.anyRecordToday.add(shipmentId);
+      this.locked = false;
+      this.renderLoop();
+    } finally {
+      this.savingMisplaced = false;
+    }
+  }
+
+  /* ====================================================================== */
+  /* Sobrante fuera de catálogo: investigar en TMS + elegir acción         */
+  /* ====================================================================== */
+
+  renderOutOfCatalog(shipmentId) {
+    const tmsUrl = `https://tms.adminml.com/fos/shipment/details/${encodeURIComponent(shipmentId)}`;
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Sobrante — fuera de catálogo</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${shipmentId}</div>
+          <div class="driver-shipment-row">
+            <span class="driver-badge driver-badge-out">No está en el catálogo</span>
+          </div>
+        </div>
+        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Investigar en TMS</a>
+        <h1 class="step-question">¿Qué acción se tomó?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    PremissortSession.OUT_OF_CATALOG_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId, opt));
+      options.appendChild(btn);
+    });
+  }
+
+  async saveOutOfCatalog(shipmentId, accion) {
+    if (this.savingOut) return;
+    this.savingOut = true;
+    try {
+      if (this.onScan) {
+        await this.onScan({
+          posicion: this.posicion,
+          hu: this.hu,
+          shipment_id: shipmentId,
+          estado: 'Sobrante - fuera de catálogo',
+          detalle: accion,
+        });
+      }
+      this.anyRecordToday.add(shipmentId);
+      this.locked = false;
+      this.renderLoop();
+    } finally {
+      this.savingOut = false;
+    }
+  }
+
+  flash(kind, message) {
+    if (this.supportEl) {
+      this.supportEl.textContent = message;
+      this.supportEl.classList.toggle('error', kind === 'error');
+    }
+    if (this.flashEl) {
+      const cls = kind === 'ok' ? 'active-ok' : (kind === 'error' ? 'active-error' : '');
+      if (cls) {
+        this.flashEl.innerHTML = Icons.svg(kind === 'ok' ? 'checkCircle' : 'resultError', { size: 96 });
+        this.flashEl.classList.add(cls);
+        setTimeout(() => {
+          if (this.flashEl) {
+            this.flashEl.classList.remove(cls);
+            this.flashEl.innerHTML = '';
+          }
+        }, 550);
+      }
+    }
+    setTimeout(() => {
+      if (!this.supportEl) return;
+      this.supportEl.classList.remove('error');
+      this.supportEl.textContent = this.inManualMode
+        ? 'Escribe el Shipment ID y presiona Enter.'
+        : (this.loopHint || 'Escaneando... apunta la cámara al shipment.');
+    }, 900);
+  }
+}
+
+/**
  * Barredura — escaneo continuo de shipments en un lugar fijo por sesión
  * (ej. andén, zona; se pregunta una vez y queda fijo hasta que se cambie
  * a mano con "Cambiar", igual que la doca en Pre-Missort), comparando
@@ -6890,6 +7670,9 @@ class CapturaApp {
     this.barreduraCatalogIndex = {};
     this.barreduraCatalogGeneratedAt = null;
     this.barreduraCatalogAccessDenied = false;
+    this.premissortCatalogIndex = {};
+    this.premissortCatalogGeneratedAt = null;
+    this.premissortCatalogAccessDenied = false;
     this.folderIds = {}; // folder_id de Grid por tipo de log (cache en memoria)
 
     // Resiliencia de sincronización. El operador nunca decide entre master y
@@ -7126,6 +7909,7 @@ class CapturaApp {
       await this.loadCatalog();
       await this.loadDriversCatalog();
       await this.loadBarreduraCatalog();
+      await this.loadPremissortCatalog();
       await this.loadOutboxFromStorage();
 
       this.renderMenu();
@@ -7308,6 +8092,77 @@ class CapturaApp {
       }
     });
     return recent;
+  }
+
+  /**
+   * Catálogo de Premissort (posición -> {hu, shipments:[shipment_id,...]}),
+   * publicado desde el dashboard. A diferencia de Barredura, aquí SÍ es
+   * obligatorio (startForm bloquea el log si no hay catálogo publicado):
+   * sin él no hay forma de saber el HU ni los shipments esperados de una
+   * posición.
+   */
+  async loadPremissortCatalog() {
+    this.premissortCatalogAccessDenied = false;
+    try {
+      DebugConsole.log('Cargando catálogo Premissort...', 'info');
+      const data = await this.gridClient.getStateBucket('catalogo_premissort');
+
+      if (!data || typeof data !== 'object') {
+        DebugConsole.log('Catálogo Premissort vacío o no publicado', 'warn');
+        this.premissortCatalogIndex = {};
+        this.premissortCatalogGeneratedAt = null;
+        return;
+      }
+
+      this.premissortCatalogIndex = data.index && typeof data.index === 'object' ? data.index : data;
+      this.premissortCatalogGeneratedAt = data.generatedAt ? new Date(data.generatedAt) : null;
+      DebugConsole.log(`Catálogo Premissort cargado: ${Object.keys(this.premissortCatalogIndex).length} posiciones`, 'info');
+    } catch (e) {
+      this.premissortCatalogAccessDenied = /^403$/.test(e.message);
+      DebugConsole.log(`Error al cargar catálogo Premissort: ${e.message}`, 'warn');
+      this.premissortCatalogIndex = {};
+      this.premissortCatalogGeneratedAt = null;
+    }
+  }
+
+  /**
+   * Dedup del día para Premissort: combina lo ya sincronizado en el shard
+   * de HOY (Premissort no consulta ayer — cada día es un plan de posiciones
+   * nuevo) con la cola local aún sin sincronizar. found = shipment_id con
+   * estado Encontrado (cuenta como resuelto en su posición correcta,
+   * llegue de donde llegue); anyRecord = cualquier shipment_id con registro
+   * de hoy (Encontrado o sobrante ya resuelto), para no volver a preguntar
+   * por lo mismo si se re-escanea.
+   */
+  async loadRecentPremissort() {
+    const found = new Set();
+    const anyRecord = new Set();
+
+    const todayKey = shardDateKeyMexico(new Date().toISOString());
+    const bucketName = masterBucketNameFor('premissort', todayKey);
+
+    try {
+      const bucket = await this.gridClient.getStateBucket(bucketName);
+      if (bucket && Array.isArray(bucket.records)) {
+        bucket.records.forEach((r) => {
+          if (!r || !r.shipment_id) return;
+          const sid = String(r.shipment_id);
+          anyRecord.add(sid);
+          if (r.estado === 'Encontrado') found.add(sid);
+        });
+      }
+    } catch (e) {
+      DebugConsole.log(`No se pudo leer ${bucketName} para dedup de Premissort: ${e.message}`, 'warn');
+    }
+
+    this.outboxRecords.forEach((r) => {
+      if (!r || r.formId !== 'premissort' || !r.shipment_id) return;
+      const sid = String(r.shipment_id);
+      anyRecord.add(sid);
+      if (r.estado === 'Encontrado') found.add(sid);
+    });
+
+    return { found, anyRecord };
   }
 
   async loadOutboxFromStorage() {
@@ -7760,10 +8615,27 @@ class CapturaApp {
       return;
     }
 
+    if (formId === 'premissort' && Object.keys(this.premissortCatalogIndex).length === 0) {
+      this.showToast(
+        this.premissortCatalogAccessDenied
+          ? 'Sin permiso para leer el catálogo de Premissort'
+          : 'Catálogo de Premissort no publicado — súbelo desde el dashboard',
+        'warn'
+      );
+      return;
+    }
+
     // Barredura necesita leer los registros recientes (dedup 12h) antes de
     // arrancar la sesión, así que se maneja por una ruta async aparte.
     if (formId === 'barredura') {
       this.startBarredura();
+      return;
+    }
+
+    // Premissort también necesita leer lo escaneado hoy (dedup global) antes
+    // de arrancar la sesión.
+    if (formId === 'premissort') {
+      this.startPremissort();
       return;
     }
 
@@ -7851,6 +8723,45 @@ class CapturaApp {
       onScan: (values) => this.onFormComplete('barredura', values, { stayInSession: true }),
       onExit: () => this.renderMenu(),
       onWarning: (msg) => this.showToast(msg, 'warn'),
+    });
+    this.currentEngine.render('form-container');
+  }
+
+  /**
+   * Arranque de Premissort: primero lee lo ya escaneado hoy (dedup global,
+   * no por posición) mostrando un placeholder, y luego instancia la sesión
+   * con esos datos.
+   */
+  async startPremissort() {
+    this._screen = 'form';
+    this.ensureBackGuard();
+
+    const root = document.getElementById('app-root');
+    root.innerHTML = `
+      <div id="form-container">
+        <div class="step-screen">
+          <div class="step-progress-row">
+            <div class="step-progress">Premissort</div>
+          </div>
+          <h1 class="step-question">Cargando…</h1>
+          <div class="step-support">Leyendo lo escaneado hoy para la deduplicación.</div>
+        </div>
+      </div>
+    `;
+
+    const { found, anyRecord } = await this.loadRecentPremissort();
+
+    // Si el usuario ya salió mientras cargaba, no montar la sesión.
+    if (this._screen !== 'form') return;
+
+    this.hideNavbar();
+    this.currentEngine = new PremissortSession({
+      catalogIndex: this.premissortCatalogIndex,
+      catalogGeneratedAt: this.premissortCatalogGeneratedAt,
+      foundToday: found,
+      anyRecordToday: anyRecord,
+      onScan: (values) => this.onFormComplete('premissort', values, { stayInSession: true }),
+      onExit: () => this.renderMenu(),
     });
     this.currentEngine.render('form-container');
   }
