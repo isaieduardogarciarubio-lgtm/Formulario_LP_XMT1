@@ -5707,7 +5707,7 @@ class PremissortSession {
     let rows;
     try {
       const sql = buildPremissortLookupSql('POS.ASSEMBLY.POSITION.NAME', posicion);
-      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql);
+      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql, escapeBqStringLiteral(posicion));
     } catch (e) {
       this.vibrate([40, 60, 40]);
       this.renderPositionEntry(`No se pudo consultar la posición: ${e.message}`);
@@ -6037,7 +6037,7 @@ class PremissortSession {
     let rows;
     try {
       const sql = buildPremissortLookupSql('SHP.SHIPMENT_ID', shipmentId);
-      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql);
+      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql, escapeBqStringLiteral(shipmentId));
     } catch (e) {
       this.locked = false;
       this.flash('error', `No se pudo consultar ${shipmentId}: ${e.message}`);
@@ -7755,6 +7755,13 @@ class GridClient {
   /* mano; ver PremissortSession para el uso.                              */
   /* ====================================================================== */
 
+  /**
+   * GET .../datasets/{name} viene ENVUELTO en runtime como
+   * { doc_id, dataset: {...campos reales...}, download_url, content_url } —
+   * no en la raíz (confirmado contra Grid real, no solo documentado). Se
+   * devuelve el objeto dataset ya desempaquetado para que el resto del
+   * código no tenga que saber de este wrapper.
+   */
   async getDatasetDefinition(name, attempt = 0) {
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${encodeURIComponent(name)}`;
     const res = await this._fetchWithTimeout(url, { credentials: 'include' });
@@ -7770,25 +7777,23 @@ class GridClient {
       if (res.status === 403) err.isForbidden = true;
       throw err;
     }
-    return res.json();
+    const raw = await res.json();
+    if (raw && typeof raw === 'object' && raw.dataset && typeof raw.dataset === 'object') return raw.dataset;
+    return raw;
   }
 
   /**
-   * Extrae el SQL de una Dataset Definition tolerando variantes de forma
-   * (source_config.sql, source_config.query, o sql en la raíz) — la Biblia
-   * no fija un schema exacto de lectura, solo el de escritura.
+   * Extrae el SQL de una definición ya desempaquetada. Confirmado contra
+   * Grid real: viene como campo `query` plano en el objeto dataset (no
+   * anidado bajo source_config como documenta el contrato de escritura) —
+   * se revisan ambas formas por si acaso.
    */
-  _extractDatasetSql(def) {
-    return def?.source_config?.sql ?? def?.source_config?.query ?? def?.sql ?? null;
+  _extractDatasetSql(meta) {
+    const sc = meta?.source_config ?? meta?.sourceConfig ?? meta?.config ?? {};
+    return meta?.query ?? sc.sql ?? sc.SQL ?? sc.query ?? sc.Query ?? null;
   }
 
-  /** Colapsa espacios para comparar SQL tolerando reformateo (Grid/BigQuery pueden normalizar el texto guardado). */
-  _normalizeSql(sql) {
-    return String(sql ?? '').replace(/\s+/g, ' ').trim();
-  }
-
-  async upsertDatasetDefinition(name, sql) {
-    const existing = await this.getDatasetDefinition(name);
+  async upsertDatasetDefinition(name, sql, existing) {
     const method = existing ? 'PATCH' : 'POST';
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/datasets/${encodeURIComponent(name)}`;
     const body = {
@@ -7811,37 +7816,8 @@ class GridClient {
       if (res.status === 403) err.isForbidden = true;
       throw err;
     }
-    const writeBody = await res.json().catch(() => null);
     DebugConsole.log(`${method} dataset ${name}: OK`, 'info');
-
-    const target = this._normalizeSql(sql);
-
-    // Si la respuesta del propio POST/PATCH ya trae el SQL actualizado, no
-    // hace falta releer — evita una vuelta extra y el riesgo de pegarle a
-    // una réplica de lectura desactualizada.
-    const writeSql = this._extractDatasetSql(writeBody);
-    if (writeSql && this._normalizeSql(writeSql) === target) return writeBody;
-
-    // Best-effort: el POST/PATCH ya devolvió HTTP OK (la escritura fue
-    // aceptada), así que no confirmar el eco exacto del SQL no es motivo
-    // para abortar el lookup completo — el contrato de lectura de
-    // datasets/{name} no está confirmado (Biblia §15.7) y podría no traer
-    // el SQL de vuelta en ninguna forma reconocible. Se intenta un rato
-    // corto por las dudas y se sigue de largo con solo un warning.
-    let lastSeen = writeBody;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      await new Promise((r) => setTimeout(r, 400 + attempt * 300));
-      const check = await this.getDatasetDefinition(name);
-      lastSeen = check;
-      const seenSql = this._extractDatasetSql(check);
-      DebugConsole.log(
-        `Confirmación definición ${name} (intento ${attempt + 1}): ${seenSql ? this._normalizeSql(seenSql).slice(0, 120) + '…' : '(sin SQL en la respuesta)'}`,
-        'info'
-      );
-      if (seenSql && this._normalizeSql(seenSql) === target) return check;
-    }
-    DebugConsole.log(`${name}: no se pudo confirmar el eco del SQL — continúo de todas formas (la escritura ya fue HTTP OK). Última respuesta: ${JSON.stringify(lastSeen).slice(0, 500)}`, 'warn');
-    return lastSeen;
+    return res.json().catch(() => ({}));
   }
 
   /** POST /refresh requiere rol editor sobre el documento — un viewer recibe 403 (Biblia §15.13). */
@@ -7857,94 +7833,123 @@ class GridClient {
     }
   }
 
+  /**
+   * La ruta de contenido puede tardar en propagarse justo después de que la
+   * definición ya se marcó lista (barrera de visibilidad propia del
+   * contenido, análoga a la de la definición) — un 404 o 400 inmediato no
+   * es necesariamente definitivo, se tolera con reintentos acotados antes
+   * de darlo por error real.
+   */
   async getDatasetContent(name) {
     const url = `${this.baseUrl}/api/v1/documents/${this.docId}/data/${encodeURIComponent(name)}/content`;
-    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
-    if (!res.ok) {
-      const bodyText = await res.text().catch(() => '');
-      throw new Error(`No se pudo leer el contenido de ${name}: HTTP ${res.status}${bodyText ? ` — ${bodyText.slice(0, 400)}` : ''}`);
-    }
-    const body = await res.json();
-    if (Array.isArray(body)) return body;
-    for (const key of ['rows', 'data', 'records', 'content']) {
-      if (Array.isArray(body && body[key])) return body[key];
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+      if ((res.status === 404 || res.status === 400) && attempt < 4) {
+        await new Promise((r) => setTimeout(r, 400 + attempt * 300));
+        continue;
+      }
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '');
+        throw new Error(`No se pudo leer el contenido de ${name}: HTTP ${res.status}${bodyText ? ` — ${bodyText.slice(0, 400)}` : ''}`);
+      }
+      const body = await res.json();
+      if (Array.isArray(body)) return body;
+      for (const key of ['rows', 'data', 'records', 'content']) {
+        if (Array.isArray(body && body[key])) return body[key];
+      }
+      return [];
     }
     return [];
   }
 
-  /**
-   * Espera el resultado fresco del refresh comparando el CONTENIDO
-   * materializado (no metadata de la definición): el contrato observado
-   * (Biblia §15.7) no confirma un campo de estado/nonce de refresh en la
-   * definición, así que confiar en uno inventado podría no cambiar nunca
-   * aunque el refresh sí haya terminado. Si el contenido cambió respecto al
-   * leído antes del refresh, se acepta de inmediato; si sigue igual tras
-   * minPolls intentos (puede pasar al re-escanear la MISMA posición/
-   * shipment dos veces), se acepta igual — mejor devolver datos
-   * potencialmente un poll "viejos" que bloquear al operador indefinidamente
-   * por una comparación de igualdad que nunca iba a cumplirse.
-   */
-  /**
-   * Patrón documentado (Playbook §17): pollear la DEFINICIÓN, no el
-   * contenido — así un refresh que falló se clasifica ahí mismo (status de
-   * error / campo de error) en vez de descubrirse como un 400 opaco al
-   * leer /content. Señal de avance: cualquiera de refresh_count/
-   * updated_at/last_refreshed_at/revision cambiando respecto al valor
-   * antes del refresh, o status pasando a "published"/"ready"/"success".
-   */
-  async waitForRefreshedDefinition(name, before, { timeoutMs = 60000, intervalMs = 1500 } = {}) {
-    const beforeStatus = String(before?.status || '').toLowerCase();
-    const beforeCount = before?.refresh_count;
-    const beforeStamp = before?.updated_at || before?.last_refreshed_at || before?.revision;
-    const errorStatuses = new Set(['error', 'failed', 'failure']);
-    const readyStatuses = new Set(['published', 'ready', 'success', 'succeeded', 'completed']);
+  /** Huella de la definición para detectar si ya cambió respecto a un baseline (no depende de un solo campo confirmado). */
+  _datasetFingerprint(meta) {
+    return JSON.stringify([
+      meta?.refresh_count ?? null,
+      meta?.last_refresh_attempt_at ?? null,
+      meta?.updated_at ?? null,
+      meta?.revision ?? null,
+    ]);
+  }
 
+  /**
+   * Espera a que el SQL escrito ya sea visible en la definición, verificando
+   * que contenga el valor filtrado de ESTE lookup como literal — no una
+   * comparación exacta del SQL completo, porque Grid/BigQuery pueden
+   * reformatear el texto guardado (espacios, comillas) y un match byte-a-
+   * byte nunca calzaría aunque la escritura sí se haya propagado. Devuelve
+   * la definición ya desempaquetada, para reusarla como baseline del
+   * refresh sin una lectura extra.
+   */
+  async waitForDatasetSqlVisible(name, escapedFilterValue, { timeoutMs = 15000 } = {}) {
     const deadline = Date.now() + timeoutMs;
-    let lastDef = before;
-    let attempt = 0;
+    let intervalMs = 300;
+    let lastSeenSql = null;
     while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, intervalMs));
-      attempt++;
-      const def = await this.getDatasetDefinition(name);
-      lastDef = def;
-      if (!def) continue;
-
-      const status = String(def.status || '').toLowerCase();
-      const errorDetail = def.last_error || def.error || def.error_message || def.refresh_error;
-      DebugConsole.log(
-        `Definición ${name} (intento ${attempt}): status=${status || 'n/a'}, refresh_count=${def.refresh_count ?? 'n/a'}`,
-        'info'
-      );
-      if (errorDetail || errorStatuses.has(status)) {
-        throw new Error(`El refresh de ${name} falló: ${errorDetail || status}`);
+      const meta = await this.getDatasetDefinition(name);
+      const sql = this._extractDatasetSql(meta);
+      if (sql) {
+        lastSeenSql = sql;
+        if (sql.includes(`'${escapedFilterValue}'`)) return meta;
       }
-
-      const countChanged = def.refresh_count !== undefined && def.refresh_count !== beforeCount;
-      const stampChanged = (def.updated_at || def.last_refreshed_at || def.revision) &&
-        (def.updated_at || def.last_refreshed_at || def.revision) !== beforeStamp;
-      const statusFlipped = readyStatuses.has(status) && status !== beforeStatus;
-
-      if (countChanged || stampChanged || statusFlipped) return def;
+      await new Promise((r) => setTimeout(r, intervalMs));
+      intervalMs = Math.min(intervalMs + 150, 900);
     }
+    DebugConsole.log(`${name}: SQL no visible a tiempo — último SQL visto: ${lastSeenSql ? lastSeenSql.slice(0, 200) : '(ninguno)'}`, 'warn');
+    throw new Error(`La definición de ${name} no se propagó a tiempo`);
+  }
 
-    DebugConsole.log(`${name}: sin señal de refresh tras el timeout — última definición: status=${lastDef?.status ?? 'n/a'}, refresh_count=${lastDef?.refresh_count ?? 'n/a'}`, 'warn');
+  /**
+   * Espera a que el refresh dispare un cambio observable en la definición
+   * respecto al baseline (tomado DESPUÉS de confirmar que el SQL ya es
+   * visible, no antes — si se tomara antes, el propio PATCH ya movería el
+   * fingerprint y esta espera terminaría de inmediato sin que el refresh
+   * real haya ocurrido). Clasifica un error de refresh ahí mismo en vez de
+   * descubrirlo como un 400 opaco al leer /content.
+   */
+  async waitForDatasetRefreshComplete(name, baselineMeta, { timeoutMs = 45000 } = {}) {
+    const baselineFingerprint = this._datasetFingerprint(baselineMeta);
+    const deadline = Date.now() + timeoutMs;
+    let intervalMs = 500;
+    let lastMeta = baselineMeta;
+    while (Date.now() < deadline) {
+      const meta = await this.getDatasetDefinition(name);
+      lastMeta = meta;
+      if (meta && this._datasetFingerprint(meta) !== baselineFingerprint) {
+        const errorDetail = meta.last_refresh_error || meta.last_error || meta.error;
+        if (errorDetail) {
+          throw new Error(`BigQuery reportó un error al refrescar ${name}: ${String(errorDetail).slice(0, 300)}`);
+        }
+        const publishState = String(meta.publish_state ?? meta.status ?? '').toLowerCase();
+        if (!publishState || publishState === 'published' || publishState === 'ready') {
+          return meta;
+        }
+      }
+      await new Promise((r) => setTimeout(r, Math.min(intervalMs, 1800)));
+      intervalMs += 250;
+    }
+    DebugConsole.log(`${name}: sin señal de refresh tras el timeout — última definición: ${JSON.stringify(lastMeta).slice(0, 1500)}`, 'warn');
     throw new Error(`El refresh de ${name} no terminó en ${Math.round(timeoutMs / 1000)}s`);
   }
 
   /**
    * Ciclo completo de un lookup grid_sql ad hoc: reescribe la definición de
-   * ESTE dispositivo con el SQL dado, dispara el refresh, espera a que la
-   * DEFINICIÓN confirme que terminó (o clasifica el error ahí) y solo
-   * entonces lee el contenido materializado. El nombre de dataset es
-   * estable por deviceId (no por escaneo) para que dos dispositivos
-   * escaneando posiciones distintas a la vez nunca compartan ni se pisen la
-   * misma definición.
+   * ESTE dispositivo con el SQL dado, confirma que ya es visible (barrera
+   * de visibilidad), dispara el refresh, espera a que la definición
+   * confirme que terminó (o clasifica el error ahí) y solo entonces lee el
+   * contenido materializado. filterValue es el literal escapado que debe
+   * aparecer en el SQL (posición o shipment_id) para confirmar que la
+   * definición visible corresponde a ESTE lookup y no a uno anterior. El
+   * nombre de dataset es estable por deviceId (no por escaneo) para que dos
+   * dispositivos escaneando posiciones distintas a la vez nunca compartan
+   * ni se pisen la misma definición.
    */
-  async runGridSqlLookup(datasetName, sql) {
-    const before = await this.getDatasetDefinition(datasetName);
-    await this.upsertDatasetDefinition(datasetName, sql);
+  async runGridSqlLookup(datasetName, sql, filterValue) {
+    const existing = await this.getDatasetDefinition(datasetName);
+    await this.upsertDatasetDefinition(datasetName, sql, !!existing);
+    const visibleMeta = await this.waitForDatasetSqlVisible(datasetName, filterValue);
     await this.refreshDataset(datasetName);
-    await this.waitForRefreshedDefinition(datasetName, before);
+    await this.waitForDatasetRefreshComplete(datasetName, visibleMeta);
     return this.getDatasetContent(datasetName);
   }
 }
