@@ -6456,6 +6456,36 @@ class GridClient {
     this.docId = docId;
     this.baseUrl = location.origin;
     this._updatedAtByName = {};
+    // Backpressure global (Biblia Grid V23.5 §5, §15.17.8): un 429 en CUALQUIER
+    // petición abre un freno compartido por TODAS — sin esto, varias lecturas
+    // paralelas (ej. registry + shards concurrentes) siguen golpeando la API
+    // mientras Grid ya pidió esperar, y el 429 se retroalimenta en ráfaga.
+    this._blockedUntil = 0;
+  }
+
+  /** Espera si hay un freno de backpressure activo antes de disparar la petición. */
+  async _respectBackpressureGate() {
+    const wait = this._blockedUntil - Date.now();
+    if (wait > 0) {
+      DebugConsole.log(`Backpressure global: esperando ${Math.round(wait / 1000)}s antes de la próxima petición`, 'info');
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+
+  /** Registra un 429: abre (o extiende) el freno global usando Retry-After si Grid lo manda. */
+  _observe429(res) {
+    const header = res.headers.get('Retry-After');
+    let waitMs = 3000; // fallback conservador si Grid no manda el header
+    if (header) {
+      const asSeconds = Number(header);
+      waitMs = Number.isFinite(asSeconds) ? asSeconds * 1000 : (new Date(header).getTime() - Date.now());
+    }
+    if (!Number.isFinite(waitMs) || waitMs < 0) waitMs = 3000;
+    const until = Date.now() + waitMs;
+    if (until > this._blockedUntil) {
+      this._blockedUntil = until;
+      DebugConsole.log(`Backpressure global: 429 recibido, pausando ${Math.round(waitMs / 1000)}s`, 'warn');
+    }
   }
 
   /**
@@ -6466,10 +6496,13 @@ class GridClient {
    * aquí una sola vez para que quien llama no tenga que adivinar.
    */
   async _fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+    await this._respectBackpressureGate();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      return await fetch(url, { ...options, signal: controller.signal });
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      if (res.status === 429) this._observe429(res);
+      return res;
     } catch (e) {
       if (e.name === 'AbortError') {
         const err = new Error(`Tiempo de espera agotado (${timeoutMs / 1000}s)`);
@@ -6576,7 +6609,7 @@ class GridClient {
    * innecesario dado que Grid ya nos dice que reintentemos.
    */
   _shouldRetryStatus(status, bodyText) {
-    if (status === 503) return true;
+    if (status === 503 || status === 429) return true;
     try {
       return !!JSON.parse(bodyText).retry;
     } catch (e) {
@@ -6599,7 +6632,9 @@ class GridClient {
         return this.getStateBucket(name, attempt + 1);
       }
       DebugConsole.log(`GET ${name}: HTTP ${res.status} — ${bodyText}`, 'error');
-      throw new Error(`${res.status}`);
+      const err = new Error(`${res.status}`);
+      if (res.status === 429) err.isRateLimited = true;
+      throw err;
     }
     const body = await res.json();
     this._updatedAtByName[name] = body.updated_at || '';
@@ -6777,7 +6812,9 @@ class GridClient {
         return this.setStateBucket(name, data, attempt + 1);
       }
       DebugConsole.log(`PUT ${name}: HTTP ${res.status} — ${bodyText}`, 'error');
-      throw new Error(`${res.status}`);
+      const err = new Error(`${res.status}`);
+      if (res.status === 429) err.isRateLimited = true;
+      throw err;
     }
     const body = await res.json();
     this._updatedAtByName[name] = body.updated_at || '';
@@ -7984,6 +8021,7 @@ class CapturaApp {
       const blockedForms = new Set();
       const forceRecoveryForms = new Set();
       let networkDown = false;
+      let rateLimited = false;
       let recoveryBacked = 0;
 
       // Agrupar por (formId, bucketName real) — para los formularios
@@ -8001,7 +8039,7 @@ class CapturaApp {
       }
 
       for (const [bucketName, group] of groups) {
-        if (networkDown) break;
+        if (networkDown || rateLimited) break;
         if (blockedForms.has(group.formId)) continue;
         try {
           const okUids = await this.syncRecordsBatch(group.formId, bucketName, group.dateKey, group.records);
@@ -8012,6 +8050,16 @@ class CapturaApp {
           if (e.isNetworkError || e.isTimeout) {
             DebugConsole.log(`Sin conexión real con Grid: ${e.message} — se detiene el lote`, 'warn');
             networkDown = true;
+            break;
+          }
+
+          // Rate limit no significa que el master sea ambiguo — no abrir
+          // circuito ni forzar recovery (eso solo generaría más peticiones
+          // durante la ráfaga). Solo detener el lote; el freno global de
+          // GridClient ya está pausando las próximas peticiones.
+          if (e.isRateLimited) {
+            DebugConsole.log(`${bucketName}: 429 — se detiene el lote, reintenta el freno global`, 'warn');
+            rateLimited = true;
             break;
           }
 
@@ -8032,8 +8080,10 @@ class CapturaApp {
       this.outboxRecords = this.outboxRecords.filter((r) => !synced.includes(r.uid));
 
       // Segunda vía automática: un master degradado nunca recibe PUT; los
-      // pendientes se respaldan como CSV inmutable en Grid.
-      if (!networkDown) {
+      // pendientes se respaldan como CSV inmutable en Grid. No se dispara
+      // durante un rate limit — sería más tráfico justo cuando Grid pidió
+      // frenar.
+      if (!networkDown && !rateLimited) {
         for (const formId of blockedForms) {
           try {
             recoveryBacked += await this.backupRecoveryForForm(formId, {
@@ -8045,6 +8095,11 @@ class CapturaApp {
               DebugConsole.log(`Recovery sin conexión: ${e.message}`, 'warn');
               break;
             }
+            if (e.isRateLimited) {
+              rateLimited = true;
+              DebugConsole.log(`Recovery: 429 — se detiene`, 'warn');
+              break;
+            }
             DebugConsole.log(`Recovery ${formId} falló: ${e.message}`, 'error');
           }
         }
@@ -8053,7 +8108,9 @@ class CapturaApp {
       this.updatePendingBadge();
 
       if (!silent) {
-        if (networkDown) {
+        if (rateLimited) {
+          this.showToast(`Grid está limitando las peticiones — ${this.outboxRecords.length} pendiente(s), reintenta en unos segundos`, 'warn');
+        } else if (networkDown) {
           this.showToast(`Sin conexión con Grid — ${this.outboxRecords.length} pendiente(s) locales`, 'warn');
         } else if (recoveryBacked > 0) {
           this.showToast(`${recoveryBacked} registro(s) respaldados en Grid; master pendiente`, 'warn');

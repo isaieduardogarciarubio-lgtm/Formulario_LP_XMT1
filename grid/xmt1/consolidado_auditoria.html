@@ -916,6 +916,37 @@
       this.docId = docId;
       this.baseUrl = location.origin;
       this._updatedAtByName = {};
+      // Freno global de backpressure (Biblia Grid V23.5 §5, §15.17.8): sin
+      // punto único de fetch como en captura, cada método de state bucket
+      // consulta este mismo reloj antes de disparar su request.
+      this._blockedUntil = 0;
+    }
+
+    async _respectBackpressureGate() {
+      const wait = this._blockedUntil - Date.now();
+      if (wait > 0) {
+        if (typeof DebugConsole !== 'undefined') {
+          DebugConsole.log(`Backpressure global: esperando ${Math.round(wait / 1000)}s antes de la próxima petición`, 'info');
+        }
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+
+    _observe429(res) {
+      const header = res.headers.get('Retry-After');
+      let waitMs = 3000;
+      if (header) {
+        const asSeconds = Number(header);
+        waitMs = Number.isFinite(asSeconds) ? asSeconds * 1000 : (new Date(header).getTime() - Date.now());
+      }
+      if (!Number.isFinite(waitMs) || waitMs < 0) waitMs = 3000;
+      const until = Date.now() + waitMs;
+      if (until > this._blockedUntil) {
+        this._blockedUntil = until;
+        if (typeof DebugConsole !== 'undefined') {
+          DebugConsole.log(`Backpressure global: 429 recibido, pausando ${Math.round(waitMs / 1000)}s`, 'warn');
+        }
+      }
     }
 
     async getMe() {
@@ -1030,7 +1061,7 @@
      * puramente transitoria.
      */
     _shouldRetryStatus(status, bodyText) {
-      if (status === 503) return true;
+      if (status === 503 || status === 429) return true;
       try {
         return !!JSON.parse(bodyText).retry;
       } catch (e) {
@@ -1040,9 +1071,11 @@
 
     async getStateBucket(name, attempt = 0) {
       try {
+        await this._respectBackpressureGate();
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
           credentials: 'include',
         });
+        if (res.status === 429) this._observe429(res);
         if (res.status === 404) return null;
         if (!res.ok) {
           const bodyText = await res.text().catch(() => '');
@@ -1090,9 +1123,11 @@
      * "no pude leer" antes de tocar un master.
      */
     async getStateBucketStrict(name, attempt = 0) {
+      await this._respectBackpressureGate();
       const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
         credentials: 'include',
       });
+      if (res.status === 429) this._observe429(res);
       if (res.status === 404) return null;
       if (!res.ok) {
         const bodyText = await res.text().catch(() => '');
@@ -1100,7 +1135,9 @@
           await new Promise((r) => setTimeout(r, 500 * (attempt + 1) + Math.random() * 300));
           return this.getStateBucketStrict(name, attempt + 1);
         }
-        throw new Error(`GET ${name} HTTP ${res.status}`);
+        const err = new Error(`GET ${name} HTTP ${res.status}`);
+        if (res.status === 429) err.isRateLimited = true;
+        throw err;
       }
       const body = await res.json();
       this._updatedAtByName[name] = body.updated_at || '';
@@ -1180,6 +1217,7 @@
 
     async setStateBucket(name, data, attempt = 0) {
       try {
+        await this._respectBackpressureGate();
         const ifUpdatedAt = this._updatedAtByName[name] || '';
         const res = await fetch(`${this.baseUrl}/api/v1/documents/${this.docId}/states/${name}`, {
           method: 'PUT',
@@ -1187,6 +1225,7 @@
           body: JSON.stringify({ state: data, if_updated_at: ifUpdatedAt }),
           credentials: 'include',
         });
+        if (res.status === 429) this._observe429(res);
 
         if (res.status === 409) {
           const conflictBody = await res.json().catch(() => ({}));
