@@ -6046,7 +6046,40 @@ class PremissortSession {
       return;
     }
 
-    const match = rows.find((r) => r && r.POSICION);
+    const matches = rows.filter((r) => r && r.POSICION);
+
+    // Si la posición actual aparece entre los resultados, el shipment SÍ
+    // pertenece aquí — la lista de la posición pudo haber quedado
+    // desactualizada si un evento nuevo llegó a BigQuery justo después de
+    // cargarla (dos lecturas independientes en momentos distintos, no un
+    // único snapshot de catálogo). No es un sobrante: se guarda como
+    // Encontrado en vez de preguntar si ya se reubicó a la posición
+    // "correcta" cuando ya está en la correcta.
+    const here = matches.find((r) => String(r.POSICION) === this.posicion);
+    if (here) {
+      this.handled.set(shipmentId, 'Encontrado');
+      this.foundToday.add(shipmentId);
+      this.anyRecordToday.add(shipmentId);
+      this.flash('ok', `${shipmentId} · Encontrado`);
+      if (this.onScan) {
+        try {
+          await this.onScan({
+            posicion: this.posicion,
+            hu: this.hu,
+            shipment_id: shipmentId,
+            estado: 'Encontrado',
+            detalle: '',
+          });
+        } catch (e) {
+          DebugConsole.log(`Premissort: error al guardar ${shipmentId}: ${e.message}`, 'error');
+        }
+      }
+      this.locked = false;
+      this.renderLoop();
+      return;
+    }
+
+    const match = matches[0];
     if (match) {
       this.renderMisplaced(shipmentId, { posicion: String(match.POSICION), hu: String(match.HU || '') });
     } else {
