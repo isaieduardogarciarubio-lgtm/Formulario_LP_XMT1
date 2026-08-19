@@ -5454,8 +5454,15 @@ class PremissortSession {
     this.onScan = opts.onScan;
     this.onExit = opts.onExit;
     this.gridClient = opts.gridClient;
-    // Estable por dispositivo (no por escaneo): ver comentario de clase.
-    this.lookupDatasetName = `premissort_lookup_${opts.deviceId || 'default'}`;
+    // Estables por dispositivo (no por escaneo) y SEPARADOS por tipo de
+    // lookup: si posición y sobrante-por-shipment compartieran un solo
+    // dataset, una lectura de contenido que se adelantara un poco (la
+    // detección de "refresh terminado" es best-effort) podía devolver el
+    // resultado del OTRO tipo de consulta — ver GridClient.
+    // waitForMatchingContent, que valida esto de todas formas como
+    // segunda barrera.
+    this.positionDatasetName = `premissort_lookup_pos_${opts.deviceId || 'default'}`;
+    this.shipmentDatasetName = `premissort_lookup_ship_${opts.deviceId || 'default'}`;
 
     // Dedup del día: found = ya guardado como Encontrado (en cualquier
     // posición); anyRecordToday = cualquier registro de hoy (Encontrado o
@@ -5708,7 +5715,7 @@ class PremissortSession {
     let rows;
     try {
       const sql = buildPremissortLookupSql('POS.ASSEMBLY.POSITION.NAME', posicion);
-      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql, escapeBqStringLiteral(posicion));
+      rows = await this.gridClient.runGridSqlLookup(this.positionDatasetName, sql, posicion, 'POSICION');
     } catch (e) {
       this.vibrate([40, 60, 40]);
       this.renderPositionEntry(`No se pudo consultar la posición: ${e.message}`);
@@ -6038,7 +6045,7 @@ class PremissortSession {
     let rows;
     try {
       const sql = buildPremissortLookupSql('SHP.SHIPMENT_ID', shipmentId);
-      rows = await this.gridClient.runGridSqlLookup(this.lookupDatasetName, sql, escapeBqStringLiteral(shipmentId));
+      rows = await this.gridClient.runGridSqlLookup(this.shipmentDatasetName, sql, shipmentId, 'SHIPMENT_ID');
     } catch (e) {
       this.locked = false;
       this.flash('error', `No se pudo consultar ${shipmentId}: ${e.message}`);
@@ -6127,6 +6134,7 @@ class PremissortSession {
   /* ====================================================================== */
 
   renderMisplaced(shipmentId, elsewhere) {
+    const tmsUrl = `https://tms.adminml.com/fos/shipment/details/${encodeURIComponent(shipmentId)}`;
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
@@ -6136,9 +6144,10 @@ class PremissortSession {
         <div class="driver-shipment-card">
           <div class="driver-shipment-id">${shipmentId}</div>
           <div class="driver-shipment-row">
-            <span class="driver-badge driver-badge-out">Pertenece a la posición ${elsewhere.posicion} · HU ${elsewhere.hu || '—'}</span>
+            <span class="driver-badge driver-badge-out">Pertenece a la posición ${elsewhere.posicion}</span>
           </div>
         </div>
+        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
         <h1 class="step-question">¿Ya lo colocaste en la posición correcta?</h1>
         <div class="driver-status-actions">
           <button type="button" class="driver-status-btn driver-status-btn-ok">Sí, ya lo coloqué</button>
@@ -7988,13 +7997,40 @@ class GridClient {
    * dispositivos escaneando posiciones distintas a la vez nunca compartan
    * ni se pisen la misma definición.
    */
-  async runGridSqlLookup(datasetName, sql, filterValue) {
+  async runGridSqlLookup(datasetName, sql, filterValue, validateField) {
     const existing = await this.getDatasetDefinition(datasetName);
     await this.upsertDatasetDefinition(datasetName, sql, !!existing);
-    const visibleMeta = await this.waitForDatasetSqlVisible(datasetName, filterValue);
+    const visibleMeta = await this.waitForDatasetSqlVisible(datasetName, escapeBqStringLiteral(filterValue));
     await this.refreshDataset(datasetName);
     await this.waitForDatasetRefreshComplete(datasetName, visibleMeta);
-    return this.getDatasetContent(datasetName);
+    return this.waitForMatchingContent(datasetName, filterValue, validateField);
+  }
+
+  /**
+   * Segunda barrera de correctitud, además de waitForDatasetRefreshComplete:
+   * la detección de "refresh terminado" es best-effort (Grid no confirma un
+   * campo de estado 100% fiable para esto), así que un refresh que se da
+   * por terminado un poco antes de tiempo puede devolver el contenido
+   * materializado de un lookup ANTERIOR (otra posición, u otro shipment) en
+   * vez del actual. Como esto puede llevar a marcar un paquete bajo la
+   * posición equivocada, se valida que TODAS las filas devueltas tengan
+   * filterValue en validateField antes de aceptarlas — si no, se relee en
+   * vez de mostrar datos de otra consulta. Cero filas sigue siendo un
+   * resultado válido (no encontrado), no un mismatch.
+   */
+  async waitForMatchingContent(name, filterValue, validateField, { timeoutMs = 20000, intervalMs = 800 } = {}) {
+    const deadline = Date.now() + timeoutMs;
+    let lastRows = [];
+    while (Date.now() < deadline) {
+      const rows = await this.getDatasetContent(name);
+      lastRows = rows;
+      const allMatch = rows.every((r) => r && String(r[validateField]) === String(filterValue));
+      if (allMatch) return rows;
+      DebugConsole.log(`${name}: el contenido todavía no corresponde a "${filterValue}" — releyendo`, 'warn');
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    DebugConsole.log(`${name}: el contenido nunca llegó a corresponder a "${filterValue}" — última lectura: ${JSON.stringify(lastRows).slice(0, 400)}`, 'error');
+    throw new Error(`No se pudo confirmar que el contenido de ${name} corresponde a "${filterValue}" — no se muestra para evitar datos de otra consulta`);
   }
 }
 
