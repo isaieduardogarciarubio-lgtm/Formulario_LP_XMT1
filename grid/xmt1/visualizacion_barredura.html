@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Visualización — Barredura</title>
+  <title>Visualización — Barredura / Premissort</title>
   <script src="/d/_libs/plotly.min.js"></script>
   <link rel="stylesheet" href="../css/lib/skeleton.min.css" />
   <style>
@@ -104,6 +104,26 @@
     }
     .card-title svg { color: var(--accent); flex-shrink: 0; }
 
+    .tabs {
+      display: flex; gap: 4px;
+      background: var(--surface-2);
+      border-radius: var(--r-pill);
+      padding: 5px;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1; padding: 9px 8px;
+      border: none; border-radius: var(--r-pill);
+      background: transparent;
+      font-size: 13px; font-weight: 600; color: var(--text-sub);
+      cursor: pointer; transition: all .16s; text-align: center;
+      font-family: var(--font);
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    }
+    .tab.active   { background: var(--surface); color: var(--text); }
+    .tab:hover:not(.active) { color: var(--text); background: rgba(255,255,255,.04); }
+
     .btn-icon {
       width: 40px; height: 40px;
       border-radius: 50%;
@@ -202,6 +222,7 @@
     @media (max-width: 640px) {
       .wrap { width: 100%; padding: 24px 16px 48px; }
       .header { padding: 16px 20px; flex-direction: column; gap: 16px; }
+      .tabs { border-radius: var(--r-lg); }
       .kpi-grid { grid-template-columns: repeat(2, 1fr); }
       .charts-grid { grid-template-columns: 1fr; }
       .chart-container { height: clamp(220px, 46vh, 420px); }
@@ -215,7 +236,7 @@
   <div class="brand">
     <div class="header-icon"><img id="header-logo" alt="Logo" /></div>
     <div>
-      <h1>Visualización — Barredura</h1>
+      <h1>Visualización de Logs</h1>
       <div class="header-sub">Solo lectura · sin campos editables</div>
     </div>
   </div>
@@ -232,13 +253,10 @@
 
 <div class="wrap">
   <div class="card">
-    <p class="card-title">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      Barredura
-    </p>
+    <div class="tabs" id="log-tabs" style="display: none;"></div>
 
     <div id="no-data-message" class="empty-state">
-      <p>Todavía no hay registros de Barredura sincronizados.</p>
+      <p>Todavía no hay registros sincronizados.</p>
     </div>
 
     <div id="analysis-content" style="display: none;">
@@ -271,15 +289,57 @@
 
 <script>
 /**
- * Visualización de Barredura — dashboard adicional, SOLO LECTURA. Lee el
- * mismo state bucket (barredura_master) que consolidado_auditoria.html,
- * apuntando a la misma bóveda de datos por defecto — no tiene ninguna
- * acción que escriba: sin editar, sin borrar, sin subir catálogo. Pensado
- * para compartirse con gente que solo necesita ver el estado de Barredura
- * sin tocar nada. Por ahora es el único log visible aquí; si más adelante
- * se necesitan otros logs, se puede replicar el patrón de tabs del
- * dashboard original.
+ * Visualización de logs — dashboard adicional, SOLO LECTURA. Lee los mismos
+ * State Buckets shardeados que consolidado_auditoria.html, apuntando a la
+ * misma bóveda de datos por defecto — no tiene ninguna acción que escriba:
+ * sin editar, sin borrar, sin subir catálogo. Pensado para compartirse con
+ * gente que solo necesita ver el estado de estos logs sin tocar nada.
+ *
+ * Empezó como un visor de un solo log (Barredura, leyendo un único
+ * "barredura_master" fijo) y se generalizó a un patrón de tabs para poder
+ * agregar más logs (Premissort) sin duplicar el archivo — mismo patrón de
+ * tabs que el dashboard original. Al generalizar también se corrigió un bug
+ * real: el visor de Barredura leía solo el bucket legacy "barredura_master"
+ * y nunca los shards diarios vigentes desde el cutover (2026-08-14), así
+ * que llevaba días mostrando datos incompletos. Ambos logs mostrados aquí
+ * están shardeados por día — ver masterBucketNameFor/loadShardedLog.
  */
+const SHARD_CUTOVER_DATE = '2026-08-14';
+
+/** Fecha calendario (hora de México, UTC-6 fijo) de un ts ISO, sea "Z" o con offset explícito. */
+function shardDateKeyMexico(ts) {
+  const instant = new Date(ts);
+  const mx = new Date(instant.getTime() - 6 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${mx.getUTCFullYear()}-${pad(mx.getUTCMonth() + 1)}-${pad(mx.getUTCDate())}`;
+}
+
+/** Nombre del bucket master que corresponde a un formId + fecha (o ts de un registro). Ambos logs de este visor están shardeados. */
+function masterBucketNameFor(formId, tsOrDateKey) {
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(String(tsOrDateKey)) ? tsOrDateKey : shardDateKeyMexico(tsOrDateKey);
+  return dateKey < SHARD_CUTOVER_DATE ? `${formId}_master` : `${formId}_master_${dateKey}`;
+}
+
+/** Nombres de shard para cubrir un rango de fechas de calendario (los elegidos en date-from/date-to, sin conversión de huso horario). */
+function shardNamesForRange(formId, fromDate, toDate) {
+  const names = new Set();
+  const pad = (n) => String(n).padStart(2, '0');
+  let cursor = Date.UTC(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+  const end = Date.UTC(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+  while (cursor <= end) {
+    const d = new Date(cursor);
+    const dateKey = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    names.add(masterBucketNameFor(formId, dateKey));
+    cursor += 24 * 60 * 60 * 1000;
+  }
+  return names;
+}
+
+const LOG_TITLES = {
+  barredura: 'Barredura',
+  premissort: 'Premissort',
+};
+
 const BARREDURA_COLUMNS = [
   { field: 'auditoria', header: 'Auditoría' },
   { field: 'ts', header: 'Fecha/Hora' },
@@ -296,6 +356,21 @@ const BARREDURA_COLUMNS = [
   { field: 'caso', header: 'Caso' },
   { field: 'costo_usd', header: 'Costo USD' },
 ];
+
+const PREMISSORT_COLUMNS = [
+  { field: 'auditoria', header: 'Auditoría' },
+  { field: 'ts', header: 'Fecha/Hora' },
+  { field: 'posicion', header: 'Posición' },
+  { field: 'hu', header: 'HU' },
+  { field: 'shipment_id', header: 'Shipment ID' },
+  { field: 'estado', header: 'Estado' },
+  { field: 'detalle', header: 'Detalle' },
+];
+
+const LOG_COLUMNS = {
+  barredura: BARREDURA_COLUMNS,
+  premissort: PREMISSORT_COLUMNS,
+};
 
 /**
  * El estado "encontrado en catálogo" de Barredura ha tenido 3 nombres
@@ -414,12 +489,13 @@ class GridClient {
   }
 }
 
-class BarreduraViewer {
+class LogViewer {
   constructor() {
     const params = new URLSearchParams(location.search);
     this.docId = params.get('data_doc_id') || '01KZPRK3PDWP9TG0RKW3J9JGN7';
     this.gridClient = new GridClient(this.docId);
-    this.records = [];
+    this.logs = { barredura: [], premissort: [] };
+    this.currentLog = 'barredura';
     this.dateFrom = null;
     this.dateTo = null;
     this.displayedCount = 10;
@@ -436,7 +512,7 @@ class BarreduraViewer {
     this.dateFrom = firstDayOfMonth;
     document.getElementById('date-from').value = firstDayOfMonth.toISOString().split('T')[0];
 
-    await this.loadRecords();
+    await this.loadAllLogs();
   }
 
   async loadHeaderLogo() {
@@ -448,23 +524,23 @@ class BarreduraViewer {
   setupEventListeners() {
     document.getElementById('btn-refresh').addEventListener('click', () => this.refresh());
     document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
-    document.getElementById('date-from').addEventListener('change', (e) => {
+    document.getElementById('date-from').addEventListener('change', async (e) => {
       this.dateFrom = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
-      this.render();
+      await this.loadAllLogs();
     });
-    document.getElementById('date-to').addEventListener('change', (e) => {
+    document.getElementById('date-to').addEventListener('change', async (e) => {
       this.dateTo = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
-      this.render();
+      await this.loadAllLogs();
     });
-    document.getElementById('btn-clear-filters').addEventListener('click', () => {
+    document.getElementById('btn-clear-filters').addEventListener('click', async () => {
       this.dateFrom = null;
       this.dateTo = null;
       document.getElementById('date-from').value = '';
       document.getElementById('date-to').value = '';
       this.displayedCount = 10;
-      this.render();
+      await this.loadAllLogs();
     });
     document.getElementById('btn-load-more').addEventListener('click', () => {
       this.displayedCount += 10;
@@ -472,9 +548,47 @@ class BarreduraViewer {
     });
   }
 
-  async loadRecords() {
-    const data = await this.gridClient.getStateBucket('barredura_master');
-    this.records = (data && data.records) || [];
+  /**
+   * Lee los shards diarios de un log que caen dentro del rango de fechas
+   * actual (sin dateFrom = todo lo que alguna vez tuvo datos, vía
+   * {formId}_shard_registry — bucket minúsculo, no crece con el volumen de
+   * registros). Concurrencia limitada para no lanzar decenas de GET
+   * simultáneos si el rango es amplio.
+   */
+  async loadShardedLog(formId) {
+    let shardNames;
+    if (!this.dateFrom) {
+      const registry = await this.gridClient.getStateBucket(`${formId}_shard_registry`);
+      const dates = registry && registry.dates ? Object.keys(registry.dates) : [];
+      shardNames = new Set([`${formId}_master`, ...dates.map((d) => masterBucketNameFor(formId, d))]);
+    } else {
+      shardNames = shardNamesForRange(formId, this.dateFrom, this.dateTo || new Date());
+    }
+
+    const names = [...shardNames];
+    const CONCURRENCY = 4;
+    const records = [];
+    for (let i = 0; i < names.length; i += CONCURRENCY) {
+      const batch = names.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.all(batch.map((name) => this.gridClient.getStateBucket(name)));
+      batchResults.forEach((data) => {
+        if (data && Array.isArray(data.records)) records.push(...data.records);
+      });
+    }
+    return records;
+  }
+
+  async loadAllLogs() {
+    for (const formId of Object.keys(this.logs)) {
+      this.logs[formId] = await this.loadShardedLog(formId);
+    }
+    // Si el log activo quedó sin datos (o es la carga inicial), salta al
+    // primero que sí tenga, para no mostrar "sin registros" innecesariamente.
+    if (!this.logs[this.currentLog] || this.logs[this.currentLog].length === 0) {
+      const firstWithData = Object.entries(this.logs).find(([, records]) => records.length > 0);
+      if (firstWithData) this.currentLog = firstWithData[0];
+    }
+    this.renderTabs();
     this.render();
   }
 
@@ -484,15 +598,43 @@ class BarreduraViewer {
     btn.classList.add('spinning');
     btn.disabled = true;
     try {
-      await this.loadRecords();
+      await this.loadAllLogs();
     } finally {
       btn.classList.remove('spinning');
       btn.disabled = false;
     }
   }
 
+  renderTabs() {
+    const container = document.getElementById('log-tabs');
+    const hasAny = Object.values(this.logs).some(r => r.length > 0);
+
+    if (!hasAny) {
+      container.style.display = 'none';
+      return;
+    }
+
+    container.style.display = 'flex';
+    container.innerHTML = '';
+
+    for (const [logType, records] of Object.entries(this.logs)) {
+      if (records.length === 0) continue;
+      const tab = document.createElement('button');
+      tab.className = `tab ${logType === this.currentLog ? 'active' : ''}`;
+      tab.textContent = LOG_TITLES[logType] || logType;
+      tab.addEventListener('click', () => {
+        this.currentLog = logType;
+        this.displayedCount = 10;
+        this.render();
+        this.renderTabs();
+      });
+      container.appendChild(tab);
+    }
+  }
+
   render() {
-    if (this.records.length === 0) {
+    const records = this.logs[this.currentLog] || [];
+    if (records.length === 0) {
       document.getElementById('no-data-message').style.display = 'block';
       document.getElementById('analysis-content').style.display = 'none';
       return;
@@ -528,7 +670,7 @@ class BarreduraViewer {
   }
 
   getFilteredRecords() {
-    let records = this.records;
+    let records = this.logs[this.currentLog] || [];
 
     if (this.dateFrom || this.dateTo) {
       records = records.filter(r => {
@@ -556,16 +698,28 @@ class BarreduraViewer {
     container.innerHTML = '';
     const total = records.length;
 
-    this.addKpiCard(container, total.toString(), 'Total');
-    const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
-    this.addKpiCard(container, enCatalogo.toString(), 'Dentro de catálogo');
-    this.addKpiCard(container, (total - enCatalogo).toString(), 'Fuera de catálogo');
-    const conCaso = records.filter(r => (r.caso || '').trim()).length;
-    if (conCaso > 0) this.addKpiCard(container, conCaso.toString(), 'Con caso');
-    const totalCosto = records.reduce((sum, r) => sum + (Number(r.costo_usd) || 0), 0);
-    if (totalCosto > 0) this.addKpiCard(container, `$${totalCosto.toFixed(2)}`, 'Costo USD');
-    const sinCosto = records.filter(r => needsCosto(r) && !hasCosto(r)).length;
-    if (sinCosto > 0) this.addKpiCard(container, sinCosto.toString(), 'Sin costo capturado');
+    if (this.currentLog === 'barredura') {
+      this.addKpiCard(container, total.toString(), 'Total');
+      const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
+      this.addKpiCard(container, enCatalogo.toString(), 'Dentro de catálogo');
+      this.addKpiCard(container, (total - enCatalogo).toString(), 'Fuera de catálogo');
+      const conCaso = records.filter(r => (r.caso || '').trim()).length;
+      if (conCaso > 0) this.addKpiCard(container, conCaso.toString(), 'Con caso');
+      const totalCosto = records.reduce((sum, r) => sum + (Number(r.costo_usd) || 0), 0);
+      if (totalCosto > 0) this.addKpiCard(container, `$${totalCosto.toFixed(2)}`, 'Costo USD');
+      const sinCosto = records.filter(r => needsCosto(r) && !hasCosto(r)).length;
+      if (sinCosto > 0) this.addKpiCard(container, sinCosto.toString(), 'Sin costo capturado');
+    } else if (this.currentLog === 'premissort') {
+      this.addKpiCard(container, total.toString(), 'Total');
+      const encontrados = records.filter(r => r.estado === 'Encontrado').length;
+      this.addKpiCard(container, encontrados.toString(), 'Encontrados');
+      const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
+      if (pendienteReubicar > 0) this.addKpiCard(container, pendienteReubicar.toString(), 'Sobrante — pendiente reubicar');
+      const fueraCatalogo = records.filter(r => r.estado === 'Sobrante - fuera de catálogo').length;
+      if (fueraCatalogo > 0) this.addKpiCard(container, fueraCatalogo.toString(), 'Sobrante — fuera de catálogo');
+      const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
+      this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');
+    }
   }
 
   addKpiCard(container, value, label) {
@@ -602,12 +756,17 @@ class BarreduraViewer {
       this._chartsRafId = null;
       container.innerHTML = '';
 
-      const builders = [
-        () => this.buildEstadoChart(records),
-        () => this.buildLugarChart(records),
-        () => this.buildCasoCountChart(records),
-        () => this.buildCostoChart(records),
-      ];
+      let builders = [];
+      if (this.currentLog === 'barredura') {
+        builders = [
+          () => this.buildBarreduraEstadoChart(records),
+          () => this.buildLugarChart(records),
+          () => this.buildCasoCountChart(records),
+          () => this.buildCostoChart(records),
+        ];
+      } else if (this.currentLog === 'premissort') {
+        builders = [() => this.buildPremissortEstadoChart(records)];
+      }
 
       // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
       // (auto-fit), el número de columnas depende de cuántos items hay en
@@ -649,14 +808,6 @@ class BarreduraViewer {
       }],
       layout: {
         title: 'Costo USD por Caso',
-        // automargin: los nombres de caso ('Con estatus BPP', etc.) son
-        // largos y se cortaban contra el overflow:hidden del contenedor —
-        // esto hace que Plotly encoja el área de la gráfica para que las
-        // etiquetas siempre quepan, en vez de desbordarse.
-        // Sin título de eje (el título de la gráfica ya dice "por Caso") —
-        // liberar ese espacio era necesario para que los nombres largos
-        // ("Con estatus BPP") y su ángulo no se recortaran contra el
-        // overflow:hidden del contenedor de altura fija.
         xaxis: { automargin: true, tickangle: -30 },
         yaxis: { title: 'USD', automargin: true },
         plot_bgcolor: 'transparent',
@@ -691,7 +842,7 @@ class BarreduraViewer {
     };
   }
 
-  buildEstadoChart(records) {
+  buildBarreduraEstadoChart(records) {
     const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
     const fueraCatalogo = records.length - enCatalogo;
 
@@ -700,7 +851,6 @@ class BarreduraViewer {
         labels: ['Dentro de catálogo', 'Fuera de catálogo'],
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
-        // Todas las gráficas de la app usan tonos de amarillo, no verde/rojo.
         marker: { colors: ['#FFD100', '#8A7300'] },
       }],
       layout: {
@@ -711,6 +861,29 @@ class BarreduraViewer {
         showlegend: true,
         legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.1 },
         margin: { l: 20, r: 20, t: 40, b: 50 },
+      },
+    };
+  }
+
+  buildPremissortEstadoChart(records) {
+    const counts = this.countByField(records, 'estado');
+    const estados = Object.keys(counts);
+
+    return {
+      data: [{
+        x: estados,
+        y: estados.map((e) => counts[e]),
+        type: 'bar',
+        marker: { color: '#FFD100' },
+      }],
+      layout: {
+        title: 'Distribución por Estado',
+        xaxis: { automargin: true, tickangle: -30 },
+        yaxis: { title: 'Cantidad', automargin: true },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 60 },
       },
     };
   }
@@ -726,9 +899,6 @@ class BarreduraViewer {
       }],
       layout: {
         title: 'Escaneos por lugar',
-        // Sin título de eje, mismo motivo que en el chart de costo — libera
-        // el espacio que faltaba para que los nombres de lugar no se
-        // recortaran.
         xaxis: { automargin: true, tickangle: -30 },
         yaxis: { title: 'Cantidad', automargin: true },
         plot_bgcolor: 'transparent',
@@ -745,8 +915,10 @@ class BarreduraViewer {
     thead.innerHTML = '';
     tbody.innerHTML = '';
 
+    const columns = LOG_COLUMNS[this.currentLog] || [];
+
     const tr = document.createElement('tr');
-    BARREDURA_COLUMNS.forEach(col => {
+    columns.forEach(col => {
       const th = document.createElement('th');
       th.textContent = col.header;
       tr.appendChild(th);
@@ -755,7 +927,7 @@ class BarreduraViewer {
 
     records.forEach((record) => {
       const tr = document.createElement('tr');
-      BARREDURA_COLUMNS.forEach(col => {
+      columns.forEach(col => {
         const td = document.createElement('td');
         const value = record[col.field] || '';
 
@@ -768,9 +940,12 @@ class BarreduraViewer {
           // Registros viejos guardaron el correo completo; ahora se
           // guarda el LDAP. Se muestra solo el LDAP en ambos casos.
           td.textContent = value.replace(/@.*$/, '');
-        } else if (col.field === 'estado') {
+        } else if (this.currentLog === 'barredura' && col.field === 'estado') {
           td.className = isDentroDeCatalogo(value) ? 'status-good' : 'status-critical';
           td.textContent = isDentroDeCatalogo(value) ? 'Dentro de catálogo' : 'Fuera de catálogo';
+        } else if (this.currentLog === 'premissort' && col.field === 'estado') {
+          td.className = value === 'Encontrado' ? 'status-good' : 'status-critical';
+          td.textContent = value;
         } else {
           td.textContent = value;
         }
@@ -789,9 +964,10 @@ class BarreduraViewer {
     }
 
     const filteredRecords = this.getFilteredRecords();
+    const columns = LOG_COLUMNS[this.currentLog] || [];
     const queryLower = query.toLowerCase();
     const searchResults = filteredRecords.filter(r => {
-      const recordText = BARREDURA_COLUMNS
+      const recordText = columns
         .map(col => String(r[col.field] || '').toLowerCase())
         .join(' ');
       return recordText.includes(queryLower);
@@ -806,7 +982,7 @@ class BarreduraViewer {
   }
 }
 
-const viewer = new BarreduraViewer();
+const viewer = new LogViewer();
 </script>
 </body>
 </html>
