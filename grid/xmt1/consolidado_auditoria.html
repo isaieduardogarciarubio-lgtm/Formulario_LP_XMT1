@@ -2205,6 +2205,20 @@
         if (sinCosto > 0) {
           this.addKpiCard(container, sinCosto.toString(), 'Sin costo capturado');
         }
+      } else if (this.currentLog === 'premissort') {
+        this.addKpiCard(container, total.toString(), 'Total');
+        const encontrados = records.filter(r => r.estado === 'Encontrado').length;
+        this.addKpiCard(container, encontrados.toString(), 'Encontrados');
+        const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
+        if (pendienteReubicar > 0) {
+          this.addKpiCard(container, pendienteReubicar.toString(), 'Sobrante — pendiente reubicar');
+        }
+        const fueraCatalogo = records.filter(r => r.estado === 'Sobrante - fuera de catálogo').length;
+        if (fueraCatalogo > 0) {
+          this.addKpiCard(container, fueraCatalogo.toString(), 'Sobrante — fuera de catálogo');
+        }
+        const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
+        this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');
       }
     }
 
@@ -2283,6 +2297,8 @@
             () => this.buildBarreduraCasoCountChart(records),
             () => this.buildBarreduraCostoChart(records),
           ];
+        } else if (this.currentLog === 'premissort') {
+          builders = [() => this.buildPremissortEstadoChart(records)];
         }
 
         // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
@@ -2343,6 +2359,29 @@
       const layout = {
         title: 'Distribución de Situaciones',
         xaxis: { title: 'Situación' },
+        yaxis: { title: 'Cantidad' },
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        margin: { l: 50, r: 30, t: 40, b: 40 },
+      };
+
+      return { data, layout };
+    }
+
+    buildPremissortEstadoChart(records) {
+      const counts = this.countByField(records, 'estado');
+
+      const data = [{
+        x: Object.keys(counts),
+        y: Object.values(counts),
+        type: 'bar',
+        marker: { color: '#FFD100' },
+      }];
+
+      const layout = {
+        title: 'Distribución por Estado',
+        xaxis: { title: 'Estado' },
         yaxis: { title: 'Cantidad' },
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
@@ -2712,6 +2751,9 @@
           } else if (this.currentLog === 'barredura' && col.field === 'estado') {
             td.className = isDentroDeCatalogo(value) ? 'status-good' : 'status-critical';
             td.textContent = isDentroDeCatalogo(value) ? 'Dentro de catálogo' : 'Fuera de catálogo';
+          } else if (this.currentLog === 'premissort' && col.field === 'estado') {
+            td.className = value === 'Encontrado' ? 'status-good' : 'status-critical';
+            td.textContent = value;
           } else if (this.currentLog === 'barredura' && col.field === 'costo_usd') {
             // Costo USD: columna editable, no viene de la captura — se
             // llena manualmente desde el dashboard.
