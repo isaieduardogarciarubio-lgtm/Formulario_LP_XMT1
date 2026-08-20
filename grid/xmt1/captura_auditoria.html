@@ -2273,7 +2273,7 @@ const FORMS_CONFIG = {
   // continuo contra el catálogo de esa posición (ver PremissortSession).
   premissort: {
     id: 'premissort',
-    title: 'Premissort',
+    title: 'Premissort Contenerizado',
     description: 'Escanea la posición y audita los shipments esperados de su HU',
     icon: 'handheldReader',
     fields: [
@@ -5507,8 +5507,29 @@ class PremissortSession {
     }
   }
 
+  /**
+   * El lector de posición puede traer texto plano (AS17-1-1-3) o un QR/JSON
+   * con la posición bajo la clave NAME, ej. {"ID":625195,"NAME":"AS17-1-1-3"}
+   * — se busca esa clave sin distinguir mayúsculas/minúsculas, igual que
+   * ScanParser.extract con los QR de HU/shipment.
+   */
   normalizePosition(raw) {
-    return String(raw || '').trim().toUpperCase();
+    const text = String(raw || '').trim();
+    if (text.startsWith('{')) {
+      try {
+        const obj = JSON.parse(text);
+        if (obj && typeof obj === 'object') {
+          const nameKey = Object.keys(obj).find((k) => k.toLowerCase() === 'name');
+          if (nameKey != null && obj[nameKey] != null) {
+            return String(obj[nameKey]).trim().toUpperCase();
+          }
+        }
+        return '';
+      } catch (e) {
+        return '';
+      }
+    }
+    return text.toUpperCase();
   }
 
   /* ====================================================================== */
@@ -5524,7 +5545,7 @@ class PremissortSession {
       <div class="step-screen scanner-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
-          <div class="step-progress">Premissort</div>
+          <div class="step-progress">Premissort Contenerizado</div>
         </div>
         <div class="scan-mode-slot"></div>
         <h1 class="step-question">${camera ? 'Escanea la posición' : 'Escanea o ingresa la posición'}</h1>
@@ -5696,7 +5717,7 @@ class PremissortSession {
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
-          <div class="step-progress">Premissort</div>
+          <div class="step-progress">Premissort Contenerizado</div>
         </div>
         <h1 class="step-question">Consultando posición ${posicion}…</h1>
         <div class="step-support">Consultando BigQuery en vivo — puede tardar unos segundos.</div>
@@ -5764,7 +5785,7 @@ class PremissortSession {
       <div class="step-screen scanner-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
-          <div class="step-progress">Premissort</div>
+          <div class="step-progress">Premissort Contenerizado</div>
         </div>
         <div class="session-pill">
           <div class="session-pill-info">Posición ${this.posicion} · HU ${this.hu || '—'}</div>
@@ -6026,7 +6047,7 @@ class PremissortSession {
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
-          <div class="step-progress">Premissort</div>
+          <div class="step-progress">Premissort Contenerizado</div>
         </div>
         <h1 class="step-question">Consultando ${shipmentId}…</h1>
         <div class="step-support">Consultando BigQuery en vivo — puede tardar unos segundos.</div>
@@ -9083,7 +9104,7 @@ class CapturaApp {
       <div id="form-container">
         <div class="step-screen">
           <div class="step-progress-row">
-            <div class="step-progress">Premissort</div>
+            <div class="step-progress">Premissort Contenerizado</div>
           </div>
           <h1 class="step-question">Cargando…</h1>
           <div class="step-support">Leyendo lo escaneado hoy para la deduplicación.</div>
