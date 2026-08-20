@@ -1650,6 +1650,16 @@
     return estado === 'En catálogo' || estado === 'Backlog esperado' || estado === 'Dentro de catálogo';
   }
 
+  /**
+   * Premissort ya no depende de un catálogo subido (consulta BigQuery en
+   * vivo) — el estado se renombró de 'Sobrante - fuera de catálogo' a
+   * 'Sobrante - no localizado', pero se acepta el nombre viejo para que
+   * los registros capturados antes del rename se sigan contando bien.
+   */
+  function isSobranteNoLocalizado(estado) {
+    return estado === 'Sobrante - no localizado' || estado === 'Sobrante - fuera de catálogo';
+  }
+
   function hasCosto(record) {
     return record.costo_usd !== undefined && record.costo_usd !== null && String(record.costo_usd).trim() !== '';
   }
@@ -2213,9 +2223,9 @@
         if (pendienteReubicar > 0) {
           this.addKpiCard(container, pendienteReubicar.toString(), 'Sobrante — pendiente reubicar');
         }
-        const fueraCatalogo = records.filter(r => r.estado === 'Sobrante - fuera de catálogo').length;
-        if (fueraCatalogo > 0) {
-          this.addKpiCard(container, fueraCatalogo.toString(), 'Sobrante — fuera de catálogo');
+        const noLocalizado = records.filter(r => isSobranteNoLocalizado(r.estado)).length;
+        if (noLocalizado > 0) {
+          this.addKpiCard(container, noLocalizado.toString(), 'Sobrante — no localizado');
         }
         const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
         this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');

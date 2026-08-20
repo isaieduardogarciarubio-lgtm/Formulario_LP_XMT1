@@ -2269,8 +2269,8 @@ const FORMS_CONFIG = {
   },
 
   // No usa el wizard genérico: la posición se escanea una vez (fija el HU
-  // de esa posición) y los shipments esperados se escanean en loop
-  // continuo contra el catálogo de esa posición (ver PremissortSession).
+  // de esa posición, consultado en vivo contra BigQuery) y los shipments
+  // esperados se escanean en loop continuo (ver PremissortSession).
   premissort: {
     id: 'premissort',
     title: 'Premissort Contenerizado',
@@ -5432,8 +5432,8 @@ class InboundDriversSession {
  *     actualiza el contador de faltantes en pantalla).
  *   - No esperado aquí: dispara un segundo lookup en vivo por shipment_id
  *     para saber si pertenece a otra posición (sobrante ubicable — pausa y
- *     pregunta si ya se reubicó físicamente) o no existe en absoluto
- *     (sobrante fuera de catálogo — pide investigar en TMS y elegir una
+ *     pregunta si ya se reubicó físicamente) o no aparece en BigQuery
+ *     (sobrante no localizado — pide investigar en TMS y elegir una
  *     acción). Ninguno de los dos lookups es instantáneo: cada uno
  *     reescribe+refresca+lee la Dataset Definition de este dispositivo
  *     (nombre estable por deviceId, para que dos dispositivos escaneando
@@ -6059,7 +6059,7 @@ class PremissortSession {
    * Lookup en vivo por shipment_id (¿a qué posición pertenece, si a
    * alguna?) para un shipment que no estaba en la lista esperada de la
    * posición actual. Con resultado -> sobrante ubicable (renderMisplaced).
-   * Sin resultado -> sobrante fuera de catálogo (renderOutOfCatalog).
+   * Sin resultado -> sobrante no localizado (renderOutOfCatalog).
    */
   async resolveSurplus(shipmentId) {
     this.renderSurplusLoading(shipmentId);
@@ -6151,7 +6151,7 @@ class PremissortSession {
   }
 
   /* ====================================================================== */
-  /* Sobrante que SÍ existe en catálogo, pero de otra posición             */
+  /* Sobrante que SÍ se localizó en BigQuery, pero en otra posición        */
   /* ====================================================================== */
 
   renderMisplaced(shipmentId, elsewhere) {
@@ -6220,7 +6220,7 @@ class PremissortSession {
   }
 
   /* ====================================================================== */
-  /* Sobrante fuera de catálogo: investigar en TMS + elegir acción         */
+  /* Sobrante no localizado en BigQuery: investigar en TMS + elegir acción */
   /* ====================================================================== */
 
   renderOutOfCatalog(shipmentId) {
@@ -6229,12 +6229,12 @@ class PremissortSession {
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
-          <div class="step-progress">Sobrante — fuera de catálogo</div>
+          <div class="step-progress">Sobrante — no localizado</div>
         </div>
         <div class="driver-shipment-card">
           <div class="driver-shipment-id">${shipmentId}</div>
           <div class="driver-shipment-row">
-            <span class="driver-badge driver-badge-out">No está en el catálogo</span>
+            <span class="driver-badge driver-badge-out">No se encontró en BigQuery</span>
           </div>
         </div>
         <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Investigar en TMS</a>
@@ -6271,7 +6271,7 @@ class PremissortSession {
           posicion: this.posicion,
           hu: this.hu,
           shipment_id: shipmentId,
-          estado: 'Sobrante - fuera de catálogo',
+          estado: 'Sobrante - no localizado',
           detalle: accion,
         });
       }
