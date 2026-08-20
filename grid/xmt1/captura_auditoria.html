@@ -5433,7 +5433,7 @@ class InboundDriversSession {
  *   - No esperado aquí: dispara un segundo lookup en vivo por shipment_id
  *     para saber si pertenece a otra posición (sobrante ubicable — pausa y
  *     pregunta si ya se reubicó físicamente) o no aparece en BigQuery
- *     (sobrante no localizado — pide investigar en TMS y elegir una
+ *     (sobrante no contenerizado — pide investigar en TMS y elegir una
  *     acción). Ninguno de los dos lookups es instantáneo: cada uno
  *     reescribe+refresca+lee la Dataset Definition de este dispositivo
  *     (nombre estable por deviceId, para que dos dispositivos escaneando
@@ -5720,7 +5720,7 @@ class PremissortSession {
           <div class="step-progress">Premissort Contenerizado</div>
         </div>
         <h1 class="step-question">Consultando posición ${posicion}…</h1>
-        <div class="step-support">Consultando BigQuery en vivo — puede tardar unos segundos.</div>
+        <div class="step-support">Consultando BigQuery en vivo — puede tardar hasta un minuto, no vuelvas a escanear todavía.</div>
       </div>
     `;
   }
@@ -6050,7 +6050,7 @@ class PremissortSession {
           <div class="step-progress">Premissort Contenerizado</div>
         </div>
         <h1 class="step-question">Consultando ${shipmentId}…</h1>
-        <div class="step-support">Consultando BigQuery en vivo — puede tardar unos segundos.</div>
+        <div class="step-support">Consultando BigQuery en vivo — puede tardar hasta un minuto, no vuelvas a escanear todavía.</div>
       </div>
     `;
   }
@@ -6059,7 +6059,7 @@ class PremissortSession {
    * Lookup en vivo por shipment_id (¿a qué posición pertenece, si a
    * alguna?) para un shipment que no estaba en la lista esperada de la
    * posición actual. Con resultado -> sobrante ubicable (renderMisplaced).
-   * Sin resultado -> sobrante no localizado (renderOutOfCatalog).
+   * Sin resultado -> sobrante no contenerizado (renderOutOfCatalog).
    */
   async resolveSurplus(shipmentId) {
     this.renderSurplusLoading(shipmentId);
@@ -6220,7 +6220,7 @@ class PremissortSession {
   }
 
   /* ====================================================================== */
-  /* Sobrante no localizado en BigQuery: investigar en TMS + elegir acción */
+  /* Sobrante no contenerizado: investigar en TMS + elegir acción         */
   /* ====================================================================== */
 
   renderOutOfCatalog(shipmentId) {
@@ -6229,7 +6229,7 @@ class PremissortSession {
       <div class="step-screen step-screen-compact">
         <div class="step-progress-row">
           <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
-          <div class="step-progress">Sobrante — no localizado</div>
+          <div class="step-progress">Sobrante — no contenerizado</div>
         </div>
         <div class="driver-shipment-card">
           <div class="driver-shipment-id">${shipmentId}</div>
@@ -6271,7 +6271,7 @@ class PremissortSession {
           posicion: this.posicion,
           hu: this.hu,
           shipment_id: shipmentId,
-          estado: 'Sobrante - no localizado',
+          estado: 'Sobrante - no contenerizado',
           detalle: accion,
         });
       }
@@ -8039,7 +8039,7 @@ class GridClient {
    * vez de mostrar datos de otra consulta. Cero filas sigue siendo un
    * resultado válido (no encontrado), no un mismatch.
    */
-  async waitForMatchingContent(name, filterValue, validateField, { timeoutMs = 20000, intervalMs = 800 } = {}) {
+  async waitForMatchingContent(name, filterValue, validateField, { timeoutMs = 60000, intervalMs = 1000 } = {}) {
     const deadline = Date.now() + timeoutMs;
     let lastRows = [];
     while (Date.now() < deadline) {

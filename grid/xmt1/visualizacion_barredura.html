@@ -214,6 +214,7 @@
     tr:hover { background: rgba(255, 255, 255, .02); }
     .status-good { color: var(--c-green); font-weight: 600; }
     .status-critical { color: var(--c-red); font-weight: 600; }
+    .status-warn { color: var(--c-orange); font-weight: 600; }
 
     .divider { height: 1px; background: var(--border-soft); margin: 20px 0; }
 
@@ -383,13 +384,31 @@ function isDentroDeCatalogo(estado) {
 }
 
 /**
- * Premissort ya no depende de un catálogo subido (consulta BigQuery en
- * vivo) — el estado se renombró de 'Sobrante - fuera de catálogo' a
- * 'Sobrante - no localizado', pero se acepta el nombre viejo para que los
- * registros capturados antes del rename se sigan contando bien.
+ * Un paquete "no contenerizado" es un hallazgo de la auditoría en sí mismo
+ * (no llegó a asignarse a ningún container/posición en BigQuery), no solo
+ * un caso técnico de "no se pudo consultar". El estado ha tenido 2 nombres
+ * antes de este ('Sobrante - fuera de catálogo' cuando Premissort todavía
+ * dependía de un catálogo subido, luego 'Sobrante - no localizado') — se
+ * acepta cualquiera para que los registros viejos se sigan contando bien.
  */
-function isSobranteNoLocalizado(estado) {
-  return estado === 'Sobrante - no localizado' || estado === 'Sobrante - fuera de catálogo';
+function isNoContenerizado(estado) {
+  return estado === 'Sobrante - no contenerizado'
+    || estado === 'Sobrante - no localizado'
+    || estado === 'Sobrante - fuera de catálogo';
+}
+
+/**
+ * Un Missort de Premissort es un paquete que se encontró (o sigue) fuera
+ * de la posición donde debía estar — esa es la razón de ser de esta
+ * auditoría, así que debe quedar visible como tal, no diluido dentro de
+ * "Encontrado" genérico. Dos formas, según si ya se reubicó o no:
+ *   - Ya reubicado: estado 'Encontrado' con detalle "Reubicado desde X"
+ *     (ver PremissortSession.saveMisplaced en captura_auditoria.html).
+ *   - Todavía sin reubicar: estado 'Sobrante - pendiente reubicar'.
+ */
+function isMissort(record) {
+  if (record.estado === 'Sobrante - pendiente reubicar') return true;
+  return record.estado === 'Encontrado' && /^Reubicado desde /.test(record.detalle || '');
 }
 
 /**
@@ -721,12 +740,16 @@ class LogViewer {
       if (sinCosto > 0) this.addKpiCard(container, sinCosto.toString(), 'Sin costo capturado');
     } else if (this.currentLog === 'premissort') {
       this.addKpiCard(container, total.toString(), 'Total');
+      // Missort y No contenerizado primero: son los dos hallazgos que
+      // busca esta auditoría, no casos técnicos secundarios.
+      const missorts = records.filter(isMissort).length;
+      this.addKpiCard(container, missorts.toString(), 'Missorts');
+      const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
+      this.addKpiCard(container, noContenerizado.toString(), 'No contenerizado');
       const encontrados = records.filter(r => r.estado === 'Encontrado').length;
       this.addKpiCard(container, encontrados.toString(), 'Encontrados');
       const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-      if (pendienteReubicar > 0) this.addKpiCard(container, pendienteReubicar.toString(), 'Sobrante — pendiente reubicar');
-      const noLocalizado = records.filter(r => isSobranteNoLocalizado(r.estado)).length;
-      if (noLocalizado > 0) this.addKpiCard(container, noLocalizado.toString(), 'Sobrante — no localizado');
+      if (pendienteReubicar > 0) this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
       const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
       this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');
     }
@@ -775,7 +798,10 @@ class LogViewer {
           () => this.buildCostoChart(records),
         ];
       } else if (this.currentLog === 'premissort') {
-        builders = [() => this.buildPremissortEstadoChart(records)];
+        builders = [
+          () => this.buildPremissortMissortChart(records),
+          () => this.buildPremissortEstadoChart(records),
+        ];
       }
 
       // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
@@ -875,6 +901,32 @@ class LogViewer {
     };
   }
 
+  /** Los dos hallazgos que busca esta auditoría: Missort (ver isMissort) y No contenerizado (ver isNoContenerizado). */
+  buildPremissortMissortChart(records) {
+    const pendiente = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
+    const reubicado = records.filter(r => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '')).length;
+    const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
+    const sinHallazgo = records.length - pendiente - reubicado - noContenerizado;
+
+    return {
+      data: [{
+        labels: ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'],
+        values: [sinHallazgo, reubicado, pendiente, noContenerizado],
+        type: 'pie',
+        marker: { colors: ['#FFD100', '#FF9E45', '#FF5C6C', '#8A7300'] },
+      }],
+      layout: {
+        title: 'Hallazgos de la auditoría',
+        plot_bgcolor: 'transparent',
+        paper_bgcolor: 'transparent',
+        font: { color: '#F4F6F8', size: 11 },
+        showlegend: true,
+        legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
+        margin: { l: 20, r: 20, t: 40, b: 50 },
+      },
+    };
+  }
+
   buildPremissortEstadoChart(records) {
     const counts = this.countByField(records, 'estado');
     const estados = Object.keys(counts);
@@ -954,8 +1006,19 @@ class LogViewer {
           td.className = isDentroDeCatalogo(value) ? 'status-good' : 'status-critical';
           td.textContent = isDentroDeCatalogo(value) ? 'Dentro de catálogo' : 'Fuera de catálogo';
         } else if (this.currentLog === 'premissort' && col.field === 'estado') {
-          td.className = value === 'Encontrado' ? 'status-good' : 'status-critical';
-          td.textContent = value;
+          // Un "Encontrado" que en realidad fue reubicado (missort ya
+          // corregido) se marca distinto de un hallazgo normal — sigue
+          // siendo la razón de ser de la auditoría, no se diluye en verde.
+          if (isMissort(record)) {
+            td.className = 'status-warn';
+            td.textContent = value === 'Encontrado' ? 'Encontrado (missort reubicado)' : value;
+          } else if (isNoContenerizado(value)) {
+            td.className = 'status-critical';
+            td.textContent = 'No contenerizado';
+          } else {
+            td.className = value === 'Encontrado' ? 'status-good' : 'status-critical';
+            td.textContent = value;
+          }
         } else {
           td.textContent = value;
         }
