@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnóstico grid_sql / BigQuery</title>
+<style>
+  :root {
+    --bg: #0a0d10; --surface: #12171b; --border: #232b31;
+    --text: #e8edf0; --text-mut: #8a97a0;
+    --accent: #FFD100; --ok: #34c759; --err: #ff5c6c; --warn: #ffb020;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 20px; max-width: 900px; margin: 0 auto;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--text-mut); font-size: 12.5px; margin-bottom: 20px; line-height: 1.5; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-mut); margin-bottom: 4px; margin-top: 10px; }
+  label:first-child { margin-top: 0; }
+  input, textarea {
+    width: 100%; background: #0d1114; border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12.5px;
+  }
+  textarea { min-height: 110px; resize: vertical; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  button {
+    background: var(--accent); color: #1a1a1a; border: none; border-radius: 8px;
+    padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  button.secondary { background: #232b31; color: var(--text); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:active:not(:disabled) { transform: scale(.98); }
+  .step-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .step-desc { font-size: 11.5px; color: var(--text-mut); margin-bottom: 10px; }
+  #log {
+    background: #0d1114; border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11.5px; line-height: 1.55; max-height: 520px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .entry { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .entry:last-child { border-bottom: none; }
+  .entry-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+  .entry-time { color: var(--text-mut); font-size: 10.5px; }
+  .entry-title { font-weight: 700; }
+  .ok-badge { color: var(--ok); }
+  .err-badge { color: var(--err); }
+  .warn-badge { color: var(--warn); }
+  .entry-body { color: var(--text-mut); }
+  .btn-clear { float: right; }
+</style>
+</head>
+<body>
+
+<h1>Diagnóstico grid_sql / BigQuery</h1>
+<p class="sub">
+  App aislada de una sola pantalla, solo para probar el ciclo Dataset Definition
+  (grid_sql) → refresh → contenido, paso por paso, mostrando la respuesta cruda
+  de Grid en cada llamada. Sirve para distinguir si un fallo (ej. el 422
+  "refresh_mode: Input should be 'external'" visto en Premissort) es específico
+  de un documento/dataset, o un cambio general de la plataforma — probando
+  contra el MISMO doc_id que ya falla y, si hace falta, contra uno distinto.
+  No guarda nada permanente: cada "Ejecutar" solo pisa el dataset de prueba
+  indicado abajo.
+</p>
+
+<div class="card">
+  <label>doc_id</label>
+  <input id="docId" value="01KZPRK3PDWP9TG0RKW3J9JGN7" />
+
+  <label>Nombre del dataset de prueba</label>
+  <input id="datasetName" value="diagnostico_grid_sql_test" />
+
+  <label>SQL (por defecto, la más simple posible: sin FROM, sin tocar tablas reales — aísla si el mecanismo grid_sql/refresh funciona en absoluto)</label>
+  <textarea id="sqlInput">SELECT 1 AS test_value, CURRENT_TIMESTAMP() AS test_ts</textarea>
+
+  <label>refresh_mode a probar</label>
+  <select id="refreshMode" style="width:100%; background:#0d1114; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:9px 11px; font-family: ui-monospace, monospace; font-size:12.5px;">
+    <option value="grid_refresh">grid_refresh (lo que usa Premissort hoy)</option>
+    <option value="external">external (lo que Grid pidió en el 422)</option>
+  </select>
+
+  <div class="row">
+    <button id="btnRunAll">Ejecutar los 4 pasos en orden</button>
+    <button class="secondary" id="btnClear">Limpiar log</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 1 — GET definición</div>
+  <div class="step-desc">Lee la Dataset Definition actual (o 404 si nunca se creó).</div>
+  <button class="secondary" id="btnGet">1. GET definición</button>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 2 — POST/PATCH definición</div>
+  <div class="step-desc">Crea o actualiza la definición con el SQL y refresh_mode de arriba. Aquí es donde Premissort recibió el 422.</div>
+  <button class="secondary" id="btnUpsert">2. Crear/actualizar definición</button>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 3 — POST refresh</div>
+  <div class="step-desc">Dispara la ejecución. Requiere rol editor sobre el documento (viewer recibe 403).</div>
+  <button class="secondary" id="btnRefresh">3. POST refresh</button>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 4 — GET contenido</div>
+  <div class="step-desc">Lee el contenido materializado del dataset.</div>
+  <button class="secondary" id="btnContent">4. GET contenido</button>
+</div>
+
+<div class="card">
+  <div class="step-title">Log <button class="secondary btn-clear" id="btnClear2" style="padding:3px 10px; font-size:11px;">Limpiar</button></div>
+  <div id="log"><div class="entry-body">Sin actividad todavía.</div></div>
+</div>
+
+<script>
+const logEl = document.getElementById('log');
+
+function nowStr() {
+  return new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function logEntry(title, kind, bodyText) {
+  if (logEl.children.length === 1 && logEl.children[0].textContent === 'Sin actividad todavía.') {
+    logEl.innerHTML = '';
+  }
+  const badgeClass = kind === 'ok' ? 'ok-badge' : (kind === 'error' ? 'err-badge' : 'warn-badge');
+  const badgeText = kind === 'ok' ? 'OK' : (kind === 'error' ? 'ERROR' : 'INFO');
+  const entry = document.createElement('div');
+  entry.className = 'entry';
+  entry.innerHTML = `
+    <div class="entry-head">
+      <span class="entry-time">${nowStr()}</span>
+      <span class="entry-title">${title}</span>
+      <span class="${badgeClass}">${badgeText}</span>
+    </div>
+    <div class="entry-body"></div>
+  `;
+  entry.querySelector('.entry-body').textContent = bodyText;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function docId() { return document.getElementById('docId').value.trim(); }
+function datasetName() { return document.getElementById('datasetName').value.trim(); }
+function baseUrl() { return location.origin; }
+
+async function rawRequest(method, url, body) {
+  const opts = { method, credentials: 'include' };
+  if (body !== undefined) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (e) {
+    return { networkError: true, message: e.message };
+  }
+  const text = await res.text();
+  let parsed = text;
+  try { parsed = JSON.parse(text); } catch (e) { /* deja texto crudo */ }
+  return { status: res.status, ok: res.ok, body: parsed };
+}
+
+function formatResult(result) {
+  if (result.networkError) return `Error de red: ${result.message}`;
+  const bodyStr = typeof result.body === 'string' ? result.body : JSON.stringify(result.body, null, 2);
+  return `HTTP ${result.status}\n${bodyStr}`;
+}
+
+async function stepGet() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(datasetName())}`;
+  logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
+  const result = await rawRequest('GET', url);
+  const kind = result.networkError ? 'error' : (result.status === 404 || result.ok ? 'ok' : 'error');
+  logEntry(`GET definición → ${datasetName()}`, kind, formatResult(result));
+  return result;
+}
+
+async function stepUpsert(existingHint) {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(datasetName())}`;
+  const method = existingHint ? 'PATCH' : 'POST';
+  const body = {
+    source_type: 'grid_sql',
+    refresh_mode: document.getElementById('refreshMode').value,
+    format: 'json_rows',
+    source: 'bigquery',
+    source_config: { sql: document.getElementById('sqlInput').value },
+  };
+  logEntry(`${method} ${url}`, 'info', `Body enviado:\n${JSON.stringify(body, null, 2)}`);
+  const result = await rawRequest(method, url, body);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry(`${method} definición → ${datasetName()}`, kind, formatResult(result));
+  return result;
+}
+
+async function stepRefresh() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(datasetName())}/refresh`;
+  logEntry(`POST ${url}`, 'info', '(esperando respuesta...)');
+  const result = await rawRequest('POST', url);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry(`POST refresh → ${datasetName()}`, kind, formatResult(result));
+  return result;
+}
+
+async function stepContent() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/data/${encodeURIComponent(datasetName())}/content`;
+  logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
+  const result = await rawRequest('GET', url);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry(`GET contenido → ${datasetName()}`, kind, formatResult(result));
+  return result;
+}
+
+document.getElementById('btnGet').addEventListener('click', () => stepGet());
+document.getElementById('btnUpsert').addEventListener('click', async () => {
+  const existing = await stepGet();
+  await stepUpsert(!existing.networkError && existing.status !== 404);
+});
+document.getElementById('btnRefresh').addEventListener('click', () => stepRefresh());
+document.getElementById('btnContent').addEventListener('click', () => stepContent());
+
+document.getElementById('btnRunAll').addEventListener('click', async () => {
+  const btn = document.getElementById('btnRunAll');
+  btn.disabled = true;
+  try {
+    const existing = await stepGet();
+    const upsertResult = await stepUpsert(!existing.networkError && existing.status !== 404);
+    if (upsertResult.networkError || !upsertResult.ok) {
+      logEntry('Secuencia detenida', 'warn', 'El paso 2 (crear/actualizar definición) falló — no se continúa con refresh/contenido hasta que este paso dé OK.');
+      return;
+    }
+    await stepRefresh();
+    await stepContent();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function clearLog() {
+  logEl.innerHTML = '<div class="entry-body">Sin actividad todavía.</div>';
+}
+document.getElementById('btnClear').addEventListener('click', clearLog);
+document.getElementById('btnClear2').addEventListener('click', clearLog);
+</script>
+</body>
+</html>
