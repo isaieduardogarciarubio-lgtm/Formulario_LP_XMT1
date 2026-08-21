@@ -81,11 +81,13 @@
 
 <h1>Explorador de endpoints — Grid</h1>
 <p class="sub">
-  Lee el spec OpenAPI que Grid publica en vivo y extrae todos los endpoints
-  (método + ruta + tag + resumen), buscable y filtrable por tag, para tener
-  el mapa completo de la API sin adivinar por prueba y error. Útil ahora para
-  encontrar el flujo real de <code>external_push</code> (upload-url / publish)
-  que reemplazó a <code>grid_sql</code>.
+  Lee el spec OpenAPI que Grid publica en vivo y extrae tanto los endpoints
+  (método + ruta + tag + resumen) como los <code>components.schemas</code>
+  a los que apuntan sus <code>$ref</code> — el spec de paths por sí solo no
+  trae los schemas inline, así que sin esto no se ve la forma real del body
+  que espera cada endpoint. Útil ahora para ver el shape exacto de
+  <code>DatasetUploadUrlResponse</code>/<code>DatasetPublishRequest</code>
+  del flujo <code>external_push</code> que reemplazó a <code>grid_sql</code>.
 </p>
 
 <div class="card">
@@ -117,13 +119,28 @@
 </div>
 
 <div class="card">
-  <div class="step-title" style="font-size:13px; font-weight:700; margin-bottom:8px;">Detalle del endpoint seleccionado</div>
-  <div id="detail"><div class="empty-hint">Selecciona una fila de la tabla para ver parámetros, request body y responses.</div></div>
+  <label>Buscar schemas (components.schemas — los $ref que usan los endpoints de arriba)</label>
+  <input id="schemaSearchInput" placeholder="ej. Dataset, Upload, Publish..." />
+  <div class="row" style="justify-content: space-between; margin-top:8px;">
+    <span class="count-badge" id="schemaCountBadge">Sin cargar todavía.</span>
+  </div>
+  <table>
+    <thead>
+      <tr><th style="width:220px;">Schema</th><th style="width:90px;">Tipo</th><th>Propiedades</th></tr>
+    </thead>
+    <tbody id="schemaTableBody"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="step-title" style="font-size:13px; font-weight:700; margin-bottom:8px;">Detalle seleccionado (endpoint o schema)</div>
+  <div id="detail"><div class="empty-hint">Selecciona una fila de cualquiera de las dos tablas para ver el detalle completo.</div></div>
 </div>
 
 <script>
 let spec = null;
 let endpoints = [];
+let schemas = [];
 let activeTag = null;
 
 const statusText = document.getElementById('statusText');
@@ -133,6 +150,9 @@ const detailEl = document.getElementById('detail');
 const tagChipsEl = document.getElementById('tagChips');
 const searchInput = document.getElementById('searchInput');
 const btnDownload = document.getElementById('btnDownload');
+const schemaSearchInput = document.getElementById('schemaSearchInput');
+const schemaCountBadge = document.getElementById('schemaCountBadge');
+const schemaTableBody = document.getElementById('schemaTableBody');
 
 function setStatus(text, kind) {
   statusText.textContent = text;
@@ -196,6 +216,24 @@ function flattenEndpoints(spec) {
   return list;
 }
 
+/**
+ * Aplana components.schemas — son a los que apuntan los $ref de requestBody/
+ * responses de cada endpoint (DatasetDefinitionRequest, DatasetPublishRequest,
+ * etc.), y el spec de paths por sí solo no los incluye inline.
+ */
+function flattenSchemas(spec) {
+  const schemaMap = (spec.components && spec.components.schemas) || {};
+  const list = Object.entries(schemaMap).map(([name, def]) => ({
+    name,
+    type: def.type || (def.enum ? 'enum' : (def.allOf || def.oneOf || def.anyOf ? 'composed' : 'object')),
+    properties: def.properties || {},
+    required: def.required || [],
+    def,
+  }));
+  list.sort((a, b) => a.name.localeCompare(b.name));
+  return list;
+}
+
 function allTags(list) {
   const set = new Set();
   list.forEach((e) => e.tags.forEach((t) => set.add(t)));
@@ -244,6 +282,7 @@ function renderTable() {
     `;
     tr.addEventListener('click', () => {
       tableBody.querySelectorAll('tr.selected').forEach((el) => el.classList.remove('selected'));
+      schemaTableBody.querySelectorAll('tr.selected').forEach((el) => el.classList.remove('selected'));
       tr.classList.add('selected');
       showDetail(e);
     });
@@ -265,6 +304,41 @@ function showDetail(e) {
   detailEl.textContent = JSON.stringify(summary, null, 2);
 }
 
+function filteredSchemas() {
+  const q = schemaSearchInput.value.trim().toLowerCase();
+  if (!q) return schemas;
+  return schemas.filter((s) => {
+    const haystack = `${s.name} ${Object.keys(s.properties).join(' ')}`.toLowerCase();
+    return haystack.includes(q);
+  });
+}
+
+function renderSchemaTable() {
+  const rows = filteredSchemas();
+  schemaCountBadge.textContent = `${rows.length} de ${schemas.length} schemas`;
+  schemaTableBody.innerHTML = '';
+  rows.forEach((s) => {
+    const tr = document.createElement('tr');
+    const propNames = Object.keys(s.properties).join(', ') || '—';
+    tr.innerHTML = `
+      <td class="path-cell">${s.name}</td>
+      <td>${s.type}</td>
+      <td class="summary-cell">${propNames}</td>
+    `;
+    tr.addEventListener('click', () => {
+      schemaTableBody.querySelectorAll('tr.selected').forEach((el) => el.classList.remove('selected'));
+      tableBody.querySelectorAll('tr.selected').forEach((el) => el.classList.remove('selected'));
+      tr.classList.add('selected');
+      showSchemaDetail(s);
+    });
+    schemaTableBody.appendChild(tr);
+  });
+}
+
+function showSchemaDetail(s) {
+  detailEl.textContent = JSON.stringify({ name: s.name, ...s.def }, null, 2);
+}
+
 async function loadSpec() {
   const btn = document.getElementById('btnLoad');
   btn.disabled = true;
@@ -277,10 +351,12 @@ async function loadSpec() {
     }
     spec = found.spec;
     endpoints = flattenEndpoints(spec);
+    schemas = flattenSchemas(spec);
     activeTag = null;
-    setStatus(`OK — ${found.path} · ${spec.info?.title || '?'} v${spec.info?.version || '?'} · ${endpoints.length} endpoints`, 'ok');
+    setStatus(`OK — ${found.path} · ${spec.info?.title || '?'} v${spec.info?.version || '?'} · ${endpoints.length} endpoints · ${schemas.length} schemas`, 'ok');
     renderTagChips();
     renderTable();
+    renderSchemaTable();
     btnDownload.disabled = false;
   } finally {
     btn.disabled = false;
@@ -289,7 +365,7 @@ async function loadSpec() {
 
 function downloadExtracted() {
   if (!endpoints.length) return;
-  const exportable = endpoints.map((e) => ({
+  const exportableEndpoints = endpoints.map((e) => ({
     method: e.method,
     route: e.route,
     tags: e.tags,
@@ -300,7 +376,13 @@ function downloadExtracted() {
     requestBody: e.operation.requestBody || null,
     responses: e.operation.responses || {},
   }));
-  const blob = new Blob([JSON.stringify({ info: spec.info, endpoints: exportable }, null, 2)], { type: 'application/json' });
+  const exportableSchemas = {};
+  schemas.forEach((s) => { exportableSchemas[s.name] = s.def; });
+  const blob = new Blob([JSON.stringify({
+    info: spec.info,
+    endpoints: exportableEndpoints,
+    schemas: exportableSchemas,
+  }, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -314,6 +396,7 @@ function downloadExtracted() {
 document.getElementById('btnLoad').addEventListener('click', loadSpec);
 btnDownload.addEventListener('click', downloadExtracted);
 searchInput.addEventListener('input', renderTable);
+schemaSearchInput.addEventListener('input', renderSchemaTable);
 </script>
 </body>
 </html>
