@@ -90,6 +90,20 @@
   <label>SQL a usar en los pasos 3 y 4 (simple a propósito: aísla si el mecanismo funciona, sin depender de las tablas reales)</label>
   <textarea id="sqlInput">SELECT 1 AS test_value, CURRENT_TIMESTAMP() AS test_ts</textarea>
 
+  <label>SQL real para el paso 5 (deja la que trae por defecto — es la query real que ya tenía el dataset existente de arriba, así el paso 5 no solo prueba, sino que lo deja funcional otra vez)</label>
+  <textarea id="sqlRestore">SELECT
+  POS.ASSEMBLY.POSITION.NAME AS POSICION,
+  POS.CONTENT.CODE AS HU,
+  SHP.SHIPMENT_ID
+FROM `meli-bi-data.WHOWNER.BT_SHP_MT_ASSEMBLY_CONTAINER` AS POS
+LEFT JOIN `meli-bi-data.WHOWNER.BT_SHP_MT_ASSEMBLY_CONTAINER_MLF_EVENT` AS SHP
+  ON POS.CONTENT.CODE = SHP.CONTENT_CODE
+  AND SHP.DATE_EVENT >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+WHERE POS.LOGISTIC_CENTER_ID = 'MXXMT1'
+  AND POS.ASSEMBLY_CREATED_DATE >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+  AND POS.STATUS = 'created'
+  AND POS.ASSEMBLY.POSITION.NAME = 'AS8-1-1-3'</textarea>
+
   <div class="row">
     <button id="btnRunAll">Ejecutar los 4 pasos en orden</button>
     <button class="secondary" id="btnClear">Limpiar log</button>
@@ -135,6 +149,20 @@
     dataset real indicado en el paso 2 — usa uno de prueba si te preocupa.
   </div>
   <button class="secondary" id="btnPatch">4. PATCH dataset existente</button>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 5 — PATCH con refresh_mode: 'external' + refresh + leer contenido</div>
+  <div class="step-desc">
+    El paso 4 mostró que el 422 al actualizar un dataset existente solo se queja
+    de <code>refresh_mode</code>, no de <code>source_type</code>. Este paso prueba
+    si <code>refresh_mode: 'external'</code> (en vez de <code>'grid_refresh'</code>)
+    deja pasar el PATCH y, más importante, si el refresh que sigue todavía ejecuta
+    la SQL contra BigQuery de verdad o si "external" significa que Grid ya no la
+    corre por ti. Usa la SQL real de arriba, así que si funciona, deja el dataset
+    con datos reales otra vez (no con el "SELECT 1" del paso 4).
+  </div>
+  <button class="secondary" id="btnPatchExternal">5. PATCH refresh_mode:external + refresh + contenido</button>
 </div>
 
 <div class="card">
@@ -247,10 +275,47 @@ async function stepPatch() {
   return result;
 }
 
+async function stepPatchExternal() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(existingName())}`;
+  const body = {
+    source_type: 'grid_sql',
+    refresh_mode: 'external',
+    format: 'json_rows',
+    source: 'bigquery',
+    source_config: { sql: document.getElementById('sqlRestore').value },
+  };
+  logEntry(`PATCH ${url}`, 'info', `Body enviado:\n${JSON.stringify(body, null, 2)}`);
+  const patchResult = await rawRequest('PATCH', url, body);
+  const patchKind = patchResult.networkError ? 'error' : (patchResult.ok ? 'ok' : 'error');
+  logEntry(`PATCH refresh_mode:external → ${existingName()}`, patchKind, formatResult(patchResult));
+  if (patchResult.networkError || !patchResult.ok) {
+    logEntry('Secuencia detenida', 'warn', 'El PATCH con refresh_mode:external falló — no se continúa con refresh/contenido.');
+    return patchResult;
+  }
+
+  const refreshUrl = `${url}/refresh`;
+  logEntry(`POST ${refreshUrl}`, 'info', '(disparando refresh...)');
+  const refreshResult = await rawRequest('POST', refreshUrl);
+  const refreshKind = refreshResult.networkError ? 'error' : (refreshResult.ok ? 'ok' : 'error');
+  logEntry(`POST refresh → ${existingName()}`, refreshKind, formatResult(refreshResult));
+  if (refreshResult.networkError || !refreshResult.ok) {
+    logEntry('Secuencia detenida', 'warn', 'El refresh falló tras el PATCH — no se continúa con la lectura de contenido.');
+    return refreshResult;
+  }
+
+  const contentUrl = `${baseUrl()}/api/v1/documents/${docId()}/data/${encodeURIComponent(existingName())}/content`;
+  logEntry(`GET ${contentUrl}`, 'info', '(leyendo contenido materializado...)');
+  const contentResult = await rawRequest('GET', contentUrl);
+  const contentKind = contentResult.networkError ? 'error' : (contentResult.ok ? 'ok' : 'error');
+  logEntry(`GET contenido → ${existingName()}`, contentKind, formatResult(contentResult));
+  return contentResult;
+}
+
 document.getElementById('btnList').addEventListener('click', () => stepList());
 document.getElementById('btnGetExisting').addEventListener('click', () => stepGetExisting());
 document.getElementById('btnCreate').addEventListener('click', () => stepCreate());
 document.getElementById('btnPatch').addEventListener('click', () => stepPatch());
+document.getElementById('btnPatchExternal').addEventListener('click', () => stepPatchExternal());
 
 document.getElementById('btnRunAll').addEventListener('click', async () => {
   const btn = document.getElementById('btnRunAll');
