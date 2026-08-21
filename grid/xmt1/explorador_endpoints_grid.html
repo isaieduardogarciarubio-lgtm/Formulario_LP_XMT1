@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explorador de endpoints — Grid</title>
+<style>
+  :root {
+    --bg: #0a0d10; --surface: #12171b; --border: #232b31;
+    --text: #e8edf0; --text-mut: #8a97a0;
+    --accent: #FFD100; --ok: #34c759; --err: #ff5c6c; --warn: #ffb020;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 20px; max-width: 1000px; margin: 0 auto;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--text-mut); font-size: 12.5px; margin-bottom: 20px; line-height: 1.5; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-mut); margin-bottom: 4px; margin-top: 10px; }
+  label:first-child { margin-top: 0; }
+  input {
+    width: 100%; background: #0d1114; border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12.5px;
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  button {
+    background: var(--accent); color: #1a1a1a; border: none; border-radius: 8px;
+    padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  button.secondary { background: #232b31; color: var(--text); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:active:not(:disabled) { transform: scale(.98); }
+  .status { font-size: 12px; color: var(--text-mut); }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+
+  .tag-chip {
+    display: inline-block; background: #1c2329; border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 10px; font-size: 11px; margin: 2px 4px 2px 0;
+    cursor: pointer; color: var(--text-mut);
+  }
+  .tag-chip.active { background: var(--accent); color: #1a1a1a; border-color: var(--accent); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th {
+    text-align: left; color: var(--text-mut); font-weight: 600; font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: .03em; padding: 6px 8px; border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #171d22; }
+  tbody tr.selected { background: #1c2329; }
+  .method { font-weight: 700; font-family: ui-monospace, monospace; font-size: 11px; padding: 2px 7px; border-radius: 5px; }
+  .method-get { background: rgba(52,199,89,.15); color: var(--ok); }
+  .method-post { background: rgba(255,209,0,.15); color: var(--accent); }
+  .method-patch { background: rgba(255,176,32,.15); color: var(--warn); }
+  .method-put { background: rgba(255,176,32,.15); color: var(--warn); }
+  .method-delete { background: rgba(255,92,108,.15); color: var(--err); }
+  .path-cell { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 11.5px; word-break: break-all; }
+  .summary-cell { color: var(--text-mut); }
+  .deprecated { text-decoration: line-through; opacity: .55; }
+  .count-badge { color: var(--text-mut); font-size: 11.5px; }
+
+  #detail {
+    background: #0d1114; border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11.5px; line-height: 1.55; max-height: 480px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .empty-hint { color: var(--text-mut); }
+</style>
+</head>
+<body>
+
+<h1>Explorador de endpoints — Grid</h1>
+<p class="sub">
+  Lee el spec OpenAPI que Grid publica en vivo y extrae todos los endpoints
+  (método + ruta + tag + resumen), buscable y filtrable por tag, para tener
+  el mapa completo de la API sin adivinar por prueba y error. Útil ahora para
+  encontrar el flujo real de <code>external_push</code> (upload-url / publish)
+  que reemplazó a <code>grid_sql</code>.
+</p>
+
+<div class="card">
+  <label>URL base (por defecto, el mismo host desde el que abras este archivo)</label>
+  <input id="baseUrlInput" value="" placeholder="https://grid.adminml.com" />
+  <div class="row">
+    <button id="btnLoad">Cargar spec OpenAPI</button>
+    <button class="secondary" id="btnDownload" disabled>Descargar JSON extraído</button>
+    <span class="status" id="statusText"></span>
+  </div>
+</div>
+
+<div class="card">
+  <label>Buscar (filtra por método, ruta, tag o resumen)</label>
+  <input id="searchInput" placeholder="ej. dataset, refresh, upload, POST..." />
+  <div id="tagChips" class="row" style="margin-top:8px;"></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content: space-between; margin-top:0;">
+    <span class="count-badge" id="countBadge">Sin cargar todavía.</span>
+  </div>
+  <table>
+    <thead>
+      <tr><th style="width:70px;">Método</th><th>Ruta</th><th style="width:110px;">Tag</th><th>Resumen</th></tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<div class="card">
+  <div class="step-title" style="font-size:13px; font-weight:700; margin-bottom:8px;">Detalle del endpoint seleccionado</div>
+  <div id="detail"><div class="empty-hint">Selecciona una fila de la tabla para ver parámetros, request body y responses.</div></div>
+</div>
+
+<script>
+let spec = null;
+let endpoints = [];
+let activeTag = null;
+
+const statusText = document.getElementById('statusText');
+const countBadge = document.getElementById('countBadge');
+const tableBody = document.getElementById('tableBody');
+const detailEl = document.getElementById('detail');
+const tagChipsEl = document.getElementById('tagChips');
+const searchInput = document.getElementById('searchInput');
+const btnDownload = document.getElementById('btnDownload');
+
+function setStatus(text, kind) {
+  statusText.textContent = text;
+  statusText.className = 'status' + (kind ? ` ${kind}` : '');
+}
+
+function baseUrl() {
+  const v = document.getElementById('baseUrlInput').value.trim();
+  return v || location.origin;
+}
+
+async function findOpenApiSpec() {
+  const candidates = [
+    '/openapi.json',
+    '/api/v1/openapi.json',
+    '/api/openapi.json',
+    '/api/v1/docs/openapi.json',
+    '/api/docs/openapi.json',
+  ];
+  for (const path of candidates) {
+    const url = `${baseUrl()}${path}`;
+    let res;
+    try {
+      res = await fetch(url, { credentials: 'include' });
+    } catch (e) {
+      continue;
+    }
+    if (!res.ok) continue;
+    let json;
+    try { json = await res.json(); } catch (e) { continue; }
+    if (json && (json.openapi || json.swagger)) return { spec: json, path };
+  }
+  return null;
+}
+
+/**
+ * Aplana spec.paths (método por método, ruta por ruta) a una lista simple
+ * — cada fila lleva la operación completa (params/requestBody/responses)
+ * para poder mostrarla entera en el detalle sin volver a tocar el spec.
+ */
+function flattenEndpoints(spec) {
+  const paths = spec.paths || {};
+  const list = [];
+  Object.entries(paths).forEach(([route, methods]) => {
+    Object.entries(methods).forEach(([method, op]) => {
+      if (typeof op !== 'object' || op === null) return;
+      const httpMethods = ['get', 'post', 'put', 'patch', 'delete', 'options', 'head'];
+      if (!httpMethods.includes(method)) return;
+      list.push({
+        method: method.toUpperCase(),
+        route,
+        tags: op.tags || [],
+        summary: op.summary || op.description || '',
+        operationId: op.operationId || '',
+        deprecated: !!op.deprecated,
+        operation: op,
+      });
+    });
+  });
+  list.sort((a, b) => a.route.localeCompare(b.route) || a.method.localeCompare(b.method));
+  return list;
+}
+
+function allTags(list) {
+  const set = new Set();
+  list.forEach((e) => e.tags.forEach((t) => set.add(t)));
+  return Array.from(set).sort();
+}
+
+function renderTagChips() {
+  const tags = allTags(endpoints);
+  tagChipsEl.innerHTML = '';
+  if (tags.length === 0) return;
+  tags.forEach((tag) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip' + (activeTag === tag ? ' active' : '');
+    chip.textContent = tag;
+    chip.addEventListener('click', () => {
+      activeTag = activeTag === tag ? null : tag;
+      renderTagChips();
+      renderTable();
+    });
+    tagChipsEl.appendChild(chip);
+  });
+}
+
+function filteredEndpoints() {
+  const q = searchInput.value.trim().toLowerCase();
+  return endpoints.filter((e) => {
+    if (activeTag && !e.tags.includes(activeTag)) return false;
+    if (!q) return true;
+    const haystack = `${e.method} ${e.route} ${e.tags.join(' ')} ${e.summary} ${e.operationId}`.toLowerCase();
+    return haystack.includes(q);
+  });
+}
+
+function renderTable() {
+  const rows = filteredEndpoints();
+  countBadge.textContent = `${rows.length} de ${endpoints.length} endpoints`;
+  tableBody.innerHTML = '';
+  rows.forEach((e) => {
+    const tr = document.createElement('tr');
+    if (e.deprecated) tr.classList.add('deprecated');
+    tr.innerHTML = `
+      <td><span class="method method-${e.method.toLowerCase()}">${e.method}</span></td>
+      <td class="path-cell">${e.route}</td>
+      <td>${e.tags.join(', ')}</td>
+      <td class="summary-cell">${e.summary || '—'}</td>
+    `;
+    tr.addEventListener('click', () => {
+      tableBody.querySelectorAll('tr.selected').forEach((el) => el.classList.remove('selected'));
+      tr.classList.add('selected');
+      showDetail(e);
+    });
+    tableBody.appendChild(tr);
+  });
+}
+
+function showDetail(e) {
+  const summary = {
+    method: e.method,
+    route: e.route,
+    operationId: e.operationId,
+    tags: e.tags,
+    deprecated: e.deprecated,
+    parameters: e.operation.parameters || [],
+    requestBody: e.operation.requestBody || null,
+    responses: e.operation.responses || {},
+  };
+  detailEl.textContent = JSON.stringify(summary, null, 2);
+}
+
+async function loadSpec() {
+  const btn = document.getElementById('btnLoad');
+  btn.disabled = true;
+  setStatus('Buscando spec OpenAPI...', null);
+  try {
+    const found = await findOpenApiSpec();
+    if (!found) {
+      setStatus('No se encontró el spec en ninguna ruta candidata.', 'err');
+      return;
+    }
+    spec = found.spec;
+    endpoints = flattenEndpoints(spec);
+    activeTag = null;
+    setStatus(`OK — ${found.path} · ${spec.info?.title || '?'} v${spec.info?.version || '?'} · ${endpoints.length} endpoints`, 'ok');
+    renderTagChips();
+    renderTable();
+    btnDownload.disabled = false;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function downloadExtracted() {
+  if (!endpoints.length) return;
+  const exportable = endpoints.map((e) => ({
+    method: e.method,
+    route: e.route,
+    tags: e.tags,
+    summary: e.summary,
+    operationId: e.operationId,
+    deprecated: e.deprecated,
+    parameters: e.operation.parameters || [],
+    requestBody: e.operation.requestBody || null,
+    responses: e.operation.responses || {},
+  }));
+  const blob = new Blob([JSON.stringify({ info: spec.info, endpoints: exportable }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'grid_endpoints.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('btnLoad').addEventListener('click', loadSpec);
+btnDownload.addEventListener('click', downloadExtracted);
+searchInput.addEventListener('input', renderTable);
+</script>
+</body>
+</html>
