@@ -89,9 +89,21 @@
   </select>
 
   <div class="row">
-    <button id="btnRunAll">Ejecutar los 4 pasos en orden</button>
+    <button id="btnRunAll">Ejecutar los 5 pasos en orden (0-4)</button>
     <button class="secondary" id="btnClear">Limpiar log</button>
   </div>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 0 — Buscar el spec OpenAPI de Grid</div>
+  <div class="step-desc">
+    El formato del error 422 ("Input should be 'external'") es el mensaje de
+    validación típico de Pydantic/FastAPI — casi seguro Grid publica su propio
+    spec OpenAPI en alguna ruta estándar. Si lo encuentra, busca ahí mismo la
+    definición actual de source_type/refresh_mode para Dataset Definitions,
+    en vez de inferirla solo por el texto del error.
+  </div>
+  <button class="secondary" id="btnOpenApi">0. Buscar spec OpenAPI</button>
 </div>
 
 <div class="card">
@@ -179,6 +191,88 @@ function formatResult(result) {
   return `HTTP ${result.status}\n${bodyStr}`;
 }
 
+/**
+ * Recorre todo el spec buscando cualquier propiedad llamada source_type o
+ * refresh_mode (en cualquier schema, sin importar el nombre del schema
+ * padre) y reporta su definición completa (incluye enum/const si son
+ * Literal de Pydantic) — más confiable que adivinar por el texto del 422.
+ */
+function findFieldDefinitions(spec, fieldNames) {
+  const schemas = (spec.components && spec.components.schemas) || {};
+  const findings = [];
+  Object.entries(schemas).forEach(([schemaName, def]) => {
+    const props = (def && def.properties) || {};
+    fieldNames.forEach((field) => {
+      if (props[field] !== undefined) {
+        findings.push(`${schemaName}.${field} =\n${JSON.stringify(props[field], null, 2)}`);
+      }
+    });
+  });
+  return findings;
+}
+
+function findDatasetSchemas(spec) {
+  const schemas = (spec.components && spec.components.schemas) || {};
+  return Object.entries(schemas).filter(([name]) => /dataset/i.test(name));
+}
+
+async function stepOpenApi() {
+  const candidates = [
+    '/openapi.json',
+    '/api/v1/openapi.json',
+    '/api/openapi.json',
+    '/api/v1/docs/openapi.json',
+    '/api/docs/openapi.json',
+  ];
+  for (const path of candidates) {
+    const url = `${baseUrl()}${path}`;
+    logEntry(`GET ${url}`, 'info', '(buscando spec OpenAPI en esta ruta...)');
+    let res;
+    try {
+      res = await fetch(url, { credentials: 'include' });
+    } catch (e) {
+      logEntry(`GET ${path}`, 'error', `Error de red: ${e.message}`);
+      continue;
+    }
+    if (!res.ok) {
+      logEntry(`GET ${path}`, 'warn', `HTTP ${res.status} — no está aquí, probando siguiente candidato`);
+      continue;
+    }
+    let spec;
+    try {
+      spec = await res.json();
+    } catch (e) {
+      logEntry(`GET ${path}`, 'warn', 'La respuesta no es JSON (probablemente no es el spec) — probando siguiente candidato');
+      continue;
+    }
+    if (!spec || (!spec.openapi && !spec.swagger)) {
+      logEntry(`GET ${path}`, 'warn', 'La respuesta es JSON pero no parece un spec OpenAPI (sin campo "openapi"/"swagger") — probando siguiente candidato');
+      continue;
+    }
+
+    logEntry(`Spec OpenAPI encontrado en ${path}`, 'ok', `Título: ${spec.info?.title || '?'} · Versión: ${spec.info?.version || '?'} · openapi: ${spec.openapi || spec.swagger}`);
+
+    const datasetSchemas = findDatasetSchemas(spec);
+    if (datasetSchemas.length > 0) {
+      datasetSchemas.forEach(([name, def]) => {
+        logEntry(`Schema: ${name}`, 'info', JSON.stringify(def, null, 2));
+      });
+    } else {
+      logEntry('Schemas de Dataset', 'warn', 'No se encontró ningún schema con "Dataset" en el nombre.');
+    }
+
+    const fieldFindings = findFieldDefinitions(spec, ['source_type', 'refresh_mode', 'source', 'format']);
+    if (fieldFindings.length > 0) {
+      logEntry('Campos source_type/refresh_mode/source/format encontrados', 'ok', fieldFindings.join('\n\n'));
+    } else {
+      logEntry('Campos source_type/refresh_mode', 'warn', 'No se encontraron como propiedades directas de ningún schema — puede que estén detrás de un $ref anidado; revisa el JSON completo de los schemas de Dataset de arriba a mano.');
+    }
+    return spec;
+  }
+  logEntry('Búsqueda de spec OpenAPI', 'error', `No se encontró en ninguna ruta candidata: ${candidates.join(', ')}. Puede que Grid no publique el spec, o lo publique en una ruta distinta a las probadas.`);
+  return null;
+}
+
 async function stepGet() {
   const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(datasetName())}`;
   logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
@@ -223,6 +317,7 @@ async function stepContent() {
   return result;
 }
 
+document.getElementById('btnOpenApi').addEventListener('click', () => stepOpenApi());
 document.getElementById('btnGet').addEventListener('click', () => stepGet());
 document.getElementById('btnUpsert').addEventListener('click', async () => {
   const existing = await stepGet();
@@ -235,6 +330,7 @@ document.getElementById('btnRunAll').addEventListener('click', async () => {
   const btn = document.getElementById('btnRunAll');
   btn.disabled = true;
   try {
+    await stepOpenApi();
     const existing = await stepGet();
     const upsertResult = await stepUpsert(!existing.networkError && existing.status !== 404);
     if (upsertResult.networkError || !upsertResult.ok) {
