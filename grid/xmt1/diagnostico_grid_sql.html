@@ -29,7 +29,8 @@
     border-radius: 8px; padding: 9px 11px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
     font-size: 12.5px;
   }
-  textarea { min-height: 110px; resize: vertical; }
+  textarea { min-height: 90px; resize: vertical; }
+  .hint { font-size: 11px; color: var(--text-mut); margin-top: 4px; line-height: 1.45; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
   button {
     background: var(--accent); color: #1a1a1a; border: none; border-radius: 8px;
@@ -43,7 +44,7 @@
   #log {
     background: #0d1114; border: 1px solid var(--border); border-radius: 12px;
     padding: 12px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
-    font-size: 11.5px; line-height: 1.55; max-height: 520px; overflow-y: auto;
+    font-size: 11.5px; line-height: 1.55; max-height: 560px; overflow-y: auto;
     white-space: pre-wrap; word-break: break-word;
   }
   .entry { padding: 8px 0; border-bottom: 1px solid var(--border); }
@@ -62,72 +63,78 @@
 
 <h1>Diagnóstico grid_sql / BigQuery</h1>
 <p class="sub">
-  App aislada de una sola pantalla, solo para probar el ciclo Dataset Definition
-  (grid_sql) → refresh → contenido, paso por paso, mostrando la respuesta cruda
-  de Grid en cada llamada. Sirve para distinguir si un fallo (ej. el 422
-  "refresh_mode: Input should be 'external'" visto en Premissort) es específico
-  de un documento/dataset, o un cambio general de la plataforma — probando
-  contra el MISMO doc_id que ya falla y, si hace falta, contra uno distinto.
-  No guarda nada permanente: cada "Ejecutar" solo pisa el dataset de prueba
-  indicado abajo.
+  El spec OpenAPI vivo de Grid (revisado hoy) muestra
+  <code>DatasetDefinitionRequest.source_type</code> como <code>const: "external_push"</code>
+  — ya no aparece <code>grid_sql</code> como opción. Pero el spec por sí solo no prueba
+  qué pasa en la práctica: puede que siga funcionando para datasets ya creados,
+  o que el 422 real diga algo distinto de lo que promete el schema. Estos 4 pasos
+  prueban eso directamente, sin tocar el dataset real de producción salvo el paso 4
+  (que sí actualiza el dataset existente indicado — usa uno de prueba si no estás seguro).
 </p>
 
 <div class="card">
   <label>doc_id</label>
   <input id="docId" value="01KZPRK3PDWP9TG0RKW3J9JGN7" />
 
-  <label>Nombre del dataset de prueba</label>
-  <input id="datasetName" value="diagnostico_grid_sql_test" />
+  <label>Nombre de un dataset EXISTENTE (real, ya creado por Premissort)</label>
+  <input id="existingName" value="premissort_lookup_pos_HH_94F17E74E1" />
+  <div class="hint">
+    Revisa el DebugConsole de tu dispositivo ("Recovery device_id: HH_...") para el
+    nombre exacto — el patrón real es <code>premissort_lookup_pos_&lt;deviceId&gt;</code>
+    o <code>premissort_lookup_ship_&lt;deviceId&gt;</code>.
+  </div>
 
-  <label>SQL (por defecto, la más simple posible: sin FROM, sin tocar tablas reales — aísla si el mecanismo grid_sql/refresh funciona en absoluto)</label>
+  <label>Nombre de un dataset NUEVO (para probar creación, no debe existir aún)</label>
+  <input id="newName" value="diagnostico_grid_sql_test_2" />
+
+  <label>SQL a usar en los pasos 3 y 4 (simple a propósito: aísla si el mecanismo funciona, sin depender de las tablas reales)</label>
   <textarea id="sqlInput">SELECT 1 AS test_value, CURRENT_TIMESTAMP() AS test_ts</textarea>
 
-  <label>refresh_mode a probar</label>
-  <select id="refreshMode" style="width:100%; background:#0d1114; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:9px 11px; font-family: ui-monospace, monospace; font-size:12.5px;">
-    <option value="grid_refresh">grid_refresh (lo que usa Premissort hoy)</option>
-    <option value="external">external (lo que Grid pidió en el 422)</option>
-  </select>
-
   <div class="row">
-    <button id="btnRunAll">Ejecutar los 5 pasos en orden (0-4)</button>
+    <button id="btnRunAll">Ejecutar los 4 pasos en orden</button>
     <button class="secondary" id="btnClear">Limpiar log</button>
   </div>
 </div>
 
 <div class="card">
-  <div class="step-title">Paso 0 — Buscar el spec OpenAPI de Grid</div>
+  <div class="step-title">Paso 1 — GET listado de datasets del documento</div>
   <div class="step-desc">
-    El formato del error 422 ("Input should be 'external'") es el mensaje de
-    validación típico de Pydantic/FastAPI — casi seguro Grid publica su propio
-    spec OpenAPI en alguna ruta estándar. Si lo encuentra, busca ahí mismo la
-    definición actual de source_type/refresh_mode para Dataset Definitions,
-    en vez de inferirla solo por el texto del error.
+    Prueba si existe un endpoint de listado (sin nombre de dataset específico).
+    Si existe, muestra el <code>source_type</code> real de TODOS los datasets del
+    documento de un solo vistazo — más confiable que el spec para separar
+    "legacy" de "lo que exige el validador hoy".
   </div>
-  <button class="secondary" id="btnOpenApi">0. Buscar spec OpenAPI</button>
+  <button class="secondary" id="btnList">1. GET listado</button>
 </div>
 
 <div class="card">
-  <div class="step-title">Paso 1 — GET definición</div>
-  <div class="step-desc">Lee la Dataset Definition actual (o 404 si nunca se creó).</div>
-  <button class="secondary" id="btnGet">1. GET definición</button>
+  <div class="step-title">Paso 2 — GET del dataset existente real</div>
+  <div class="step-desc">
+    Lee la Dataset Definition del dataset real indicado arriba. Si Grid
+    reescribió <code>source_type</code> a <code>external_push</code> por detrás
+    para datasets viejos, se ve aquí. Si todavía dice <code>grid_sql</code>,
+    significa que solo lo nuevo está bloqueado (dato "legacy" tolerado).
+  </div>
+  <button class="secondary" id="btnGetExisting">2. GET dataset existente</button>
 </div>
 
 <div class="card">
-  <div class="step-title">Paso 2 — POST/PATCH definición</div>
-  <div class="step-desc">Crea o actualiza la definición con el SQL y refresh_mode de arriba. Aquí es donde Premissort recibió el 422.</div>
-  <button class="secondary" id="btnUpsert">2. Crear/actualizar definición</button>
+  <div class="step-title">Paso 3 — POST de un dataset NUEVO con source_type: grid_sql</div>
+  <div class="step-desc">
+    La prueba definitiva de "¿se puede crear uno nuevo hoy?". Lo que importa es
+    el texto exacto del 422 (si lo hay), no solo el código de status.
+  </div>
+  <button class="secondary" id="btnCreate">3. POST dataset nuevo</button>
 </div>
 
 <div class="card">
-  <div class="step-title">Paso 3 — POST refresh</div>
-  <div class="step-desc">Dispara la ejecución. Requiere rol editor sobre el documento (viewer recibe 403).</div>
-  <button class="secondary" id="btnRefresh">3. POST refresh</button>
-</div>
-
-<div class="card">
-  <div class="step-title">Paso 4 — GET contenido</div>
-  <div class="step-desc">Lee el contenido materializado del dataset.</div>
-  <button class="secondary" id="btnContent">4. GET contenido</button>
+  <div class="step-title">Paso 4 — PATCH del dataset existente con source_type: grid_sql</div>
+  <div class="step-desc">
+    Separa "ya no se puede crear nada nuevo con grid_sql" de "ya no se puede
+    usar grid_sql en absoluto, ni actualizar lo viejo". Esto SÍ modifica el
+    dataset real indicado en el paso 2 — usa uno de prueba si te preocupa.
+  </div>
+  <button class="secondary" id="btnPatch">4. PATCH dataset existente</button>
 </div>
 
 <div class="card">
@@ -164,7 +171,8 @@ function logEntry(title, kind, bodyText) {
 }
 
 function docId() { return document.getElementById('docId').value.trim(); }
-function datasetName() { return document.getElementById('datasetName').value.trim(); }
+function existingName() { return document.getElementById('existingName').value.trim(); }
+function newName() { return document.getElementById('newName').value.trim(); }
 function baseUrl() { return location.origin; }
 
 async function rawRequest(method, url, body) {
@@ -191,154 +199,67 @@ function formatResult(result) {
   return `HTTP ${result.status}\n${bodyStr}`;
 }
 
-/**
- * Recorre todo el spec buscando cualquier propiedad llamada source_type o
- * refresh_mode (en cualquier schema, sin importar el nombre del schema
- * padre) y reporta su definición completa (incluye enum/const si son
- * Literal de Pydantic) — más confiable que adivinar por el texto del 422.
- */
-function findFieldDefinitions(spec, fieldNames) {
-  const schemas = (spec.components && spec.components.schemas) || {};
-  const findings = [];
-  Object.entries(schemas).forEach(([schemaName, def]) => {
-    const props = (def && def.properties) || {};
-    fieldNames.forEach((field) => {
-      if (props[field] !== undefined) {
-        findings.push(`${schemaName}.${field} =\n${JSON.stringify(props[field], null, 2)}`);
-      }
-    });
-  });
-  return findings;
-}
-
-function findDatasetSchemas(spec) {
-  const schemas = (spec.components && spec.components.schemas) || {};
-  return Object.entries(schemas).filter(([name]) => /dataset/i.test(name));
-}
-
-async function stepOpenApi() {
-  const candidates = [
-    '/openapi.json',
-    '/api/v1/openapi.json',
-    '/api/openapi.json',
-    '/api/v1/docs/openapi.json',
-    '/api/docs/openapi.json',
-  ];
-  for (const path of candidates) {
-    const url = `${baseUrl()}${path}`;
-    logEntry(`GET ${url}`, 'info', '(buscando spec OpenAPI en esta ruta...)');
-    let res;
-    try {
-      res = await fetch(url, { credentials: 'include' });
-    } catch (e) {
-      logEntry(`GET ${path}`, 'error', `Error de red: ${e.message}`);
-      continue;
-    }
-    if (!res.ok) {
-      logEntry(`GET ${path}`, 'warn', `HTTP ${res.status} — no está aquí, probando siguiente candidato`);
-      continue;
-    }
-    let spec;
-    try {
-      spec = await res.json();
-    } catch (e) {
-      logEntry(`GET ${path}`, 'warn', 'La respuesta no es JSON (probablemente no es el spec) — probando siguiente candidato');
-      continue;
-    }
-    if (!spec || (!spec.openapi && !spec.swagger)) {
-      logEntry(`GET ${path}`, 'warn', 'La respuesta es JSON pero no parece un spec OpenAPI (sin campo "openapi"/"swagger") — probando siguiente candidato');
-      continue;
-    }
-
-    logEntry(`Spec OpenAPI encontrado en ${path}`, 'ok', `Título: ${spec.info?.title || '?'} · Versión: ${spec.info?.version || '?'} · openapi: ${spec.openapi || spec.swagger}`);
-
-    const datasetSchemas = findDatasetSchemas(spec);
-    if (datasetSchemas.length > 0) {
-      datasetSchemas.forEach(([name, def]) => {
-        logEntry(`Schema: ${name}`, 'info', JSON.stringify(def, null, 2));
-      });
-    } else {
-      logEntry('Schemas de Dataset', 'warn', 'No se encontró ningún schema con "Dataset" en el nombre.');
-    }
-
-    const fieldFindings = findFieldDefinitions(spec, ['source_type', 'refresh_mode', 'source', 'format']);
-    if (fieldFindings.length > 0) {
-      logEntry('Campos source_type/refresh_mode/source/format encontrados', 'ok', fieldFindings.join('\n\n'));
-    } else {
-      logEntry('Campos source_type/refresh_mode', 'warn', 'No se encontraron como propiedades directas de ningún schema — puede que estén detrás de un $ref anidado; revisa el JSON completo de los schemas de Dataset de arriba a mano.');
-    }
-    return spec;
-  }
-  logEntry('Búsqueda de spec OpenAPI', 'error', `No se encontró en ninguna ruta candidata: ${candidates.join(', ')}. Puede que Grid no publique el spec, o lo publique en una ruta distinta a las probadas.`);
-  return null;
-}
-
-async function stepGet() {
-  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(datasetName())}`;
-  logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
+async function stepList() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets`;
+  logEntry(`GET ${url}`, 'info', '(probando si existe un endpoint de listado...)');
   const result = await rawRequest('GET', url);
-  const kind = result.networkError ? 'error' : (result.status === 404 || result.ok ? 'ok' : 'error');
-  logEntry(`GET definición → ${datasetName()}`, kind, formatResult(result));
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'warn');
+  logEntry('GET listado de datasets', kind, formatResult(result));
   return result;
 }
 
-async function stepUpsert(existingHint) {
-  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(datasetName())}`;
-  const method = existingHint ? 'PATCH' : 'POST';
-  const body = {
+async function stepGetExisting() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(existingName())}`;
+  logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
+  const result = await rawRequest('GET', url);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry(`GET dataset existente → ${existingName()}`, kind, formatResult(result));
+  return result;
+}
+
+function gridSqlBody() {
+  return {
     source_type: 'grid_sql',
-    refresh_mode: document.getElementById('refreshMode').value,
+    refresh_mode: 'grid_refresh',
     format: 'json_rows',
     source: 'bigquery',
     source_config: { sql: document.getElementById('sqlInput').value },
   };
-  logEntry(`${method} ${url}`, 'info', `Body enviado:\n${JSON.stringify(body, null, 2)}`);
-  const result = await rawRequest(method, url, body);
+}
+
+async function stepCreate() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(newName())}`;
+  const body = gridSqlBody();
+  logEntry(`POST ${url}`, 'info', `Body enviado:\n${JSON.stringify(body, null, 2)}`);
+  const result = await rawRequest('POST', url, body);
   const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
-  logEntry(`${method} definición → ${datasetName()}`, kind, formatResult(result));
+  logEntry(`POST dataset nuevo → ${newName()}`, kind, formatResult(result));
   return result;
 }
 
-async function stepRefresh() {
-  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(datasetName())}/refresh`;
-  logEntry(`POST ${url}`, 'info', '(esperando respuesta...)');
-  const result = await rawRequest('POST', url);
+async function stepPatch() {
+  const url = `${baseUrl()}/api/v1/documents/${docId()}/datasets/${encodeURIComponent(existingName())}`;
+  const body = gridSqlBody();
+  logEntry(`PATCH ${url}`, 'info', `Body enviado:\n${JSON.stringify(body, null, 2)}`);
+  const result = await rawRequest('PATCH', url, body);
   const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
-  logEntry(`POST refresh → ${datasetName()}`, kind, formatResult(result));
+  logEntry(`PATCH dataset existente → ${existingName()}`, kind, formatResult(result));
   return result;
 }
 
-async function stepContent() {
-  const url = `${baseUrl()}/api/v1/documents/${docId()}/data/${encodeURIComponent(datasetName())}/content`;
-  logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
-  const result = await rawRequest('GET', url);
-  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
-  logEntry(`GET contenido → ${datasetName()}`, kind, formatResult(result));
-  return result;
-}
-
-document.getElementById('btnOpenApi').addEventListener('click', () => stepOpenApi());
-document.getElementById('btnGet').addEventListener('click', () => stepGet());
-document.getElementById('btnUpsert').addEventListener('click', async () => {
-  const existing = await stepGet();
-  await stepUpsert(!existing.networkError && existing.status !== 404);
-});
-document.getElementById('btnRefresh').addEventListener('click', () => stepRefresh());
-document.getElementById('btnContent').addEventListener('click', () => stepContent());
+document.getElementById('btnList').addEventListener('click', () => stepList());
+document.getElementById('btnGetExisting').addEventListener('click', () => stepGetExisting());
+document.getElementById('btnCreate').addEventListener('click', () => stepCreate());
+document.getElementById('btnPatch').addEventListener('click', () => stepPatch());
 
 document.getElementById('btnRunAll').addEventListener('click', async () => {
   const btn = document.getElementById('btnRunAll');
   btn.disabled = true;
   try {
-    await stepOpenApi();
-    const existing = await stepGet();
-    const upsertResult = await stepUpsert(!existing.networkError && existing.status !== 404);
-    if (upsertResult.networkError || !upsertResult.ok) {
-      logEntry('Secuencia detenida', 'warn', 'El paso 2 (crear/actualizar definición) falló — no se continúa con refresh/contenido hasta que este paso dé OK.');
-      return;
-    }
-    await stepRefresh();
-    await stepContent();
+    await stepList();
+    await stepGetExisting();
+    await stepCreate();
+    await stepPatch();
   } finally {
     btn.disabled = false;
   }
