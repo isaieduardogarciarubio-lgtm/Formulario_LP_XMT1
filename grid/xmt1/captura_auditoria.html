@@ -2372,11 +2372,12 @@ function masterBucketNameFor(formId, tsOrDateKey) {
  * external da 404 en /refresh). El reemplazo es una Google Sheet ya
  * conectada a BigQuery (pestaña CONT_MISSORT, extracto con todas las filas
  * necesarias) leída vía el proxy de Sheets de Grid — GridClient.
- * loadPremissortCatalog. doc_id resuelve el token OAuth del DUEÑO del
- * documento, así que cualquier dispositivo con acceso a este doc lee sin
- * conectar su propia cuenta de Google.
+ * loadPremissortCatalog. El doc_id que se manda en esa llamada resuelve el
+ * token OAuth del DUEÑO de ESE documento — usar un doc separado (solo
+ * compartido con quien conectó OAuth) dio 403 permission_denied al resto
+ * del equipo. Se usa a propósito el MISMO doc_id que ya usa toda la app
+ * (this.docId, ya compartido con todos) en vez de uno aparte.
  */
-const PREMISSORT_SHEET_DOC_ID = '01M0JPXT8R76F1YC7SF5BGF9FK';
 const PREMISSORT_SHEET_ID = '19rVgf7-4-7AFWiFkM5Ff6JmcYj8HhHMahui-PUZlJ2M';
 const PREMISSORT_SHEET_RANGE = 'CONT_MISSORT!A:C';
 
@@ -7769,7 +7770,7 @@ class GridClient {
    * consulta nueva por cada escaneo.
    */
   async loadPremissortCatalog() {
-    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(PREMISSORT_SHEET_DOC_ID)}&range=${encodeURIComponent(PREMISSORT_SHEET_RANGE)}`;
+    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(PREMISSORT_SHEET_RANGE)}`;
     const res = await this._fetchWithTimeout(url, { credentials: 'include' });
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
