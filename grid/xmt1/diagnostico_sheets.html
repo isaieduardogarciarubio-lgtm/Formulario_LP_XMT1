@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diagnóstico Sheets — Grid</title>
+<style>
+  :root {
+    --bg: #0a0d10; --surface: #12171b; --border: #232b31;
+    --text: #e8edf0; --text-mut: #8a97a0;
+    --accent: #FFD100; --ok: #34c759; --err: #ff5c6c; --warn: #ffb020;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 20px; max-width: 900px; margin: 0 auto;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--text-mut); font-size: 12.5px; margin-bottom: 20px; line-height: 1.5; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-mut); margin-bottom: 4px; margin-top: 10px; }
+  label:first-child { margin-top: 0; }
+  input {
+    width: 100%; background: #0d1114; border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 11px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 12.5px;
+  }
+  .hint { font-size: 11px; color: var(--text-mut); margin-top: 4px; line-height: 1.45; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
+  button {
+    background: var(--accent); color: #1a1a1a; border: none; border-radius: 8px;
+    padding: 9px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  button.secondary { background: #232b31; color: var(--text); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button:active:not(:disabled) { transform: scale(.98); }
+  .step-title { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
+  .step-desc { font-size: 11.5px; color: var(--text-mut); margin-bottom: 10px; }
+  #log {
+    background: #0d1114; border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    font-size: 11.5px; line-height: 1.55; max-height: 520px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .entry { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .entry:last-child { border-bottom: none; }
+  .entry-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 3px; }
+  .entry-time { color: var(--text-mut); font-size: 10.5px; }
+  .entry-title { font-weight: 700; }
+  .ok-badge { color: var(--ok); }
+  .err-badge { color: var(--err); }
+  .warn-badge { color: var(--warn); }
+  .entry-body { color: var(--text-mut); }
+  .btn-clear { float: right; }
+</style>
+</head>
+<body>
+
+<h1>Diagnóstico Sheets — Grid</h1>
+<p class="sub">
+  Prueba el proxy de Google Sheets que ya conectaste en Grid (OAuth por
+  documento). El parámetro <code>doc_id</code> resuelve el token OAuth del
+  DUEÑO del documento — cualquiera que pueda llamar este endpoint para ese
+  doc_id lee la sheet montado en tu conexión, no necesita conectar su propia
+  cuenta de Google. No hay límite propio documentado para /sheets, así que
+  el paso 4 mide empíricamente qué tan seguido se puede recargar antes de
+  un 429/error.
+</p>
+
+<div class="card">
+  <label>doc_id (el documento de Grid donde conectaste Google OAuth)</label>
+  <input id="docId" value="01KZPRK3PDWP9TG0RKW3J9JGN7" />
+
+  <label>sheet_id (el ID de la hoja de Google Sheets, de la URL: .../d/&lt;sheet_id&gt;/edit)</label>
+  <input id="sheetId" value="" placeholder="1AbCdEfGhIjKlMnOpQrStUvWxYz..." />
+
+  <label>Rango en notación A1</label>
+  <input id="rangeInput" value="Sheet1!A1:Z200" />
+
+  <div class="row">
+    <button class="secondary" id="btnStatus">0. Estado de mi conexión OAuth</button>
+    <button class="secondary" id="btnClear">Limpiar log</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 1 — Metadata de la sheet</div>
+  <div class="step-desc">Confirma que Grid puede resolver la sheet con tu conexión — trae nombres de tabs, dimensiones, etc.</div>
+  <button class="secondary" id="btnMetadata">1. GET metadata</button>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 2 — Leer valores</div>
+  <div class="step-desc">Trae los valores del rango indicado arriba — así se vería lo que consumiría captura_auditoria.html.</div>
+  <button class="secondary" id="btnValues">2. GET valores</button>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 3 — Escribir un valor de prueba (opcional, modifica la sheet real)</div>
+  <div class="step-desc">
+    Escribe la fecha/hora actual en la celda que pongas, para confirmar que el
+    flujo de escritura también funciona (útil si algún día quieres escribir
+    resultados de vuelta, no solo leer). Sáltate este paso si no quieres tocar
+    la sheet real.
+  </div>
+  <label>Celda destino (A1)</label>
+  <input id="writeCell" value="Sheet1!Z1" />
+  <div class="row">
+    <button class="secondary" id="btnWrite">3. PUT valor de prueba</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="step-title">Paso 4 — Medir qué tan seguido se puede recargar</div>
+  <div class="step-desc">
+    Dispara N lecturas consecutivas (GET valores) con el intervalo que
+    indiques, y marca la primera que falle (429 u otro error) — así sabemos
+    el límite real en vez de adivinar entre el límite general de Grid
+    (60 req/min documentado para datasets) y la cuota de la Google Sheets API
+    detrás de tu token.
+  </div>
+  <label>Número de llamadas</label>
+  <input id="burstCount" value="20" />
+  <label>Intervalo entre llamadas (ms)</label>
+  <input id="burstInterval" value="500" />
+  <div class="row">
+    <button class="secondary" id="btnBurst">4. Probar límite de refresco</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="step-title">Log <button class="secondary btn-clear" id="btnClear2" style="padding:3px 10px; font-size:11px;">Limpiar</button></div>
+  <div id="log"><div class="entry-body">Sin actividad todavía.</div></div>
+</div>
+
+<script>
+const logEl = document.getElementById('log');
+
+function nowStr() {
+  return new Date().toLocaleTimeString('es-MX', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function logEntry(title, kind, bodyText) {
+  if (logEl.children.length === 1 && logEl.children[0].textContent === 'Sin actividad todavía.') {
+    logEl.innerHTML = '';
+  }
+  const badgeClass = kind === 'ok' ? 'ok-badge' : (kind === 'error' ? 'err-badge' : 'warn-badge');
+  const badgeText = kind === 'ok' ? 'OK' : (kind === 'error' ? 'ERROR' : 'INFO');
+  const entry = document.createElement('div');
+  entry.className = 'entry';
+  entry.innerHTML = `
+    <div class="entry-head">
+      <span class="entry-time">${nowStr()}</span>
+      <span class="entry-title">${title}</span>
+      <span class="${badgeClass}">${badgeText}</span>
+    </div>
+    <div class="entry-body"></div>
+  `;
+  entry.querySelector('.entry-body').textContent = bodyText;
+  logEl.appendChild(entry);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function docId() { return document.getElementById('docId').value.trim(); }
+function sheetId() { return document.getElementById('sheetId').value.trim(); }
+function rangeVal() { return document.getElementById('rangeInput').value.trim(); }
+function baseUrl() { return location.origin; }
+
+async function rawRequest(method, url, body) {
+  const opts = { method, credentials: 'include' };
+  if (body !== undefined) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  const startedAt = performance.now();
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (e) {
+    return { networkError: true, message: e.message, ms: Math.round(performance.now() - startedAt) };
+  }
+  const text = await res.text();
+  let parsed = text;
+  try { parsed = JSON.parse(text); } catch (e) { /* deja texto crudo */ }
+  return { status: res.status, ok: res.ok, body: parsed, ms: Math.round(performance.now() - startedAt) };
+}
+
+function formatResult(result) {
+  if (result.networkError) return `Error de red: ${result.message}`;
+  const bodyStr = typeof result.body === 'string' ? result.body : JSON.stringify(result.body, null, 2);
+  return `HTTP ${result.status} · ${result.ms}ms\n${bodyStr}`;
+}
+
+async function stepStatus() {
+  const url = `${baseUrl()}/api/v1/google/oauth/status`;
+  logEntry(`GET ${url}`, 'info', '(consultando tu conexión OAuth...)');
+  const result = await rawRequest('GET', url);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry('Estado OAuth', kind, formatResult(result));
+  return result;
+}
+
+async function stepMetadata() {
+  const url = `${baseUrl()}/api/v1/sheets/${encodeURIComponent(sheetId())}/metadata?doc_id=${encodeURIComponent(docId())}`;
+  logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
+  const result = await rawRequest('GET', url);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry('GET metadata de la sheet', kind, formatResult(result));
+  return result;
+}
+
+async function stepValues() {
+  const url = `${baseUrl()}/api/v1/sheets/${encodeURIComponent(sheetId())}?doc_id=${encodeURIComponent(docId())}&range=${encodeURIComponent(rangeVal())}`;
+  logEntry(`GET ${url}`, 'info', '(esperando respuesta...)');
+  const result = await rawRequest('GET', url);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry('GET valores de la sheet', kind, formatResult(result));
+  return result;
+}
+
+async function stepWrite() {
+  const cell = document.getElementById('writeCell').value.trim();
+  const url = `${baseUrl()}/api/v1/sheets/${encodeURIComponent(sheetId())}?doc_id=${encodeURIComponent(docId())}`;
+  const body = { range: cell, values: [[`diagnostico ${new Date().toISOString()}`]] };
+  logEntry(`PUT ${url}`, 'info', `Body enviado:\n${JSON.stringify(body, null, 2)}`);
+  const result = await rawRequest('PUT', url, body);
+  const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+  logEntry(`PUT valor de prueba → ${cell}`, kind, formatResult(result));
+  return result;
+}
+
+async function stepBurst() {
+  const count = parseInt(document.getElementById('burstCount').value, 10) || 20;
+  const interval = parseInt(document.getElementById('burstInterval').value, 10) || 500;
+  const url = `${baseUrl()}/api/v1/sheets/${encodeURIComponent(sheetId())}?doc_id=${encodeURIComponent(docId())}&range=${encodeURIComponent(rangeVal())}`;
+  logEntry('Ráfaga de lecturas', 'info', `${count} llamadas cada ${interval}ms a GET valores...`);
+  let firstFailure = null;
+  for (let i = 1; i <= count; i++) {
+    const result = await rawRequest('GET', url);
+    const failed = result.networkError || !result.ok;
+    if (failed && !firstFailure) firstFailure = i;
+    const kind = result.networkError ? 'error' : (result.ok ? 'ok' : 'error');
+    logEntry(`Llamada ${i}/${count}`, kind, formatResult(result));
+    if (failed) break;
+    if (i < count) await new Promise((r) => setTimeout(r, interval));
+  }
+  if (firstFailure) {
+    logEntry('Resultado de la ráfaga', 'warn', `Empezó a fallar en la llamada ${firstFailure} (de ${count} planeadas, cada ${interval}ms → ${Math.round(60000 / interval)} llamadas/min de ritmo).`);
+  } else {
+    logEntry('Resultado de la ráfaga', 'ok', `Las ${count} llamadas (cada ${interval}ms) pasaron sin error — el límite real es más alto que este ritmo.`);
+  }
+}
+
+document.getElementById('btnStatus').addEventListener('click', () => stepStatus());
+document.getElementById('btnMetadata').addEventListener('click', () => stepMetadata());
+document.getElementById('btnValues').addEventListener('click', () => stepValues());
+document.getElementById('btnWrite').addEventListener('click', () => stepWrite());
+document.getElementById('btnBurst').addEventListener('click', () => stepBurst());
+
+function clearLog() {
+  logEl.innerHTML = '<div class="entry-body">Sin actividad todavía.</div>';
+}
+document.getElementById('btnClear').addEventListener('click', clearLog);
+document.getElementById('btnClear2').addEventListener('click', clearLog);
+</script>
+</body>
+</html>
