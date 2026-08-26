@@ -536,10 +536,18 @@ class LogViewer {
     this.setupEventListeners();
     this.loadHeaderLogo();
 
+    // Rango de fechas por defecto: ayer y hoy (el usuario lo puede ampliar
+    // manualmente desde los inputs date-from/date-to). getFullYear/Month/
+    // Date en vez de toISOString: toISOString usa UTC y desfasa el día
+    // durante la tarde/noche en México (UTC-6).
+    const pad = (n) => String(n).padStart(2, '0');
+    const toInputValue = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const today = new Date();
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    this.dateFrom = firstDayOfMonth;
-    document.getElementById('date-from').value = firstDayOfMonth.toISOString().split('T')[0];
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    this.dateFrom = yesterday;
+    this.dateTo = today;
+    document.getElementById('date-from').value = toInputValue(yesterday);
+    document.getElementById('date-to').value = toInputValue(today);
 
     await this.loadAllLogs();
   }
