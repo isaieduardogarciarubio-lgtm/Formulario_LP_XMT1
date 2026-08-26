@@ -1728,12 +1728,12 @@
       this.logs = {
         destino_doca: [],
         fury: [],
-        contenerizado: [],
         linehaul: [],
         inbound_fm: [],
         inbound_drivers: [],
         barredura: [],
         premissort: [],
+        cont_cerrado: [],
       };
       this.currentLog = 'destino_doca';
       // Filtros y paginación
@@ -2186,13 +2186,6 @@
           const count = records.filter(r => r.situacion === s).length;
           this.addKpiCard(container, count.toString(), s);
         });
-      } else if (this.currentLog === 'contenerizado') {
-        const situations = new Set(records.map(r => r.situacion));
-        this.addKpiCard(container, total.toString(), 'Total');
-        situations.forEach(s => {
-          const count = records.filter(r => r.situacion === s).length;
-          this.addKpiCard(container, count.toString(), s);
-        });
       } else if (this.currentLog === 'linehaul') {
         const areas = new Set(records.map(r => r.area));
         this.addKpiCard(container, total.toString(), 'Total');
@@ -2254,6 +2247,22 @@
         }
         const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
         this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');
+      } else if (this.currentLog === 'cont_cerrado') {
+        this.addKpiCard(container, total.toString(), 'Total');
+        // Mismos hallazgos que Premissort (ver isMissort/isNoContenerizado)
+        // — misma auditoría, solo que sobre contenedores ya cerrados.
+        const missorts = records.filter(isMissort).length;
+        this.addKpiCard(container, missorts.toString(), 'Missorts');
+        const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
+        this.addKpiCard(container, noContenerizado.toString(), 'No contenerizado');
+        const encontrados = records.filter(r => r.estado === 'Encontrado').length;
+        this.addKpiCard(container, encontrados.toString(), 'Encontrados');
+        const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
+        if (pendienteReubicar > 0) {
+          this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
+        }
+        const contenedores = new Set(records.map(r => r.hu).filter(Boolean)).size;
+        this.addKpiCard(container, contenedores.toString(), 'Contenedores escaneados');
       }
     }
 
@@ -2314,7 +2323,7 @@
             () => this.buildResultadoChart(records),
             () => this.buildDestinoChart(records),
           ];
-        } else if (this.currentLog === 'fury' || this.currentLog === 'contenerizado') {
+        } else if (this.currentLog === 'fury') {
           builders = [() => this.buildSituacionChart(records)];
         } else if (this.currentLog === 'linehaul') {
           builders = [() => this.buildAreaChart(records)];
@@ -2332,7 +2341,7 @@
             () => this.buildBarreduraCasoCountChart(records),
             () => this.buildBarreduraCostoChart(records),
           ];
-        } else if (this.currentLog === 'premissort') {
+        } else if (this.currentLog === 'premissort' || this.currentLog === 'cont_cerrado') {
           builders = [
             () => this.buildPremissortMissortChart(records),
             () => this.buildPremissortEstadoChart(records),
@@ -2816,7 +2825,7 @@
           } else if (this.currentLog === 'barredura' && col.field === 'estado') {
             td.className = isDentroDeCatalogo(value) ? 'status-good' : 'status-critical';
             td.textContent = isDentroDeCatalogo(value) ? 'Dentro de catálogo' : 'Fuera de catálogo';
-          } else if (this.currentLog === 'premissort' && col.field === 'estado') {
+          } else if ((this.currentLog === 'premissort' || this.currentLog === 'cont_cerrado') && col.field === 'estado') {
             // Un "Encontrado" que en realidad fue reubicado (missort ya
             // corregido) se marca distinto de un hallazgo normal — sigue
             // siendo la razón de ser de la auditoría, no se diluye en verde.
@@ -3675,17 +3684,6 @@
       ],
       fields: [{ type: 'photo', id: 'foto' }],
     },
-    contenerizado: {
-      title: 'Contenerizado',
-      csvColumns: [
-        { field: 'auditoria', header: 'Auditoría' },
-        { field: 'ts', header: 'Fecha/Hora' },
-        { field: 'shipment', header: 'Shipment ID' },
-        { field: 'situacion', header: 'Situación' },
-        { field: 'foto', header: 'Foto' },
-      ],
-      fields: [{ type: 'photo', id: 'foto' }],
-    },
     linehaul: {
       title: 'Posible daño LH',
       csvColumns: [
@@ -3758,6 +3756,18 @@
         { field: 'auditoria', header: 'Auditoría' },
         { field: 'ts', header: 'Fecha/Hora' },
         { field: 'posicion', header: 'Posición' },
+        { field: 'hu', header: 'HU' },
+        { field: 'shipment_id', header: 'Shipment ID' },
+        { field: 'estado', header: 'Estado' },
+        { field: 'detalle', header: 'Detalle' },
+      ],
+      fields: [],
+    },
+    cont_cerrado: {
+      title: 'Contenedor Cerrado',
+      csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
+        { field: 'ts', header: 'Fecha/Hora' },
         { field: 'hu', header: 'HU' },
         { field: 'shipment_id', header: 'Shipment ID' },
         { field: 'estado', header: 'Estado' },
