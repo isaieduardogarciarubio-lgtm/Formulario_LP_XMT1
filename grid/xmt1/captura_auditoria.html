@@ -6220,12 +6220,17 @@ class PremissortSession {
     missortBtn.addEventListener('click', () => this.saveMissortProbable(shipmentId));
     options.appendChild(missortBtn);
 
-    const noContenerizadoBtn = document.createElement('button');
-    noContenerizadoBtn.type = 'button';
-    noContenerizadoBtn.className = 'choice-btn';
-    noContenerizadoBtn.textContent = 'No contenerizado — no está en ningún contenedor';
-    noContenerizadoBtn.addEventListener('click', () => this.renderOutOfCatalogAction(shipmentId));
-    options.appendChild(noContenerizadoBtn);
+    // "No contenerizado" ya es un paso final (a diferencia de Correcto/
+    // Missort, no lleva a otra pantalla) — sus 2 acciones posibles se
+    // ofrecen aquí mismo en vez de navegar a un segundo paso.
+    PremissortSession.OUT_OF_CATALOG_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = `No contenerizado — ${opt}`;
+      btn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId, opt));
+      options.appendChild(btn);
+    });
   }
 
   /** Falsa alarma por desfase del catálogo — el operador confirma que sí pertenece a la posición actual. Mismo resultado que un match normal (saveMatch), pero este shipment nunca estuvo en pending. */
@@ -6277,42 +6282,6 @@ class PremissortSession {
     } finally {
       this.savingOut = false;
     }
-  }
-
-  renderOutOfCatalogAction(shipmentId) {
-    const tmsUrl = `https://tms.adminml.com/fos/shipment/details/${encodeURIComponent(shipmentId)}`;
-    this.container.innerHTML = `
-      <div class="step-screen step-screen-compact">
-        <div class="step-progress-row">
-          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
-          <div class="step-progress">Sobrante — no contenerizado</div>
-        </div>
-        <div class="driver-shipment-card">
-          <div class="driver-shipment-id">${shipmentId}</div>
-        </div>
-        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Investigar en TMS</a>
-        <h1 class="step-question">¿Qué acción se tomó?</h1>
-        <div class="choice-options"></div>
-        <div class="step-support"></div>
-      </div>
-    `;
-
-    this.supportEl = this.container.querySelector('.step-support');
-    const options = this.container.querySelector('.choice-options');
-
-    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      this.locked = false;
-      this.renderLoop();
-    });
-
-    PremissortSession.OUT_OF_CATALOG_OPTIONS.forEach((opt) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'choice-btn';
-      btn.textContent = opt;
-      btn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId, opt));
-      options.appendChild(btn);
-    });
   }
 
   async saveOutOfCatalog(shipmentId, accion) {
@@ -7139,12 +7108,17 @@ class ContenedorCerradoSession {
     missortBtn.addEventListener('click', () => this.saveMissortProbable(shipmentId));
     options.appendChild(missortBtn);
 
-    const noContenerizadoBtn = document.createElement('button');
-    noContenerizadoBtn.type = 'button';
-    noContenerizadoBtn.className = 'choice-btn';
-    noContenerizadoBtn.textContent = 'No contenerizado — no está en ningún contenedor';
-    noContenerizadoBtn.addEventListener('click', () => this.renderOutOfCatalogAction(shipmentId));
-    options.appendChild(noContenerizadoBtn);
+    // "No contenerizado" ya es un paso final (a diferencia de Correcto/
+    // Missort, no lleva a otra pantalla) — sus 2 acciones posibles se
+    // ofrecen aquí mismo en vez de navegar a un segundo paso.
+    ContenedorCerradoSession.OUT_OF_CATALOG_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = `No contenerizado — ${opt}`;
+      btn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId, opt));
+      options.appendChild(btn);
+    });
   }
 
   /** Falsa alarma por desfase del catálogo — el operador confirma que sí pertenece a este HU. Mismo resultado que un match normal (saveMatch), pero este shipment nunca estuvo en pending. */
@@ -7194,42 +7168,6 @@ class ContenedorCerradoSession {
     } finally {
       this.savingOut = false;
     }
-  }
-
-  renderOutOfCatalogAction(shipmentId) {
-    const tmsUrl = `https://tms.adminml.com/fos/shipment/details/${encodeURIComponent(shipmentId)}`;
-    this.container.innerHTML = `
-      <div class="step-screen step-screen-compact">
-        <div class="step-progress-row">
-          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
-          <div class="step-progress">Sobrante — no contenerizado</div>
-        </div>
-        <div class="driver-shipment-card">
-          <div class="driver-shipment-id">${shipmentId}</div>
-        </div>
-        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Investigar en TMS</a>
-        <h1 class="step-question">¿Qué acción se tomó?</h1>
-        <div class="choice-options"></div>
-        <div class="step-support"></div>
-      </div>
-    `;
-
-    this.supportEl = this.container.querySelector('.step-support');
-    const options = this.container.querySelector('.choice-options');
-
-    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      this.locked = false;
-      this.renderLoop();
-    });
-
-    ContenedorCerradoSession.OUT_OF_CATALOG_OPTIONS.forEach((opt) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'choice-btn';
-      btn.textContent = opt;
-      btn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId, opt));
-      options.appendChild(btn);
-    });
   }
 
   async saveOutOfCatalog(shipmentId, accion) {
