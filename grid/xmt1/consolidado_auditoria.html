@@ -2548,26 +2548,32 @@
 
         // Fase 2: con el grid ya en su layout final, dibujar cada gráfica.
         specs.forEach(({ div, data, layout, chartKey, labels, predicates }) => {
-          // Si esta gráfica tiene una porción elegida por drill-down, la
-          // "saca" un poco (pull) y le da un borde — así se distingue sin
-          // tener que cambiar sus colores ni la leyenda.
+          // Si esta gráfica tiene una porción/barra elegida por drill-down,
+          // se resalta sin tener que cambiar su paleta de colores: en pie
+          // se "saca" (pull) y lleva borde; en barra, se atenúa todo lo
+          // demás (opacity) y la barra elegida queda al 100%.
           if (chartKey && predicates && this.chartFilter && this.chartFilter.chartKey === chartKey) {
             const idx = labels.indexOf(this.chartFilter.label);
             if (idx !== -1) {
-              data[0].pull = labels.map((_, i) => (i === idx ? 0.06 : 0));
-              data[0].marker = {
-                ...data[0].marker,
-                line: { color: '#F4F6F8', width: labels.map((_, i) => (i === idx ? 2 : 0)) },
-              };
+              if (data[0].type === 'pie') {
+                data[0].pull = labels.map((_, i) => (i === idx ? 0.06 : 0));
+                data[0].marker = {
+                  ...data[0].marker,
+                  line: { color: '#F4F6F8', width: labels.map((_, i) => (i === idx ? 2 : 0)) },
+                };
+              } else {
+                data[0].marker = {
+                  ...data[0].marker,
+                  opacity: labels.map((_, i) => (i === idx ? 1 : 0.35)),
+                };
+              }
             }
           }
 
           Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
 
-          // Drill-down: clic en una porción filtra la tabla de abajo por esa
-          // categoría; clic de nuevo sobre la misma porción lo quita. Las
-          // gráficas de barras (sin predicates) no participan — el pedido
-          // era específicamente sobre "gráfica pastel".
+          // Drill-down: clic en una porción/barra filtra la tabla de abajo
+          // por esa categoría; clic de nuevo sobre la misma la quita.
           if (chartKey && predicates) {
             div.style.cursor = 'pointer';
             div.on('plotly_click', (evt) => {
@@ -2616,9 +2622,10 @@
 
     buildSituacionChart(records) {
       const counts = this.countByField(records, 'situacion');
+      const labels = Object.keys(counts);
 
       const data = [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2634,7 +2641,7 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'situacion', labels, predicates: this.fieldPredicates('situacion', labels) };
     }
 
     /** Los dos hallazgos que busca esta auditoría: Missort (ver isMissort) y No contenerizado (ver isNoContenerizado). */
@@ -2683,9 +2690,10 @@
 
     buildPremissortEstadoChart(records) {
       const counts = this.countByField(records, 'estado');
+      const labels = Object.keys(counts);
 
       const data = [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2701,16 +2709,17 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'premissort-estado', labels, predicates: this.fieldPredicates('estado', labels) };
     }
 
     buildDestinoChart(records) {
       const counts = this.countByField(records, 'destino');
 
       const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const labels = sorted.map(([k]) => k);
 
       const data = [{
-        x: sorted.map(([k]) => k),
+        x: labels,
         y: sorted.map(([, v]) => v),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2726,7 +2735,7 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'destino', labels, predicates: this.fieldPredicates('destino', labels) };
     }
 
     buildAreaChart(records) {
@@ -2759,9 +2768,10 @@
 
     buildHallazgoChart(records) {
       const counts = this.countByField(records, 'hallazgo');
+      const labels = Object.keys(counts);
 
       const data = [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2777,7 +2787,7 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'hallazgo', labels, predicates: this.fieldPredicates('hallazgo', labels) };
     }
 
     buildEstadoDriversChart(records) {
@@ -2820,9 +2830,14 @@
         totals[key] = (totals[key] || 0) + (Number(r.cost_usd) || 0);
       });
       const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const labels = sorted.map(([k]) => k);
+      const predicates = {};
+      labels.forEach((label) => {
+        predicates[label] = (r) => (r.route_id || '(sin ruta)') === label;
+      });
 
       const data = [{
-        x: sorted.map(([k]) => k),
+        x: labels,
         y: sorted.map(([, v]) => Number(v.toFixed(2))),
         type: 'bar',
         marker: { color: '#3987E5' },
@@ -2838,7 +2853,7 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'cost-by-route', labels, predicates };
     }
 
     buildBarreduraEstadoChart(records) {
@@ -2884,6 +2899,8 @@
         totals[caso] = (totals[caso] || 0) + (Number(r.costo_usd) || 0);
       });
       const casos = Object.keys(totals);
+      const predicates = {};
+      casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
       const data = [{
         x: casos,
@@ -2910,14 +2927,17 @@
         margin: { l: 50, r: 30, t: 40, b: 60 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-costo', labels: casos, predicates };
     }
 
     buildBarreduraLugarChart(records) {
       const counts = this.countByField(records.map(r => ({ lugar: bucketLugar(r.lugar) })), 'lugar');
+      const labels = Object.keys(counts);
+      const predicates = {};
+      labels.forEach((label) => { predicates[label] = (r) => bucketLugar(r.lugar) === label; });
 
       const data = [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2936,13 +2956,15 @@
         margin: { l: 50, r: 30, t: 40, b: 60 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-lugar', labels, predicates };
     }
 
     /** Cantidad de registros por tipo de caso (conteo, no costo). */
     buildBarreduraCasoCountChart(records) {
       const counts = this.countByField(records.map(r => ({ caso: bucketCaso(r.caso) })), 'caso');
       const casos = Object.keys(counts);
+      const predicates = {};
+      casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
       const data = [{
         x: casos,
@@ -2961,7 +2983,7 @@
         margin: { l: 50, r: 30, t: 40, b: 60 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-caso-count', labels: casos, predicates };
     }
 
     /**
