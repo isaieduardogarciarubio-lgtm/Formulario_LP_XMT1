@@ -6166,10 +6166,83 @@ class PremissortSession {
   }
 
   /* ====================================================================== */
-  /* Sobrante no contenerizado: investigar en TMS + elegir acción         */
+  /* Sin match en el catálogo: clasificar (Missort probable vs realmente   */
+  /* no contenerizado) antes de decidir la acción                          */
   /* ====================================================================== */
 
+  /**
+   * No encontrarlo en el catálogo NO prueba que esté fuera de todo
+   * contenedor — el catálogo viene de una Google Sheet conectada a
+   * BigQuery, y esa conexión puede tener segundos/minutos de desfase. Un
+   * paquete recién contenerizado en otra posición puede no aparecer
+   * todavía. Por eso no se asume "no contenerizado": se le pregunta al
+   * operador, que puede saberlo por observación física aunque el catálogo
+   * todavía no lo refleje.
+   */
   renderOutOfCatalog(shipmentId) {
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Sobrante — sin match en catálogo</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${shipmentId}</div>
+          <div class="driver-shipment-row">
+            <span class="driver-badge driver-badge-out">No aparece en el catálogo</span>
+          </div>
+        </div>
+        <div class="step-support">El catálogo puede tener unos segundos de desfase — si sabes que este paquete está en otro contenedor aunque el catálogo no lo muestre todavía, marca Missort.</div>
+        <h1 class="step-question">¿Qué es este paquete?</h1>
+        <div class="choice-options"></div>
+      </div>
+    `;
+
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    const missortBtn = document.createElement('button');
+    missortBtn.type = 'button';
+    missortBtn.className = 'choice-btn';
+    missortBtn.textContent = 'Missort — está en otro contenedor';
+    missortBtn.addEventListener('click', () => this.saveMissortProbable(shipmentId));
+    options.appendChild(missortBtn);
+
+    const noContenerizadoBtn = document.createElement('button');
+    noContenerizadoBtn.type = 'button';
+    noContenerizadoBtn.className = 'choice-btn';
+    noContenerizadoBtn.textContent = 'No contenerizado — no está en ningún contenedor';
+    noContenerizadoBtn.addEventListener('click', () => this.renderOutOfCatalogAction(shipmentId));
+    options.appendChild(noContenerizadoBtn);
+  }
+
+  /** El operador ya sabe/observó que está en otro contenedor — se marca pendiente de reubicar aunque el catálogo no diga dónde. */
+  async saveMissortProbable(shipmentId) {
+    if (this.savingOut) return;
+    this.savingOut = true;
+    try {
+      if (this.onScan) {
+        await this.onScan({
+          posicion: this.posicion,
+          hu: this.hu,
+          shipment_id: shipmentId,
+          estado: 'Sobrante - pendiente reubicar',
+          detalle: 'Missort — no aparece aún en el catálogo (posible desfase de la sheet conectada)',
+        });
+      }
+      this.anyRecordToday.add(shipmentId);
+      this.locked = false;
+      this.renderLoop();
+    } finally {
+      this.savingOut = false;
+    }
+  }
+
+  renderOutOfCatalogAction(shipmentId) {
     const tmsUrl = `https://tms.adminml.com/fos/shipment/details/${encodeURIComponent(shipmentId)}`;
     this.container.innerHTML = `
       <div class="step-screen step-screen-compact">
@@ -6179,9 +6252,6 @@ class PremissortSession {
         </div>
         <div class="driver-shipment-card">
           <div class="driver-shipment-id">${shipmentId}</div>
-          <div class="driver-shipment-row">
-            <span class="driver-badge driver-badge-out">No se encontró en BigQuery</span>
-          </div>
         </div>
         <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Investigar en TMS</a>
         <h1 class="step-question">¿Qué acción se tomó?</h1>
