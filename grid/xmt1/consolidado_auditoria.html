@@ -541,6 +541,56 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Overlay de carga inicial (misma micro-orb de captura_auditoria.html) — sin esto, el dashboard se ve vacío mientras loadAllLogs() todavía no trae nada. */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 3000;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.active { display: flex; }
+    .loading-overlay-content {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface, #12171b);
+      border: 1px solid var(--border-soft, #232b31);
+      padding: 16px 24px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text, #e8edf0);
+    }
+    .loading-orb {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #27272a;
+      flex-shrink: 0;
+      transition: all 0.4s ease;
+    }
+    .loading-orb.saving {
+      background: radial-gradient(circle at 30% 30%, #a855f7, #3b82f6, #06b6d4);
+      filter: blur(1px);
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+      animation: loading-orb-morph 2s infinite alternate, loading-orb-spin 3s linear infinite;
+    }
+    .loading-orb.error {
+      background: #ff5c6c;
+      filter: blur(0);
+      box-shadow: 0 0 10px rgba(255, 92, 108, 0.6);
+      animation: none;
+    }
+    @keyframes loading-orb-morph {
+      0% { border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%; }
+      100% { border-radius: 60% 40% 30% 70% / 50% 60% 30% 60%; }
+    }
+    @keyframes loading-orb-spin {
+      100% { transform: rotate(360deg); }
+    }
+
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     @media (max-width: 640px) {
@@ -564,6 +614,13 @@
 <script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KXHH66CFA1XB2SDYFD9BEG8D";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script></head>
 
 <body>
+
+<div id="loading-overlay" class="loading-overlay active">
+  <div class="loading-overlay-content">
+    <div id="loading-orb" class="loading-orb saving"></div>
+    <span id="loading-overlay-text">Cargando logs...</span>
+  </div>
+</div>
 
 <!-- HEADER (barra de título) -->
 <header class="header">
@@ -914,6 +971,45 @@
       this.log('Consola de depuración iniciada', 'info');
     }
   }
+
+  /**
+   * Overlay de carga inicial (misma micro-orb de captura_auditoria.html) —
+   * arranca activo en el HTML (ver <body>) para que nunca haya un frame
+   * de dashboard vacío antes de que este script corra; init() lo oculta
+   * cuando loadAllLogs() termina, o lo deja en estado error si falla.
+   */
+  const LoadingOverlay = (() => {
+    let overlayEl, orbEl, textEl;
+
+    function refs() {
+      if (!overlayEl) {
+        overlayEl = document.getElementById('loading-overlay');
+        orbEl = document.getElementById('loading-orb');
+        textEl = document.getElementById('loading-overlay-text');
+      }
+      return !!overlayEl;
+    }
+
+    function show(text = 'Cargando logs...') {
+      if (!refs()) return;
+      overlayEl.classList.add('active');
+      orbEl.className = 'loading-orb saving';
+      textEl.textContent = text;
+    }
+
+    function error(text = 'No se pudieron cargar los logs') {
+      if (!refs()) return;
+      orbEl.className = 'loading-orb error';
+      textEl.textContent = text;
+    }
+
+    function hide() {
+      if (!refs()) return;
+      overlayEl.classList.remove('active');
+    }
+
+    return { show, error, hide };
+  })();
 
   class GridClient {
     constructor(docId) {
@@ -1774,12 +1870,18 @@
       document.getElementById('date-from').value = toInputValue(yesterday);
       document.getElementById('date-to').value = toInputValue(today);
 
-      await this.loadAllLogs();
-      const firstWithData = Object.entries(this.logs).find(([, r]) => r.length > 0);
-      if (firstWithData) {
-        this.currentLog = firstWithData[0];
+      try {
+        await this.loadAllLogs();
+        const firstWithData = Object.entries(this.logs).find(([, r]) => r.length > 0);
+        if (firstWithData) {
+          this.currentLog = firstWithData[0];
+        }
+        this.render();
+        LoadingOverlay.hide();
+      } catch (e) {
+        DebugConsole.log(`Error al cargar logs: ${e.message}`, 'error');
+        LoadingOverlay.error('No se pudieron cargar los logs');
       }
-      this.render();
       this.refreshRecoveryBadge().catch((e) => DebugConsole.log(`Recovery badge: ${e.message}`, 'warn'));
     }
 

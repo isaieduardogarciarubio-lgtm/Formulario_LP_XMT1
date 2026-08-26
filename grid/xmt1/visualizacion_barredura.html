@@ -228,10 +228,67 @@
       .charts-grid { grid-template-columns: 1fr; }
       .chart-container { height: clamp(220px, 46vh, 420px); }
     }
+
+    /* Overlay de carga inicial (misma micro-orb de captura_auditoria.html) — sin esto, el "no hay registros" de abajo se ve momentáneamente como si ya hubiera terminado de cargar y estuviera vacío. */
+    .loading-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 3000;
+      align-items: center;
+      justify-content: center;
+    }
+    .loading-overlay.active { display: flex; }
+    .loading-overlay-content {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--surface);
+      border: 1px solid var(--border-soft);
+      padding: 16px 24px;
+      border-radius: var(--r-lg);
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .loading-orb {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #27272a;
+      flex-shrink: 0;
+      transition: all 0.4s ease;
+    }
+    .loading-orb.saving {
+      background: radial-gradient(circle at 30% 30%, #a855f7, #3b82f6, #06b6d4);
+      filter: blur(1px);
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.6);
+      animation: loading-orb-morph 2s infinite alternate, loading-orb-spin 3s linear infinite;
+    }
+    .loading-orb.error {
+      background: var(--c-red);
+      filter: blur(0);
+      box-shadow: 0 0 10px rgba(255, 92, 108, 0.6);
+      animation: none;
+    }
+    @keyframes loading-orb-morph {
+      0% { border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%; }
+      100% { border-radius: 60% 40% 30% 70% / 50% 60% 30% 60%; }
+    }
+    @keyframes loading-orb-spin {
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 
 <body>
+
+<div id="loading-overlay" class="loading-overlay active">
+  <div class="loading-overlay-content">
+    <div id="loading-orb" class="loading-orb saving"></div>
+    <span id="loading-overlay-text">Cargando logs...</span>
+  </div>
+</div>
 
 <header class="header">
   <div class="brand">
@@ -459,6 +516,46 @@ function bucketCaso(caso) {
   return KNOWN_CASOS.includes(v) ? v : 'Otro';
 }
 
+/**
+ * Overlay de carga inicial (misma micro-orb de captura_auditoria.html) —
+ * arranca activo en el HTML (ver <body>) para que nunca haya un frame de
+ * "Todavía no hay registros sincronizados" antes de que este script
+ * termine de cargar; init() lo oculta cuando loadAllLogs() termina, o lo
+ * deja en estado error si falla.
+ */
+const LoadingOverlay = (() => {
+  let overlayEl, orbEl, textEl;
+
+  function refs() {
+    if (!overlayEl) {
+      overlayEl = document.getElementById('loading-overlay');
+      orbEl = document.getElementById('loading-orb');
+      textEl = document.getElementById('loading-overlay-text');
+    }
+    return !!overlayEl;
+  }
+
+  function show(text = 'Cargando logs...') {
+    if (!refs()) return;
+    overlayEl.classList.add('active');
+    orbEl.className = 'loading-orb saving';
+    textEl.textContent = text;
+  }
+
+  function error(text = 'No se pudieron cargar los logs') {
+    if (!refs()) return;
+    orbEl.className = 'loading-orb error';
+    textEl.textContent = text;
+  }
+
+  function hide() {
+    if (!refs()) return;
+    overlayEl.classList.remove('active');
+  }
+
+  return { show, error, hide };
+})();
+
 class GridClient {
   constructor(docId) {
     this.docId = docId;
@@ -549,7 +646,12 @@ class LogViewer {
     document.getElementById('date-from').value = toInputValue(yesterday);
     document.getElementById('date-to').value = toInputValue(today);
 
-    await this.loadAllLogs();
+    try {
+      await this.loadAllLogs();
+      LoadingOverlay.hide();
+    } catch (e) {
+      LoadingOverlay.error('No se pudieron cargar los logs');
+    }
   }
 
   async loadHeaderLogo() {
