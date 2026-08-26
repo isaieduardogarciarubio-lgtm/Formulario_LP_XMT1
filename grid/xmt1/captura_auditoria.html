@@ -6173,11 +6173,17 @@ class PremissortSession {
   /**
    * No encontrarlo en el catálogo NO prueba que esté fuera de todo
    * contenedor — el catálogo viene de una Google Sheet conectada a
-   * BigQuery, y esa conexión puede tener segundos/minutos de desfase. Un
-   * paquete recién contenerizado en otra posición puede no aparecer
-   * todavía. Por eso no se asume "no contenerizado": se le pregunta al
-   * operador, que puede saberlo por observación física aunque el catálogo
-   * todavía no lo refleje.
+   * BigQuery, y esa conexión puede tener segundos/minutos de desfase. Dos
+   * formas distintas en que el desfase puede engañar:
+   *   - El paquete SÍ pertenece a ESTA posición, pero el catálogo todavía
+   *     no lo reflejó cuando se cargó al iniciar el escaneo -> falsa
+   *     alarma, es "Correcto".
+   *   - El paquete está en OTRA posición, pero esa reasignación tampoco se
+   *     refleja aún -> es un Missort real, solo que el catálogo no dice
+   *     dónde.
+   * Por eso no se asume "no contenerizado": se le pregunta al operador,
+   * que puede saberlo por observación física aunque el catálogo todavía
+   * no lo refleje.
    */
   renderOutOfCatalog(shipmentId) {
     this.container.innerHTML = `
@@ -6192,7 +6198,7 @@ class PremissortSession {
             <span class="driver-badge driver-badge-out">No aparece en el catálogo</span>
           </div>
         </div>
-        <div class="step-support">El catálogo puede tener unos segundos de desfase — si sabes que este paquete está en otro contenedor aunque el catálogo no lo muestre todavía, marca Missort.</div>
+        <div class="step-support">El catálogo puede tener unos segundos de desfase — puede ser una falsa alarma (sí pertenece aquí), un Missort real (está en otro contenedor) que aún no se refleja, o de verdad no contenerizado.</div>
         <h1 class="step-question">¿Qué es este paquete?</h1>
         <div class="choice-options"></div>
       </div>
@@ -6204,6 +6210,13 @@ class PremissortSession {
       this.locked = false;
       this.renderLoop();
     });
+
+    const correctBtn = document.createElement('button');
+    correctBtn.type = 'button';
+    correctBtn.className = 'choice-btn';
+    correctBtn.textContent = 'Correcto — sí pertenece aquí';
+    correctBtn.addEventListener('click', () => this.saveCorrectHere(shipmentId));
+    options.appendChild(correctBtn);
 
     const missortBtn = document.createElement('button');
     missortBtn.type = 'button';
@@ -6218,6 +6231,35 @@ class PremissortSession {
     noContenerizadoBtn.textContent = 'No contenerizado — no está en ningún contenedor';
     noContenerizadoBtn.addEventListener('click', () => this.renderOutOfCatalogAction(shipmentId));
     options.appendChild(noContenerizadoBtn);
+  }
+
+  /** Falsa alarma por desfase del catálogo — el operador confirma que sí pertenece a la posición actual. Mismo resultado que un match normal (saveMatch), pero este shipment nunca estuvo en pending. */
+  async saveCorrectHere(shipmentId) {
+    if (this.savingOut) return;
+    this.savingOut = true;
+    try {
+      this.handled.set(shipmentId, 'Encontrado');
+      this.foundToday.add(shipmentId);
+      this.anyRecordToday.add(shipmentId);
+      this.flash('ok', `${shipmentId} · Encontrado`);
+      if (this.onScan) {
+        try {
+          await this.onScan({
+            posicion: this.posicion,
+            hu: this.hu,
+            shipment_id: shipmentId,
+            estado: 'Encontrado',
+            detalle: 'Confirmado en esta posición — no aparecía en el catálogo (posible desfase de la sheet conectada)',
+          });
+        } catch (e) {
+          DebugConsole.log(`Premissort: error al guardar ${shipmentId}: ${e.message}`, 'error');
+        }
+      }
+      this.locked = false;
+      this.renderLoop();
+    } finally {
+      this.savingOut = false;
+    }
   }
 
   /** El operador ya sabe/observó que está en otro contenedor — se marca pendiente de reubicar aunque el catálogo no diga dónde. */
