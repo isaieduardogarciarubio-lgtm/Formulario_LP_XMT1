@@ -365,6 +365,29 @@
     .search-input::placeholder {
       color: var(--text-mut);
     }
+    /* Chip de filtro activo por clic en gráfica (drill-down) */
+    .chart-filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 209, 0, .12);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .chart-filter-chip button {
+      background: none;
+      border: none;
+      color: inherit;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+    }
 
     table {
       width: 100%;
@@ -800,6 +823,10 @@
         <div class="table-wrapper" id="historial-wrap">
           <div class="table-controls">
             <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
+            <div id="chart-filter-chip" class="chart-filter-chip" style="display: none;">
+              <span id="chart-filter-chip-label"></span>
+              <button type="button" id="chart-filter-chip-clear" aria-label="Quitar filtro de gráfica" title="Quitar filtro">&times;</button>
+            </div>
           </div>
           <table id="records-table">
             <thead id="table-head"></thead>
@@ -1841,6 +1868,11 @@
       this.barreduraView = 'historial';
       // Filtro por área (lugar) — solo aplica a Barredura. '' = todas.
       this.areaFilter = '';
+      // Drill-down: clic en una porción de un pie chart filtra la tabla de
+      // abajo. { chartKey, label, predicate }. Se limpia al cambiar de log
+      // o de cualquier otro filtro, para no dejar un filtro "fantasma"
+      // sobre un set de datos distinto al que lo generó.
+      this.chartFilter = null;
       this.recoveryBatches = [];
       this.recoveryRegistry = {};
       this.RECOVERY_PREFIX = 'RECOVERY_AUDITORIAS__';
@@ -1930,12 +1962,14 @@
       document.getElementById('date-from').addEventListener('change', async (e) => {
         this.dateFrom = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
+        this.chartFilter = null;
         await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
       document.getElementById('date-to').addEventListener('change', async (e) => {
         this.dateTo = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
+        this.chartFilter = null;
         await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
@@ -1945,6 +1979,7 @@
         document.getElementById('date-from').value = '';
         document.getElementById('date-to').value = '';
         this.displayedCount = 10;
+        this.chartFilter = null;
         await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
@@ -1957,6 +1992,7 @@
         btn.addEventListener('click', () => {
           this.barreduraView = btn.dataset.view;
           this.displayedCount = 10;
+          this.chartFilter = null;
           this.render();
         });
       });
@@ -1964,7 +2000,14 @@
       document.getElementById('area-filter').addEventListener('change', (e) => {
         this.areaFilter = e.target.value;
         this.displayedCount = 10;
+        this.chartFilter = null;
         this.render();
+      });
+
+      document.getElementById('chart-filter-chip-clear').addEventListener('click', () => {
+        this.chartFilter = null;
+        this.displayedCount = 10;
+        this.renderAnalysis();
       });
     }
 
@@ -2134,6 +2177,7 @@
           this.barreduraView = 'historial';
           this.areaFilter = '';
           this.displayedCount = 10;
+          this.chartFilter = null;
           this.render();
         });
         container.appendChild(tab);
@@ -2196,22 +2240,43 @@
       // paginados); la tabla sí pagina, para no renderizar cientos de filas.
       this.renderKpis(filteredRecords);
 
+      // Drill-down por clic en gráfica: solo estrecha la tabla de abajo, no
+      // los KPIs ni las gráficas — así la gráfica sigue mostrando la
+      // distribución completa como referencia mientras la tabla se enfoca
+      // en la porción elegida.
+      const tableRecords = this.chartFilter
+        ? filteredRecords.filter(this.chartFilter.predicate)
+        : filteredRecords;
+      this.renderChartFilterChip();
+
       if (!isBarredura || this.barreduraView === 'historial') {
-        const displayedRecords = filteredRecords.slice(0, this.displayedCount);
+        const displayedRecords = tableRecords.slice(0, this.displayedCount);
         this.renderTable(displayedRecords);
 
         const btnLoadMore = document.getElementById('btn-load-more');
         const paginationInfo = document.getElementById('pagination-info');
-        if (filteredRecords.length > this.displayedCount) {
+        if (tableRecords.length > this.displayedCount) {
           btnLoadMore.style.display = 'inline-block';
-          paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
+          paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${tableRecords.length}`;
         } else {
           btnLoadMore.style.display = 'none';
-          paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+          paginationInfo.textContent = `Total: ${tableRecords.length}`;
         }
       }
 
       this.renderCharts(filteredRecords);
+    }
+
+    /** Chip "Filtrando por: X" cuando hay un drill-down activo desde una gráfica. */
+    renderChartFilterChip() {
+      const chip = document.getElementById('chart-filter-chip');
+      const label = document.getElementById('chart-filter-chip-label');
+      if (this.chartFilter) {
+        chip.style.display = 'inline-flex';
+        label.textContent = `Filtrando por: ${this.chartFilter.label}`;
+      } else {
+        chip.style.display = 'none';
+      }
     }
 
     /**
@@ -2391,6 +2456,15 @@
       return counts;
     }
 
+    /** Un predicado de drill-down por cada label, reproduciendo el mismo bucketing que countByField. */
+    fieldPredicates(field, labels) {
+      const predicates = {};
+      labels.forEach((label) => {
+        predicates[label] = (r) => ((r[field] || '').toString().trim() || '(sin dato)') === label;
+      });
+      return predicates;
+    }
+
     renderCharts(records) {
       const container = document.getElementById('charts-grid');
 
@@ -2473,19 +2547,57 @@
         });
 
         // Fase 2: con el grid ya en su layout final, dibujar cada gráfica.
-        specs.forEach(({ div, data, layout }) => {
+        specs.forEach(({ div, data, layout, chartKey, labels, predicates }) => {
+          // Si esta gráfica tiene una porción elegida por drill-down, la
+          // "saca" un poco (pull) y le da un borde — así se distingue sin
+          // tener que cambiar sus colores ni la leyenda.
+          if (chartKey && predicates && this.chartFilter && this.chartFilter.chartKey === chartKey) {
+            const idx = labels.indexOf(this.chartFilter.label);
+            if (idx !== -1) {
+              data[0].pull = labels.map((_, i) => (i === idx ? 0.06 : 0));
+              data[0].marker = {
+                ...data[0].marker,
+                line: { color: '#F4F6F8', width: labels.map((_, i) => (i === idx ? 2 : 0)) },
+              };
+            }
+          }
+
           Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+
+          // Drill-down: clic en una porción filtra la tabla de abajo por esa
+          // categoría; clic de nuevo sobre la misma porción lo quita. Las
+          // gráficas de barras (sin predicates) no participan — el pedido
+          // era específicamente sobre "gráfica pastel".
+          if (chartKey && predicates) {
+            div.style.cursor = 'pointer';
+            div.on('plotly_click', (evt) => {
+              const pt = evt.points && evt.points[0];
+              if (!pt) return;
+              const label = labels[pt.pointNumber];
+              const isSame = this.chartFilter
+                && this.chartFilter.chartKey === chartKey
+                && this.chartFilter.label === label;
+              this.chartFilter = isSame ? null : { chartKey, label, predicate: predicates[label] };
+              this.displayedCount = 10;
+              this.renderAnalysis();
+            });
+          }
         });
       });
     }
 
     buildResultadoChart(records) {
       const counts = this.countByField(records, 'resultado');
+      const labels = Object.keys(counts);
 
       const data = [{
-        labels: Object.keys(counts),
+        labels,
         values: Object.values(counts),
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#4A4A4A'] },
       }];
 
@@ -2499,7 +2611,7 @@
         margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'resultado', labels, predicates: this.fieldPredicates('resultado', labels) };
     }
 
     buildSituacionChart(records) {
@@ -2527,15 +2639,32 @@
 
     /** Los dos hallazgos que busca esta auditoría: Missort (ver isMissort) y No contenerizado (ver isNoContenerizado). */
     buildPremissortMissortChart(records) {
-      const pendiente = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-      const reubicado = records.filter(r => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '')).length;
-      const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
+      const pendienteTest = (r) => r.estado === 'Sobrante - pendiente reubicar';
+      const reubicadoTest = (r) => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '');
+      const noContenerizadoTest = (r) => isNoContenerizado(r.estado);
+      const sinHallazgoTest = (r) => !pendienteTest(r) && !reubicadoTest(r) && !noContenerizadoTest(r);
+
+      const pendiente = records.filter(pendienteTest).length;
+      const reubicado = records.filter(reubicadoTest).length;
+      const noContenerizado = records.filter(noContenerizadoTest).length;
       const sinHallazgo = records.length - pendiente - reubicado - noContenerizado;
 
+      const labels = ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'];
+      const predicates = {
+        'Sin hallazgo': sinHallazgoTest,
+        'Missort — reubicado': reubicadoTest,
+        'Missort — pendiente': pendienteTest,
+        'No contenerizado': noContenerizadoTest,
+      };
+
       const data = [{
-        labels: ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'],
+        labels,
         values: [sinHallazgo, reubicado, pendiente, noContenerizado],
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#FF9E45', '#FF5C6C', '#8A7300'] },
       }];
 
@@ -2549,7 +2678,7 @@
         margin: { l: 20, r: 20, t: 40, b: 50 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'premissort-missort', labels, predicates };
     }
 
     buildPremissortEstadoChart(records) {
@@ -2602,11 +2731,16 @@
 
     buildAreaChart(records) {
       const counts = this.countByField(records, 'area');
+      const labels = Object.keys(counts);
 
       const data = [{
-        labels: Object.keys(counts),
+        labels,
         values: Object.values(counts),
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#8A7300', '#4A4A4A'] },
       }];
 
@@ -2620,7 +2754,7 @@
         margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'area', labels, predicates: this.fieldPredicates('area', labels) };
     }
 
     buildHallazgoChart(records) {
@@ -2659,6 +2793,10 @@
         labels,
         values: labels.map(l => counts[l]),
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: labels.map(l => colorMap[l] || '#8A7300') },
       }];
 
@@ -2672,7 +2810,7 @@
         margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'estado-drivers', labels, predicates: this.fieldPredicates('estado', labels) };
     }
 
     buildCostByRouteChart(records) {
@@ -2707,10 +2845,20 @@
       const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
       const fueraCatalogo = records.length - enCatalogo;
 
+      const labels = ['Dentro de catálogo', 'Fuera de catálogo'];
+      const predicates = {
+        'Dentro de catálogo': (r) => isDentroDeCatalogo(r.estado),
+        'Fuera de catálogo': (r) => !isDentroDeCatalogo(r.estado),
+      };
+
       const data = [{
-        labels: ['Dentro de catálogo', 'Fuera de catálogo'],
+        labels,
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         // Todas las gráficas de la app usan tonos de amarillo, no verde/rojo.
         marker: { colors: ['#FFD100', '#8A7300'] },
       }];
@@ -2725,7 +2873,7 @@
         margin: { l: 20, r: 20, t: 40, b: 50 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-estado', labels, predicates };
     }
 
     /** Costo USD capturado por tipo de caso (suma). */
@@ -3461,7 +3609,8 @@
         return;
       }
 
-      const filteredRecords = this.getFilteredRecords();
+      let filteredRecords = this.getFilteredRecords();
+      if (this.chartFilter) filteredRecords = filteredRecords.filter(this.chartFilter.predicate);
       const queryLower = query.toLowerCase();
       const config = FORMS_CONFIG[this.currentLog];
       const searchResults = filteredRecords.filter(r => {
