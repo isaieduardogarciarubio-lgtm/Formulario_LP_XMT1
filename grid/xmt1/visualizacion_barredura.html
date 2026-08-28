@@ -196,6 +196,18 @@
       font-size: 14px; color: var(--text); font-family: var(--font);
     }
     .search-input::placeholder { color: var(--text-mut); }
+    /* Chip de filtro activo por clic en gráfica (drill-down) */
+    .chart-filter-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(255, 209, 0, .12);
+      border: 1px solid var(--accent); color: var(--accent);
+      font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .chart-filter-chip button {
+      background: none; border: none; color: inherit;
+      font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
+    }
 
     input[type="date"] {
       padding: 6px 8px; border-radius: 6px;
@@ -299,6 +311,11 @@
     </div>
   </div>
   <div class="header-right">
+    <a class="btn-icon" id="btn-datastudio" title="Abrir dashboard de Data Studio" href="https://datastudio.google.com/reporting/34756cb1-fa59-4b30-a6ee-f2c99dad4230/page/p_1eapajygzd" target="_blank" rel="noopener noreferrer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 20V10M12 20V4M6 20v-6"/>
+      </svg>
+    </a>
     <button class="btn-icon" id="btn-refresh" title="Actualizar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M23 4v6h-6"/>
@@ -331,6 +348,10 @@
         </div>
         <div class="table-controls">
           <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
+          <div id="chart-filter-chip" class="chart-filter-chip" style="display: none;">
+            <span id="chart-filter-chip-label"></span>
+            <button type="button" id="chart-filter-chip-clear" aria-label="Quitar filtro de gráfica" title="Quitar filtro">&times;</button>
+          </div>
         </div>
         <table id="records-table">
           <thead id="table-head"></thead>
@@ -626,6 +647,11 @@ class LogViewer {
     this.dateTo = null;
     this.displayedCount = 10;
     this._chartsRafId = null;
+    // Drill-down: clic en una porción/barra de una gráfica filtra la tabla
+    // de abajo. { chartKey, label, predicate }. Se limpia al cambiar de log
+    // o de cualquier otro filtro, para no dejar un filtro "fantasma" sobre
+    // un set de datos distinto al que lo generó.
+    this.chartFilter = null;
     this.init();
   }
 
@@ -666,11 +692,13 @@ class LogViewer {
     document.getElementById('date-from').addEventListener('change', async (e) => {
       this.dateFrom = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
+      this.chartFilter = null;
       await this.loadAllLogs();
     });
     document.getElementById('date-to').addEventListener('change', async (e) => {
       this.dateTo = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
+      this.chartFilter = null;
       await this.loadAllLogs();
     });
     document.getElementById('btn-clear-filters').addEventListener('click', async () => {
@@ -679,10 +707,16 @@ class LogViewer {
       document.getElementById('date-from').value = '';
       document.getElementById('date-to').value = '';
       this.displayedCount = 10;
+      this.chartFilter = null;
       await this.loadAllLogs();
     });
     document.getElementById('btn-load-more').addEventListener('click', () => {
       this.displayedCount += 10;
+      this.render();
+    });
+    document.getElementById('chart-filter-chip-clear').addEventListener('click', () => {
+      this.chartFilter = null;
+      this.displayedCount = 10;
       this.render();
     });
   }
@@ -764,6 +798,7 @@ class LogViewer {
       tab.addEventListener('click', () => {
         this.currentLog = logType;
         this.displayedCount = 10;
+        this.chartFilter = null;
         this.render();
         this.renderTabs();
       });
@@ -792,20 +827,41 @@ class LogViewer {
 
     this.renderKpis(filteredRecords);
 
-    const displayedRecords = filteredRecords.slice(0, this.displayedCount);
+    // Drill-down por clic en gráfica: solo estrecha la tabla de abajo, no
+    // los KPIs ni las gráficas — así la gráfica sigue mostrando la
+    // distribución completa como referencia mientras la tabla se enfoca
+    // en la porción/barra elegida.
+    const tableRecords = this.chartFilter
+      ? filteredRecords.filter(this.chartFilter.predicate)
+      : filteredRecords;
+    this.renderChartFilterChip();
+
+    const displayedRecords = tableRecords.slice(0, this.displayedCount);
     this.renderTable(displayedRecords);
 
     const btnLoadMore = document.getElementById('btn-load-more');
     const paginationInfo = document.getElementById('pagination-info');
-    if (filteredRecords.length > this.displayedCount) {
+    if (tableRecords.length > this.displayedCount) {
       btnLoadMore.style.display = 'inline-block';
-      paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
+      paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${tableRecords.length}`;
     } else {
       btnLoadMore.style.display = 'none';
-      paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+      paginationInfo.textContent = `Total: ${tableRecords.length}`;
     }
 
     this.renderCharts(filteredRecords);
+  }
+
+  /** Chip "Filtrando por: X" cuando hay un drill-down activo desde una gráfica. */
+  renderChartFilterChip() {
+    const chip = document.getElementById('chart-filter-chip');
+    const label = document.getElementById('chart-filter-chip-label');
+    if (this.chartFilter) {
+      chip.style.display = 'inline-flex';
+      label.textContent = `Filtrando por: ${this.chartFilter.label}`;
+    } else {
+      chip.style.display = 'none';
+    }
   }
 
   getFilteredRecords() {
@@ -881,6 +937,15 @@ class LogViewer {
     return counts;
   }
 
+  /** Un predicado de drill-down por cada label, reproduciendo el mismo bucketing que countByField. */
+  fieldPredicates(field, labels) {
+    const predicates = {};
+    labels.forEach((label) => {
+      predicates[label] = (r) => ((r[field] || '').toString().trim() || '(sin dato)') === label;
+    });
+    return predicates;
+  }
+
   renderCharts(records) {
     const container = document.getElementById('charts-grid');
 
@@ -930,8 +995,47 @@ class LogViewer {
       });
 
       // Fase 2: con el grid ya en su layout final, dibujar cada gráfica.
-      specs.forEach(({ div, data, layout }) => {
+      specs.forEach(({ div, data, layout, chartKey, labels, predicates }) => {
+        // Si esta gráfica tiene una porción/barra elegida por drill-down,
+        // se resalta sin tener que cambiar su paleta de colores: en pie se
+        // "saca" (pull) y lleva borde; en barra, se atenúa todo lo demás
+        // (opacity) y la elegida queda al 100%.
+        if (chartKey && predicates && this.chartFilter && this.chartFilter.chartKey === chartKey) {
+          const idx = labels.indexOf(this.chartFilter.label);
+          if (idx !== -1) {
+            if (data[0].type === 'pie') {
+              data[0].pull = labels.map((_, i) => (i === idx ? 0.06 : 0));
+              data[0].marker = {
+                ...data[0].marker,
+                line: { color: '#F4F6F8', width: labels.map((_, i) => (i === idx ? 2 : 0)) },
+              };
+            } else {
+              data[0].marker = {
+                ...data[0].marker,
+                opacity: labels.map((_, i) => (i === idx ? 1 : 0.35)),
+              };
+            }
+          }
+        }
+
         Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+
+        // Drill-down: clic en una porción/barra filtra la tabla de abajo
+        // por esa categoría; clic de nuevo sobre la misma la quita.
+        if (chartKey && predicates) {
+          div.style.cursor = 'pointer';
+          div.on('plotly_click', (evt) => {
+            const pt = evt.points && evt.points[0];
+            if (!pt) return;
+            const label = labels[pt.pointNumber];
+            const isSame = this.chartFilter
+              && this.chartFilter.chartKey === chartKey
+              && this.chartFilter.label === label;
+            this.chartFilter = isSame ? null : { chartKey, label, predicate: predicates[label] };
+            this.displayedCount = 10;
+            this.render();
+          });
+        }
       });
     });
   }
@@ -944,6 +1048,8 @@ class LogViewer {
       totals[caso] = (totals[caso] || 0) + (Number(r.costo_usd) || 0);
     });
     const casos = Object.keys(totals);
+    const predicates = {};
+    casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
     return {
       data: [{
@@ -961,6 +1067,7 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'costo', labels: casos, predicates,
     };
   }
 
@@ -968,6 +1075,8 @@ class LogViewer {
   buildCasoCountChart(records) {
     const counts = this.countByField(records.map(r => ({ caso: bucketCaso(r.caso) })), 'caso');
     const casos = Object.keys(counts);
+    const predicates = {};
+    casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
     return {
       data: [{
@@ -985,18 +1094,28 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'caso-count', labels: casos, predicates,
     };
   }
 
   buildBarreduraEstadoChart(records) {
     const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
     const fueraCatalogo = records.length - enCatalogo;
+    const labels = ['Dentro de catálogo', 'Fuera de catálogo'];
+    const predicates = {
+      'Dentro de catálogo': (r) => isDentroDeCatalogo(r.estado),
+      'Fuera de catálogo': (r) => !isDentroDeCatalogo(r.estado),
+    };
 
     return {
       data: [{
-        labels: ['Dentro de catálogo', 'Fuera de catálogo'],
+        labels,
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#8A7300'] },
       }],
       layout: {
@@ -1008,21 +1127,39 @@ class LogViewer {
         legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.1 },
         margin: { l: 20, r: 20, t: 40, b: 50 },
       },
+      chartKey: 'barredura-estado', labels, predicates,
     };
   }
 
   /** Los dos hallazgos que busca esta auditoría: Missort (ver isMissort) y No contenerizado (ver isNoContenerizado). */
   buildPremissortMissortChart(records) {
-    const pendiente = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-    const reubicado = records.filter(r => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '')).length;
-    const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
+    const pendienteTest = (r) => r.estado === 'Sobrante - pendiente reubicar';
+    const reubicadoTest = (r) => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '');
+    const noContenerizadoTest = (r) => isNoContenerizado(r.estado);
+    const sinHallazgoTest = (r) => !pendienteTest(r) && !reubicadoTest(r) && !noContenerizadoTest(r);
+
+    const pendiente = records.filter(pendienteTest).length;
+    const reubicado = records.filter(reubicadoTest).length;
+    const noContenerizado = records.filter(noContenerizadoTest).length;
     const sinHallazgo = records.length - pendiente - reubicado - noContenerizado;
+
+    const labels = ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'];
+    const predicates = {
+      'Sin hallazgo': sinHallazgoTest,
+      'Missort — reubicado': reubicadoTest,
+      'Missort — pendiente': pendienteTest,
+      'No contenerizado': noContenerizadoTest,
+    };
 
     return {
       data: [{
-        labels: ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'],
+        labels,
         values: [sinHallazgo, reubicado, pendiente, noContenerizado],
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#FF9E45', '#FF5C6C', '#8A7300'] },
       }],
       layout: {
@@ -1034,6 +1171,7 @@ class LogViewer {
         legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
         margin: { l: 20, r: 20, t: 40, b: 50 },
       },
+      chartKey: 'premissort-missort', labels, predicates,
     };
   }
 
@@ -1057,14 +1195,19 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'premissort-estado', labels: estados, predicates: this.fieldPredicates('estado', estados),
     };
   }
 
   buildLugarChart(records) {
     const counts = this.countByField(records.map(r => ({ lugar: bucketLugar(r.lugar) })), 'lugar');
+    const labels = Object.keys(counts);
+    const predicates = {};
+    labels.forEach((label) => { predicates[label] = (r) => bucketLugar(r.lugar) === label; });
+
     return {
       data: [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -1078,6 +1221,7 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'lugar', labels, predicates,
     };
   }
 
@@ -1146,7 +1290,8 @@ class LogViewer {
       return;
     }
 
-    const filteredRecords = this.getFilteredRecords();
+    let filteredRecords = this.getFilteredRecords();
+    if (this.chartFilter) filteredRecords = filteredRecords.filter(this.chartFilter.predicate);
     const columns = LOG_COLUMNS[this.currentLog] || [];
     const queryLower = query.toLowerCase();
     const searchResults = filteredRecords.filter(r => {
