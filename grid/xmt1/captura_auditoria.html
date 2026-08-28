@@ -2183,59 +2183,6 @@ const FORMS_CONFIG = {
     ],
   },
 
-  inbound_fm: {
-    id: 'inbound_fm',
-    title: 'Inbound FM',
-    description: 'Escanea patente, diferencia y hallazgo',
-    icon: 'truck',
-    fields: [
-      {
-        id: 'patente',
-        label: '¿Cuál es la patente?',
-        type: 'scanner',
-        idType: 'plate',
-        required: true,
-        placeholder: 'Ej. ABC-123',
-      },
-      {
-        id: 'diferencia_shipments',
-        label: '¿Cuál es la diferencia de shipments?',
-        type: 'text',
-        required: true,
-        placeholder: 'Ingresa la diferencia',
-      },
-      {
-        id: 'hallazgo',
-        label: '¿Cuál es el hallazgo?',
-        type: 'choice',
-        required: true,
-        options: ['Correcto', 'Divergencia', 'Falta de probidad'],
-      },
-      {
-        id: 'evidencia',
-        label: 'Evidencia (opcional)',
-        type: 'photo',
-        required: false,
-      },
-    ],
-  },
-
-  // Este log no usa el wizard genérico de un campo por pantalla: fija la
-  // ruta una vez por sesión (QR del conductor o entrada manual) y escanea
-  // shipments en loop continuo contra el catálogo de la ruta (ver
-  // InboundDriversSession), igual que Pre-Missort con destino/doca.
-  inbound_drivers: {
-    id: 'inbound_drivers',
-    title: 'Inbound / Drivers',
-    description: 'Escanea la ruta del conductor y audita los paquetes Frágil/HV',
-    icon: 'truck',
-    fields: [
-      { id: 'route_id', type: 'text' },
-      { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
-      { id: 'foto', type: 'photo', required: false },
-    ],
-  },
-
   // Tampoco usa el wizard genérico: fija el lugar una vez por sesión y
   // escanea shipments en loop continuo contra el catálogo catalogo_barredura
   // (opcional — funciona igual sin él, solo avisa), sin permitir repetir un
@@ -2267,6 +2214,22 @@ const FORMS_CONFIG = {
       { id: 'estado', type: 'text' },
     ],
   },
+
+  // Tampoco usa el wizard genérico: escanea un shipment (o un QR de
+  // retorno) a la vez contra el catálogo AUDITORIA_HV (ver
+  // AuditoriaHVSession). No hay "lugar" fijo de sesión.
+  auditoria_hv: {
+    id: 'auditoria_hv',
+    title: 'Auditoría HV',
+    description: 'Escanea shipment o QR de retorno contra el catálogo HV',
+    icon: 'assignmentTurnedIn',
+    fields: [
+      { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
+      { id: 'descripcion', type: 'text' },
+      { id: 'caso', type: 'text' },
+      { id: 'foto', type: 'photo', required: true },
+    ],
+  },
 };
 
 /**
@@ -2278,11 +2241,10 @@ const HISTORY_FIELD_MAP = {
   destino_doca: { id: 'hu', result: 'resultado' },
   fury: { id: 'shipment', result: 'situacion' },
   linehaul: { id: 'hu', result: 'area' },
-  inbound_fm: { id: 'patente', result: 'hallazgo' },
-  inbound_drivers: { id: 'shipment_id', result: 'estado' },
   barredura: { id: 'shipment_id', result: 'estado' },
   premissort: { id: 'shipment_id', result: 'estado' },
   cont_cerrado: { id: 'shipment_id', result: 'estado' },
+  auditoria_hv: { id: 'shipment_id', result: 'caso' },
 };
 
 /**
@@ -2299,7 +2261,6 @@ const HISTORY_FIELD_MAP = {
  */
 const DEDUPE_FIELD_MAP = {
   destino_doca: { type: 'hu', field: 'hu' },
-  inbound_drivers: { type: 'shipment', field: 'shipment_id' },
   barredura: { type: 'shipment', field: 'shipment_id' },
   premissort: { type: 'shipment', field: 'shipment_id' },
   cont_cerrado: { type: 'shipment', field: 'shipment_id' },
@@ -2326,7 +2287,7 @@ function buildDedupeKey(formId, type, rawValue) {
  * la opción segura). Desde este día en adelante, cada registro nuevo va a
  * su shard diario.
  */
-const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'inbound_drivers', 'premissort', 'cont_cerrado']);
+const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'premissort', 'cont_cerrado']);
 const SHARD_CUTOVER_DATE = '2026-08-14';
 
 /** Fecha calendario (hora de México, UTC-6 fijo) de un ts ISO, sea "Z" o con offset explícito. */
@@ -2373,6 +2334,14 @@ const PREMISSORT_SHEET_RANGE = 'CONT_MISSORT!A:C';
  * SHIPMENT_ID (sin columna POSICION).
  */
 const CONT_CERRADO_SHEET_RANGE = 'CONT_CERRADO!A:B';
+
+/**
+ * Catálogo de Auditoría HV — misma sheet que Premissort/Contenedor Cerrado
+ * (mismo PREMISSORT_SHEET_ID), pestaña propia AUDITORIA_HV con columnas
+ * ID, Descripcion, Costo_USD, Costo_MXN, TIPO_DE_ENVIO, Canalizacion,
+ * SHP_RETURN_QR_ID, FECHA_DE_ACTUALIZACION.
+ */
+const AUDITORIA_HV_SHEET_RANGE = 'AUDITORIA_HV!A:H';
 
 /**
  * Scan parser and validator
@@ -4465,934 +4434,6 @@ class DestinoDocaSession {
   }
 }
 
-/**
- * Inbound / Drivers — escanea el QR del conductor para fijar la ruta (o
- * captura manual si el QR no trae route_id/ruta no impresa), y audita en
- * loop continuo los shipments Frágil/HV de esa ruta contra el catálogo
- * publicado desde el dashboard. Carrier/Placa mostrados en pantalla salen
- * siempre del catálogo (nunca del QR) y son solo de lectura — si el QR trae
- * un carrier/placa distinto al del catálogo, no se muestra la comparación,
- * pero la divergencia se calcula y se guarda en cada registro de la ruta
- * para que quede trazable en el dashboard. Cada shipment que sí pertenece a
- * la ruta pide evidencia fotográfica y termina en "Auditado OK" o
- * "Divergencia" (botón rápido); "Faltante confirmado" se marca a mano desde
- * el panel de faltantes y no pide foto. Los shipments nunca escaneados ni
- * marcados no generan registro — la ruta se puede guardar incompleta.
- */
-class InboundDriversSession {
-  constructor(opts = {}) {
-    this.catalogIndex = opts.catalogIndex || {};
-    this.catalogAccessDenied = !!opts.catalogAccessDenied;
-    this.onScan = opts.onScan;
-    this.onExit = opts.onExit;
-
-    this.container = null;
-    this.scanner = null;
-    this.locked = false;
-    this.inManualMode = false;
-
-    this.routeId = null;
-    this.routeCarrier = '';
-    this.routePlaca = '';
-    this.qrData = null;
-    this.divergent = false;
-    this.divergentDetail = '';
-
-    this.pending = new Map();
-    this.handled = new Map();
-    this.total = 0;
-    this.pendingPanelOpen = false;
-  }
-
-  render(containerId) {
-    this.container = document.getElementById(containerId);
-    this.renderRouteEntry();
-  }
-
-  destroy() {
-    this.stopScanner();
-  }
-
-  stopScanner() {
-    if (this.scanner) {
-      this.scanner.stop();
-      this.scanner = null;
-    }
-    if (this.detailCamera) {
-      this.detailCamera.stop();
-      this.detailCamera = null;
-    }
-  }
-
-  vibrate(pattern) {
-    if (navigator.vibrate) {
-      try {
-        navigator.vibrate(pattern);
-      } catch (e) {}
-    }
-  }
-
-  back() {
-    this.stopScanner();
-    if (this.onExit) this.onExit();
-  }
-
-  formatCost(cost) {
-    const n = Number(cost);
-    return Number.isFinite(n) ? n.toFixed(2) : (cost || '0.00');
-  }
-
-  badgeClass(resultado) {
-    const r = String(resultado || '').toLowerCase();
-    if (r.includes('frag') || r.includes('frág')) return 'driver-badge-fragil';
-    if (r.includes('hv')) return 'driver-badge-hv';
-    return '';
-  }
-
-  /* ====================================================================== */
-  /* Paso 1: fijar la ruta (QR del conductor o entrada manual)             */
-  /* ====================================================================== */
-
-  renderRouteEntry() {
-    this.stopScanner();
-    this.locked = false;
-    const camera = ScanUI.mode() === 'camera';
-
-    this.container.innerHTML = `
-      <div class="step-screen scanner-screen step-screen-compact">
-        <div class="step-progress-row">
-          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
-          <div class="step-progress">Inbound / Drivers</div>
-        </div>
-        <div class="scan-mode-slot"></div>
-        <h1 class="step-question">${camera ? 'Escanea el QR del conductor' : 'Escanea o ingresa la ruta'}</h1>
-        <div class="scanner-body"></div>
-        <div class="step-support"></div>
-      </div>
-    `;
-
-    this.supportEl = this.container.querySelector('.step-support');
-    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.renderRouteEntry()));
-    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      this.stopScanner();
-      if (this.onExit) this.onExit();
-    });
-
-    const body = this.container.querySelector('.scanner-body');
-    if (camera) {
-      body.innerHTML = `
-        <div class="scanner-viewport">
-          <video class="scanner-video" playsinline muted></video>
-          <div class="scanner-frame"><span class="scanner-line"></span></div>
-        </div>
-      `;
-      this.supportEl.textContent = 'Apunta la cámara al QR de la app del conductor.';
-      const link = document.createElement('button');
-      link.type = 'button';
-      link.className = 'session-manual-link';
-      link.textContent = 'Ingresar ruta manualmente';
-      link.addEventListener('click', () => this.enterManualRouteEntry());
-      this.container.querySelector('.step-screen').appendChild(link);
-      this.startRouteCamera();
-    } else {
-      this.supportEl.textContent = 'Escanea el QR con el lector o escribe el ID de ruta y Enter.';
-
-      // Hidden HID input
-      const hidInput = document.createElement('input');
-      hidInput.type = 'text';
-      hidInput.className = 'hh-hid-input';
-      hidInput.setAttribute('inputmode', 'none');
-      body.appendChild(hidInput);
-
-      // Scan area
-      const scanArea = document.createElement('div');
-      scanArea.className = 'hh-scan-area';
-      const iconWrap = document.createElement('div');
-      iconWrap.className = 'hh-icon idle';
-      iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
-      scanArea.appendChild(iconWrap);
-      const lastCodeEl = document.createElement('div');
-      lastCodeEl.className = 'hh-last-code';
-      scanArea.appendChild(lastCodeEl);
-      body.appendChild(scanArea);
-      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
-
-      let modalOpen = false;
-      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
-
-      let raceArmed = false;
-      const armHid = () => {
-        if (!isActive()) return;
-        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
-        raceArmed = false;
-        hidInput.setAttribute('inputmode', 'none');
-        hidInput.focus({ preventScroll: true });
-        setTimeout(() => {
-          if (!isActive() || document.activeElement !== hidInput) return;
-          hidInput.setAttribute('inputmode', 'text');
-          raceArmed = true;
-        }, 50);
-      };
-
-      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
-      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
-
-      hidInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.keyCode !== 13) return;
-        e.preventDefault();
-        const raw = hidInput.value.trim();
-        if (!raw || this.locked) return;
-        hidInput.value = '';
-        lastCodeEl.textContent = raw;
-        lastCodeEl.className = 'hh-last-code visible';
-        this.submitRouteValue(raw);
-      });
-
-      armHid();
-
-      // Floating manual button
-      const manualBtn = document.createElement('button');
-      manualBtn.type = 'button';
-      manualBtn.className = 'btn-manual-hid';
-      manualBtn.innerHTML = Icons.svg('keyboard', { size: 22 });
-      body.appendChild(manualBtn);
-
-      // Bottom-sheet modal
-      const modal = document.createElement('div');
-      modal.className = 'hh-manual-modal';
-      modal.innerHTML = `
-        <div class="hh-manual-inner">
-          <p class="hh-manual-label">QR del conductor o ID de ruta</p>
-          <input type="text" class="hh-manual-input" placeholder="QR del conductor o ID de ruta" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
-          <div class="hh-manual-actions">
-            <button type="button" class="hh-manual-cancel">Cancelar</button>
-            <button type="button" class="hh-manual-confirm">Confirmar</button>
-          </div>
-        </div>`;
-      this.container.appendChild(modal);
-
-      const modalInput = modal.querySelector('.hh-manual-input');
-      const openModal = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
-      const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
-      const confirmModal = () => {
-        const val = modalInput.value.trim();
-        if (!val) return;
-        modalInput.value = '';
-        closeModal();
-        this.submitRouteValue(val);
-      };
-
-      manualBtn.addEventListener('click', openModal);
-      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
-      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
-      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
-      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-    }
-  }
-
-  // Handheld: el lector puede teclear el JSON del QR o el operador escribe
-  // el ID de ruta directo. Se decide por el prefijo '{'.
-  submitRouteValue(val) {
-    const text = String(val || '').trim();
-    if (text.startsWith('{')) {
-      const parsed = this.parseDriverQr(text);
-      if (!parsed) {
-        this.supportEl.textContent = 'QR no reconocido — intenta de nuevo.';
-        this.supportEl.classList.add('error');
-        return;
-      }
-      if (!parsed.route_id) {
-        this.qrData = parsed;
-        this.enterManualRouteEntry('El QR no trae ruta asignada — ingrésala manualmente.');
-        return;
-      }
-      this.resolveRoute(parsed.route_id, parsed);
-      return;
-    }
-    this.resolveRoute(text, this.qrData);
-  }
-
-  async startRouteCamera() {
-    if (!ScannerEngine.isSupported()) {
-      this.supportEl.textContent = 'Cámara no disponible — ingresa la ruta manualmente.';
-      this.supportEl.classList.add('error');
-      return;
-    }
-    const video = this.container.querySelector('.scanner-video');
-    this.scanner = new ScannerEngine();
-    try {
-      await this.scanner.start(video, (text) => this.handleRouteScan(text));
-    } catch (e) {
-      this.supportEl.textContent = 'No se pudo activar la cámara — ingresa la ruta manualmente.';
-      this.supportEl.classList.add('error');
-    }
-  }
-
-  handleRouteScan(rawText) {
-    if (this.locked) return;
-    this.locked = true;
-    if (this.scanner) this.scanner.pause();
-
-    const parsed = this.parseDriverQr(rawText);
-    if (!parsed) {
-      this.vibrate(40);
-      this.supportEl.textContent = 'QR no reconocido — intenta de nuevo o ingresa la ruta manualmente.';
-      this.supportEl.classList.add('error');
-      setTimeout(() => {
-        this.locked = false;
-        if (this.supportEl) {
-          this.supportEl.classList.remove('error');
-          this.supportEl.textContent = 'Apunta la cámara al QR de la app del conductor.';
-        }
-        if (this.scanner) this.scanner.resume();
-      }, 1200);
-      return;
-    }
-
-    if (!parsed.route_id) {
-      this.qrData = parsed;
-      this.enterManualRouteEntry('El QR no trae ruta asignada — ingrésala manualmente.');
-      return;
-    }
-
-    this.resolveRoute(parsed.route_id, parsed);
-  }
-
-  /**
-   * QR de la app del conductor: JSON plano con route_id (puede venir como
-   * el string literal "null" cuando la ruta todavía no se asignó), y
-   * datos de conductor/vehículo usados solo para detectar divergencia
-   * contra el catálogo — nunca se muestran directamente en pantalla.
-   */
-  parseDriverQr(rawText) {
-    const text = String(rawText || '').trim();
-    if (!text.startsWith('{')) return null;
-    try {
-      const obj = JSON.parse(text);
-      if (!obj || typeof obj !== 'object') return null;
-      const routeId = obj.route_id != null && String(obj.route_id).toLowerCase() !== 'null'
-        ? String(obj.route_id).trim()
-        : null;
-      return {
-        route_id: routeId,
-        driver_id: obj.driver_id != null ? String(obj.driver_id) : '',
-        carrier_id: obj.carrier_id != null ? String(obj.carrier_id) : '',
-        vehicle_id: obj.vehicle_id != null ? String(obj.vehicle_id) : '',
-        license_plate: obj.license_plate != null ? String(obj.license_plate) : '',
-        site_id: obj.site_id != null ? String(obj.site_id) : '',
-        rostering_id: obj.rostering_id != null ? String(obj.rostering_id) : '',
-      };
-    } catch (e) {
-      return null;
-    }
-  }
-
-  enterManualRouteEntry(message) {
-    this.stopScanner();
-
-    this.container.innerHTML = `
-      <div class="step-screen step-screen-compact">
-        <div class="step-progress-row">
-          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
-          <div class="step-progress">Inbound / Drivers</div>
-        </div>
-        <h1 class="step-question">¿Cuál es el ID de ruta?</h1>
-        <div class="step-input-wrap">
-          <input type="text" class="step-input route-manual-input" placeholder="Ej. 100897405" />
-        </div>
-        <div class="step-support ${message ? 'error' : ''}">${message || 'Escribe el ID de ruta y presiona Enter.'}</div>
-      </div>
-    `;
-
-    this.supportEl = this.container.querySelector('.step-support');
-    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      if (this.onExit) this.onExit();
-    });
-
-    const input = this.container.querySelector('.route-manual-input');
-    input.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      const routeId = input.value.trim();
-      if (!routeId) return;
-      this.resolveRoute(routeId, this.qrData);
-    });
-    setTimeout(() => input.focus(), 60);
-  }
-
-  resolveRoute(routeId, qrData) {
-    const route = this.catalogIndex[routeId];
-    if (!route) {
-      this.vibrate([40, 60, 40]);
-      this.supportEl.textContent = `Ruta "${routeId}" no encontrada en el catálogo.`;
-      this.supportEl.classList.add('error');
-      this.locked = false;
-      if (this.scanner) {
-        this.scanner.resume();
-      } else {
-        // Handheld: limpiar y volver a enfocar el input para reintentar.
-        const inp = this.container.querySelector('.scanner-body .step-input');
-        if (inp) {
-          inp.value = '';
-          inp.focus();
-        }
-      }
-      return;
-    }
-
-    this.routeId = routeId;
-    this.routeCarrier = route.carrier || '';
-    this.routePlaca = route.placa || '';
-    this.qrData = qrData || null;
-
-    const divergence = this.computeDivergence(qrData, route);
-    this.divergent = divergence.divergent;
-    this.divergentDetail = divergence.detail;
-
-    this.pending = new Map();
-    (route.shipments || []).forEach((s) => {
-      if (s && s.shipment_id) this.pending.set(String(s.shipment_id), s);
-    });
-    this.handled = new Map();
-    this.total = this.pending.size;
-
-    this.vibrate(60);
-    this.renderLoop();
-  }
-
-  /**
-   * Compara carrier/placa del QR contra el catálogo de la ruta. No bloquea
-   * nada — solo marca la ruta como divergente para que quede registrado en
-   * cada shipment auditado (el operador nunca ve el detalle del QR, solo
-   * el carrier/placa oficial del catálogo).
-   */
-  computeDivergence(qrData, route) {
-    if (!qrData) return { divergent: false, detail: '' };
-    const norm = (v) => String(v || '').trim().toUpperCase();
-    const mismatches = [];
-
-    if (qrData.carrier_id && route.carrier && norm(qrData.carrier_id) !== norm(route.carrier)) {
-      mismatches.push('carrier');
-    }
-    if (qrData.license_plate && route.placa && norm(qrData.license_plate) !== norm(route.placa)) {
-      mismatches.push('placa');
-    }
-    return {
-      divergent: mismatches.length > 0,
-      detail: mismatches.length > 0 ? `Divergencia QR vs. catálogo: ${mismatches.join(', ')}` : '',
-    };
-  }
-
-  /* ====================================================================== */
-  /* Paso 2: loop de escaneo de shipments de la ruta                       */
-  /* ====================================================================== */
-
-  renderLoop() {
-    this.stopScanner();
-    this.locked = false;
-    this.inManualMode = false;
-    const camera = ScanUI.mode() === 'camera';
-    this.loopHint = camera
-      ? 'Escaneando... apunta la cámara al shipment.'
-      : '';
-
-    const auditedCount = this.handled.size;
-    const pendingCount = this.pending.size;
-
-    this.container.innerHTML = `
-      <div class="step-screen scanner-screen step-screen-compact">
-        <div class="step-progress-row">
-          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
-          <div class="step-progress">Inbound / Drivers</div>
-        </div>
-        <div class="session-pill">
-          <div class="session-pill-info">Ruta ${this.routeId} · Carrier ${this.routeCarrier || '—'} · Placa ${this.routePlaca || '—'}</div>
-          <button type="button" class="btn btn-secondary session-change-btn">Cambiar</button>
-        </div>
-        ${this.divergent ? `<div class="driver-warning-banner">${Icons.svg('alertCircle', { size: 16 })}<span>${this.divergentDetail}</span></div>` : ''}
-        <button type="button" class="driver-pending-toggle">
-          <span>${auditedCount} / ${this.total} auditados · ${pendingCount} faltantes</span>
-          ${Icons.svg(this.pendingPanelOpen ? 'arrowDown' : 'arrowRight', { size: 16 })}
-        </button>
-        <div class="driver-pending-panel" style="display: ${this.pendingPanelOpen ? 'block' : 'none'};"></div>
-        <div class="scan-mode-slot"></div>
-        <h1 class="step-question">Escanea el shipment</h1>
-        <div class="scanner-body"></div>
-        <div class="step-support"></div>
-        <button type="button" class="btn btn-primary btn-block finish-route-btn" style="margin-top: 16px;">Finalizar ruta</button>
-      </div>
-      <div class="session-flash"></div>
-    `;
-
-    this.flashEl = this.container.querySelector('.session-flash');
-    this.supportEl = this.container.querySelector('.step-support');
-    this.supportEl.textContent = this.loopHint;
-    this.pendingPanelEl = this.container.querySelector('.driver-pending-panel');
-    this.renderPendingPanel();
-    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.renderLoop()));
-
-    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      this.stopScanner();
-      if (this.onExit) this.onExit();
-    });
-    this.container.querySelector('.session-change-btn').addEventListener('click', () => {
-      this.renderRouteEntry();
-    });
-    this.container.querySelector('.driver-pending-toggle').addEventListener('click', () => {
-      this.pendingPanelOpen = !this.pendingPanelOpen;
-      this.renderLoop();
-    });
-    this.container.querySelector('.finish-route-btn').addEventListener('click', () => {
-      this.stopScanner();
-      if (this.onExit) this.onExit();
-    });
-
-    const body = this.container.querySelector('.scanner-body');
-    if (camera) {
-      body.innerHTML = `
-        <div class="scanner-viewport">
-          <video class="scanner-video" playsinline muted></video>
-          <div class="scanner-frame"><span class="scanner-line"></span></div>
-        </div>
-      `;
-      const link = document.createElement('button');
-      link.type = 'button';
-      link.className = 'session-manual-link';
-      link.textContent = 'Entrada manual';
-      link.addEventListener('click', () => this.enterManualShipmentEntry());
-      this.supportEl.insertAdjacentElement('afterend', link);
-      this.startShipmentCamera();
-    } else {
-      // Hidden HID input
-      const hidInput = document.createElement('input');
-      hidInput.type = 'text';
-      hidInput.className = 'hh-hid-input';
-      hidInput.setAttribute('inputmode', 'none');
-      body.appendChild(hidInput);
-
-      // Scan area
-      const scanArea = document.createElement('div');
-      scanArea.className = 'hh-scan-area';
-      const iconWrap = document.createElement('div');
-      iconWrap.className = 'hh-icon idle';
-      iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
-      scanArea.appendChild(iconWrap);
-      const lastCodeEl = document.createElement('div');
-      lastCodeEl.className = 'hh-last-code';
-      scanArea.appendChild(lastCodeEl);
-      body.appendChild(scanArea);
-      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
-
-      let modalOpen = false;
-      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
-
-      let raceArmed = false;
-      const armHid = () => {
-        if (!isActive()) return;
-        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
-        raceArmed = false;
-        hidInput.setAttribute('inputmode', 'none');
-        hidInput.focus({ preventScroll: true });
-        setTimeout(() => {
-          if (!isActive() || document.activeElement !== hidInput) return;
-          hidInput.setAttribute('inputmode', 'text');
-          raceArmed = true;
-        }, 50);
-      };
-
-      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
-      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
-
-      hidInput.addEventListener('keydown', (e) => {
-        if (e.key !== 'Enter' && e.keyCode !== 13) return;
-        e.preventDefault();
-        const raw = hidInput.value.trim();
-        if (!raw || this.locked) return;
-        hidInput.value = '';
-        const isDup = this.handled && this.handled.has(raw);
-        lastCodeEl.textContent = isDup ? `${raw} · ya escaneado` : raw;
-        lastCodeEl.className = 'hh-last-code visible';
-        lastCodeEl.classList.toggle('duplicate', isDup);
-        this.submitShipmentValue(raw, hidInput);
-      });
-
-      armHid();
-
-      // Floating manual button
-      const manualBtn = document.createElement('button');
-      manualBtn.type = 'button';
-      manualBtn.className = 'btn-manual-hid';
-      manualBtn.innerHTML = Icons.svg('keyboard', { size: 22 });
-      body.appendChild(manualBtn);
-
-      // Bottom-sheet modal
-      const modal = document.createElement('div');
-      modal.className = 'hh-manual-modal';
-      modal.innerHTML = `
-        <div class="hh-manual-inner">
-          <p class="hh-manual-label">Shipment ID</p>
-          <input type="text" class="hh-manual-input" placeholder="Shipment ID" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
-          <div class="hh-manual-actions">
-            <button type="button" class="hh-manual-cancel">Cancelar</button>
-            <button type="button" class="hh-manual-confirm">Confirmar</button>
-          </div>
-        </div>`;
-      this.container.appendChild(modal);
-
-      const modalInput = modal.querySelector('.hh-manual-input');
-      const openModal = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
-      const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
-      const confirmModal = () => {
-        const val = modalInput.value.trim().toUpperCase();
-        if (!val) return;
-        modalInput.value = '';
-        closeModal();
-        this.submitShipmentValue(val, hidInput);
-      };
-
-      manualBtn.addEventListener('click', openModal);
-      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
-      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
-      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
-      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
-    }
-  }
-
-  submitShipmentValue(rawText, input) {
-    const parsed = ScanParser.parse(rawText, 'shipment');
-    if (!parsed) {
-      this.vibrate(40);
-      this.flash('error', 'Código no reconocido.');
-      if (input) input.value = '';
-      return;
-    }
-    const willNavigate = this.pending.has(String(parsed));
-    this.processShipment(parsed);
-    if (!willNavigate && input && document.body.contains(input)) {
-      input.value = '';
-      input.focus();
-    }
-  }
-
-  renderPendingPanel() {
-    if (!this.pendingPanelEl) return;
-    if (this.pending.size === 0) {
-      this.pendingPanelEl.innerHTML = '<div class="driver-pending-empty">Sin faltantes — todos los shipments fueron auditados.</div>';
-      return;
-    }
-    this.pendingPanelEl.innerHTML = Array.from(this.pending.values()).map((s) => `
-      <div class="driver-pending-item">
-        <div class="driver-pending-info">
-          <div class="driver-pending-id">${s.shipment_id}</div>
-          <div class="driver-pending-meta">${s.domain || ''} · $${this.formatCost(s.cost_usd)} USD</div>
-        </div>
-        <span class="driver-badge ${this.badgeClass(s.resultado)}">${s.resultado || ''}</span>
-        <button type="button" class="driver-faltante-btn" data-shipment="${s.shipment_id}">Faltante confirmado</button>
-      </div>
-    `).join('');
-
-    this.pendingPanelEl.querySelectorAll('.driver-faltante-btn').forEach((btn) => {
-      btn.addEventListener('click', () => this.markFaltante(btn.dataset.shipment));
-    });
-  }
-
-  async startShipmentCamera() {
-    if (!ScannerEngine.isSupported()) {
-      this.supportEl.textContent = 'Cámara no disponible — usa entrada manual.';
-      this.supportEl.classList.add('error');
-      return;
-    }
-    const video = this.container.querySelector('.scanner-video');
-    this.scanner = new ScannerEngine();
-    try {
-      await this.scanner.start(video, (text) => this.handleShipmentScan(text));
-    } catch (e) {
-      this.supportEl.textContent = 'No se pudo activar la cámara — usa entrada manual.';
-      this.supportEl.classList.add('error');
-    }
-  }
-
-  handleShipmentScan(rawText) {
-    if (this.locked) return;
-    const parsed = ScanParser.parse(rawText, 'shipment');
-    if (!parsed) {
-      this.vibrate(40);
-      this.flash('error', 'Código no reconocido.');
-      return;
-    }
-    this.processShipment(parsed);
-  }
-
-  enterManualShipmentEntry() {
-    if (this.scanner) this.scanner.pause();
-    this.inManualMode = true;
-
-    this.container.querySelector('.scanner-body').innerHTML = `
-      <div class="step-input-wrap">
-        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
-      </div>
-    `;
-    const input = this.container.querySelector('.session-manual-input');
-    this.supportEl.textContent = 'Escribe el Shipment ID y presiona Enter.';
-    this.supportEl.classList.remove('error');
-
-    input.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter') return;
-      e.preventDefault();
-      const parsed = ScanParser.parse(input.value, 'shipment');
-      if (!parsed) {
-        this.supportEl.textContent = 'Shipment inválido. Verifica el número e intenta de nuevo.';
-        this.supportEl.classList.add('error');
-        return;
-      }
-      this.processShipment(parsed);
-      input.value = '';
-    });
-
-    setTimeout(() => input.focus(), 60);
-  }
-
-  /**
-   * Coincide con un pendiente de la ruta -> pantalla de detalle (foto +
-   * estado). Ya auditado en esta sesión -> aviso, sigue escaneando. No
-   * pertenece a la ruta -> "No es HV/Frágil", NO se guarda nada y el
-   * escaneo continúa (nunca se detiene por un código que no coincide).
-   */
-  processShipment(shipmentId) {
-    if (this.pending.has(shipmentId)) {
-      this.locked = true;
-      if (this.scanner) this.scanner.pause();
-      this.vibrate(60);
-      this.renderShipmentDetail(this.pending.get(shipmentId));
-      return;
-    }
-
-    if (this.handled.has(shipmentId)) {
-      this.vibrate(40);
-      this.flash('warn', `${shipmentId} · Ya auditado en esta ruta.`);
-      return;
-    }
-
-    this.vibrate([40, 60, 40]);
-    this.flash('error', `${shipmentId} · No es HV/Frágil.`);
-  }
-
-  flash(kind, message) {
-    if (this.supportEl) {
-      this.supportEl.textContent = message;
-      this.supportEl.classList.toggle('error', kind === 'error');
-    }
-    if (this.flashEl) {
-      const cls = kind === 'ok' ? 'active-ok' : (kind === 'error' ? 'active-error' : '');
-      if (cls) {
-        this.flashEl.innerHTML = Icons.svg(kind === 'ok' ? 'checkCircle' : 'resultError', { size: 96 });
-        this.flashEl.classList.add(cls);
-        setTimeout(() => {
-          if (this.flashEl) {
-            this.flashEl.classList.remove(cls);
-            this.flashEl.innerHTML = '';
-          }
-        }, 550);
-      }
-    }
-    setTimeout(() => {
-      if (!this.supportEl) return;
-      this.supportEl.classList.remove('error');
-      this.supportEl.textContent = this.inManualMode
-        ? 'Escribe el Shipment ID y presiona Enter.'
-        : (this.loopHint || 'Escaneando... apunta la cámara al shipment.');
-    }, 900);
-  }
-
-  /* ====================================================================== */
-  /* Paso 3: detalle del shipment coincidente — foto + Auditado OK/Divergencia */
-  /* ====================================================================== */
-
-  renderShipmentDetail(shipment) {
-    this.container.innerHTML = `
-      <div class="step-screen step-screen-compact">
-        <div class="step-progress-row">
-          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
-          <div class="step-progress">Auditoría de paquete</div>
-        </div>
-        <div class="driver-shipment-card">
-          <div class="driver-shipment-id">${shipment.shipment_id}</div>
-          <div class="driver-shipment-domain">${shipment.domain || 'Sin descripción'}</div>
-          <div class="driver-shipment-row">
-            <span class="driver-shipment-cost">$${this.formatCost(shipment.cost_usd)} USD</span>
-            <span class="driver-badge ${this.badgeClass(shipment.resultado)}">${shipment.resultado || ''}</span>
-          </div>
-        </div>
-        <h1 class="step-question">Toma una foto del paquete</h1>
-        <div class="scanner-body detail-photo-body"></div>
-        <div class="step-support"></div>
-      </div>
-    `;
-
-    this.supportEl = this.container.querySelector('.step-support');
-    this.detailPhotoBody = this.container.querySelector('.detail-photo-body');
-    this.detailPhotoValue = null;
-
-    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
-      this.locked = false;
-      this.renderLoop();
-    });
-
-    this.renderDetailPhotoCapture(shipment);
-  }
-
-  async renderDetailPhotoCapture(shipment) {
-    this.stopDetailCamera();
-    // Cámara DENTRO de la app (la handheld bloquea la cámara externa).
-    this.detailPhotoBody.innerHTML = `
-      <div class="scanner-viewport">
-        <video class="scanner-video" playsinline muted></video>
-      </div>
-    `;
-    this.supportEl.textContent = 'Encuadra y toma la foto del paquete.';
-    this.supportEl.classList.remove('error');
-
-    if (!PhotoCamera.isSupported()) {
-      this.supportEl.textContent = 'Cámara no disponible en este dispositivo.';
-      this.supportEl.classList.add('error');
-      return;
-    }
-
-    const video = this.detailPhotoBody.querySelector('.scanner-video');
-    this.detailCamera = new PhotoCamera();
-    try {
-      await this.detailCamera.start(video);
-    } catch (e) {
-      this.supportEl.textContent = 'No se pudo abrir la cámara. Revisa el permiso e intenta de nuevo.';
-      this.supportEl.classList.add('error');
-      return;
-    }
-
-    if (this.detailCamera.hasTorch()) {
-      const viewport = this.detailPhotoBody.querySelector('.scanner-viewport');
-      const torchBtn = document.createElement('button');
-      torchBtn.type = 'button';
-      torchBtn.className = 'scanner-torch';
-      torchBtn.setAttribute('aria-label', 'Linterna');
-      torchBtn.innerHTML = Icons.svg('flash', { size: 20 });
-      let on = false;
-      torchBtn.addEventListener('click', async () => {
-        on = !on;
-        const ok = await this.detailCamera.setTorch(on);
-        torchBtn.classList.toggle('active', ok && on);
-      });
-      viewport.appendChild(torchBtn);
-    }
-
-    const shutter = document.createElement('button');
-    shutter.type = 'button';
-    shutter.className = 'photo-cam-shutter';
-    shutter.innerHTML = `${Icons.svg('camera', { size: 20 })}<span>Tomar foto</span>`;
-    shutter.addEventListener('click', () => {
-      const data = this.detailCamera && this.detailCamera.capture({ maxDim: 1280, quality: 0.6 });
-      if (!data) {
-        this.supportEl.textContent = 'No se pudo capturar. Intenta de nuevo.';
-        this.supportEl.classList.add('error');
-        return;
-      }
-      this.detailPhotoValue = data;
-      this.vibrate(30);
-      this.stopDetailCamera();
-      this.renderDetailPhotoPreview(shipment);
-    });
-    this.detailPhotoBody.appendChild(shutter);
-  }
-
-  stopDetailCamera() {
-    if (this.detailCamera) {
-      this.detailCamera.stop();
-      this.detailCamera = null;
-    }
-  }
-
-  renderDetailPhotoPreview(shipment) {
-    this.detailPhotoBody.innerHTML = `
-      <div class="photo-preview">
-        <img alt="Foto capturada" />
-        <div class="photo-preview-badge">${Icons.svg('checkCircle', { size: 20 })}</div>
-      </div>
-      <div class="driver-status-actions">
-        <button type="button" class="driver-status-btn driver-status-btn-ok">Auditado OK</button>
-        <button type="button" class="driver-status-btn driver-status-btn-divergencia">Divergencia</button>
-      </div>
-    `;
-    this.detailPhotoBody.querySelector('img').src = this.detailPhotoValue;
-
-    this.detailPhotoBody.querySelector('.driver-status-btn-ok').addEventListener('click', () => {
-      this.saveShipmentResult(shipment, 'Auditado OK', this.detailPhotoValue);
-    });
-    this.detailPhotoBody.querySelector('.driver-status-btn-divergencia').addEventListener('click', () => {
-      this.saveShipmentResult(shipment, 'Divergencia', this.detailPhotoValue);
-    });
-  }
-
-  /* ====================================================================== */
-  /* Guardar registro (1 por shipment) y volver al loop                    */
-  /* ====================================================================== */
-
-  async saveShipmentResult(shipment, estado, foto) {
-    await this.persistShipment(shipment, estado, foto);
-    this.pending.delete(shipment.shipment_id);
-    this.handled.set(shipment.shipment_id, estado);
-    this.renderLoop();
-  }
-
-  async markFaltante(shipmentId) {
-    const shipment = this.pending.get(shipmentId);
-    if (!shipment) return;
-    const ok = await ConfirmModal.show({
-      title: 'Confirmar faltante',
-      message: `¿Confirmas que el shipment ${shipmentId} falta en esta ruta?`,
-      confirmText: 'Confirmar',
-      danger: true,
-    });
-    if (!ok) return;
-    await this.persistShipment(shipment, 'Faltante confirmado', null);
-    this.pending.delete(shipmentId);
-    this.handled.set(shipmentId, 'Faltante confirmado');
-    this.renderLoop();
-  }
-
-  async persistShipment(shipment, estado, foto) {
-    // Guard contra doble toque: onScan (guardar + sincronizar) tarda un
-    // instante y el botón sigue clicable mientras tanto, así que un
-    // segundo toque rápido en "Auditado OK"/"Divergencia"/"Faltante
-    // confirmado" duplicaba el registro.
-    if (this.savingShipment) return;
-    this.savingShipment = true;
-    try {
-      await this._persistShipment(shipment, estado, foto);
-    } finally {
-      this.savingShipment = false;
-    }
-  }
-
-  async _persistShipment(shipment, estado, foto) {
-    if (!this.onScan) return;
-    await this.onScan({
-      route_id: this.routeId,
-      carrier: this.routeCarrier,
-      placa: this.routePlaca,
-      shipment_id: shipment.shipment_id,
-      domain: shipment.domain || '',
-      cost_usd: shipment.cost_usd,
-      resultado_auditoria: shipment.resultado || '',
-      estado,
-      foto: foto || undefined,
-      driver_id: (this.qrData && this.qrData.driver_id) || '',
-      vehicle_id: (this.qrData && this.qrData.vehicle_id) || '',
-      site_id: (this.qrData && this.qrData.site_id) || '',
-      rostering_id: (this.qrData && this.qrData.rostering_id) || '',
-      route_divergencia: this.divergent,
-      route_divergencia_detalle: this.divergentDetail,
-    });
-  }
-}
 
 /**
  * Premissort — escaneo rápido de posición (ej. AS1-1-1-1) que audita en
@@ -8093,6 +7134,643 @@ class BarreduraSession {
     }, 900);
   }
 }
+
+/**
+ * AuditoriaHVSession — escaneo de UN shipment (o QR de retorno) a la vez
+ * contra el catálogo AUDITORIA_HV (Google Sheets, ver AUDITORIA_HV_SHEET_RANGE
+ * y GridClient.loadAuditoriaHVCatalog). A diferencia de BarreduraSession no
+ * hay "lugar" fijo de sesión — cada escaneo es independiente.
+ */
+class AuditoriaHVSession {
+  static CASO_OPTIONS = ['Vacío', 'Piezas faltantes', 'Sin divergencias'];
+
+  // PLACEHOLDER: sin ejemplo real de SHP_RETURN_QR_ID todavía — ajustar
+  // este regex en cuanto se tenga un caso real de escaneo. Basado en el
+  // único ejemplo dado por el usuario: K0000052742MLB (1 letra + 10
+  // dígitos + 3 letras).
+  static RETURN_QR_PATTERN = /^[A-Z]\d{10}[A-Z]{3}$/i;
+
+  constructor(opts = {}) {
+    this.onScan = opts.onScan;
+    this.onExit = opts.onExit;
+    this.catalog = Array.isArray(opts.catalog) ? opts.catalog : [];
+
+    this.catalogById = {};
+    this.catalogByReturnQr = {};
+    this.catalog.forEach((row) => {
+      if (row.ID) this.catalogById[row.ID] = row;
+      if (row.SHP_RETURN_QR_ID) this.catalogByReturnQr[row.SHP_RETURN_QR_ID.toUpperCase()] = row;
+    });
+
+    this.container = null;
+    this.scanner = null;
+    this.locked = false;
+    this.inManualMode = false;
+    this.count = 0;
+
+    // Última foto tomada en esta sesión (cualquiera de las dos ramas) —
+    // permite ofrecer "Reutilizar última foto" en la rama fuera de catálogo.
+    this.lastPhotoDataUrl = null;
+  }
+
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.renderLoop();
+  }
+
+  destroy() {
+    this.stopScanner();
+    this.stopPhotoCamera();
+  }
+
+  stopScanner() {
+    if (this.scanner) {
+      this.scanner.stop();
+      this.scanner = null;
+    }
+  }
+
+  stopPhotoCamera() {
+    if (this.photoCamera) {
+      this.photoCamera.stop();
+      this.photoCamera = null;
+    }
+  }
+
+  vibrate(pattern) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  /* ====================================================================== */
+  /* Loop de escaneo                                                       */
+  /* ====================================================================== */
+
+  renderLoop() {
+    this.stopScanner();
+    this.stopPhotoCamera();
+    this.locked = false;
+    this.inManualMode = false;
+    const camera = ScanUI.mode() === 'camera';
+    this.loopHint = camera
+      ? 'Escaneando... apunta la cámara al shipment o al QR de retorno.'
+      : '';
+
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Auditoría HV</div>
+        </div>
+        <div class="scan-mode-slot"></div>
+        <h1 class="step-question">Escanea el Shipment o QR de retorno</h1>
+        <div class="scanner-body"></div>
+        <div class="step-support"></div>
+        <div class="session-counter">${this.count} escaneados en esta sesión</div>
+      </div>
+      <div class="session-flash"></div>
+    `;
+
+    this.flashEl = this.container.querySelector('.session-flash');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.supportEl.textContent = this.loopHint;
+    this.counterEl = this.container.querySelector('.session-counter');
+    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.renderLoop()));
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+
+    const body = this.container.querySelector('.scanner-body');
+    if (camera) {
+      body.innerHTML = `
+        <div class="scanner-viewport">
+          <video class="scanner-video" playsinline muted></video>
+          <div class="scanner-frame"><span class="scanner-line"></span></div>
+        </div>
+      `;
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'session-manual-link';
+      link.textContent = 'Entrada manual';
+      link.addEventListener('click', () => this.enterManualEntry());
+      this.supportEl.insertAdjacentElement('afterend', link);
+      this.startCamera();
+    } else {
+      const { wrap, input } = ScanUI.buildHandheldInput({
+        placeholder: 'Shipment o QR de retorno',
+        isActive: () => !this.locked && ScanUI.mode() === 'handheld',
+        onSubmit: (val, inputEl) => {
+          this.handleScan(val);
+          inputEl.value = '';
+        },
+      });
+      body.appendChild(wrap);
+    }
+  }
+
+  async startCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — usa entrada manual.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+    try {
+      await this.scanner.start(video, (text) => this.handleScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — usa entrada manual.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  enterManualEntry() {
+    if (this.scanner) this.scanner.pause();
+    this.inManualMode = true;
+
+    this.container.querySelector('.scanner-body').innerHTML = `
+      <div class="step-input-wrap">
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment o QR de retorno" />
+      </div>
+    `;
+    const input = this.container.querySelector('.session-manual-input');
+    this.supportEl.textContent = 'Escribe el código y presiona Enter.';
+    this.supportEl.classList.remove('error');
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const val = input.value.trim();
+      if (!val) return;
+      this.handleScan(val);
+      input.value = '';
+    });
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  /**
+   * Resuelve un código escaneado contra el catálogo: primero como
+   * Shipment ID numérico (catalogById), y si no matchea o no se encuentra
+   * ahí, como QR de retorno (catalogByReturnQr). Si se resuelve vía QR de
+   * retorno, el shipment_id real a guardar es el ID de esa misma fila —
+   * nunca el código del QR de retorno.
+   */
+  resolveScan(rawText) {
+    const extracted = ScanParser.extract(rawText);
+    const raw = extracted ? extracted.value : String(rawText || '').trim().toUpperCase();
+    if (!raw) return null;
+
+    if (ScanParser.ID_PATTERN.test(raw)) {
+      const row = this.catalogById[raw];
+      if (row) return { row, code: raw };
+      // No está por ID: puede seguir siendo un QR de retorno (poco probable
+      // si matchea el patrón numérico, pero no hay razón para no intentarlo).
+    }
+
+    if (AuditoriaHVSession.RETURN_QR_PATTERN.test(raw)) {
+      const row = this.catalogByReturnQr[raw.toUpperCase()];
+      if (row) return { row, code: raw };
+    }
+
+    // No se encontró en ninguno de los dos índices: se trata igual como
+    // "fuera de catálogo", usando el código escaneado tal cual.
+    if (ScanParser.ID_PATTERN.test(raw) || AuditoriaHVSession.RETURN_QR_PATTERN.test(raw)) {
+      return { row: null, code: raw };
+    }
+    return null;
+  }
+
+  handleScan(rawText) {
+    if (this.locked) return;
+    const resolved = this.resolveScan(rawText);
+    if (!resolved) {
+      this.vibrate(40);
+      this.flash('error', 'Código no reconocido.');
+      return;
+    }
+    this.locked = true;
+    this.stopScanner();
+    if (resolved.row) {
+      this.renderFound(resolved.row);
+    } else {
+      this.renderNotFound(resolved.code);
+    }
+  }
+
+  flash(kind, message) {
+    if (this.supportEl) {
+      this.supportEl.textContent = message;
+      this.supportEl.classList.toggle('error', kind === 'error');
+    }
+    if (this.flashEl) {
+      const cls = kind === 'ok' ? 'active-ok' : (kind === 'error' ? 'active-error' : '');
+      if (cls) {
+        this.flashEl.innerHTML = Icons.svg(kind === 'ok' ? 'checkCircle' : 'resultError', { size: 96 });
+        this.flashEl.classList.add(cls);
+        setTimeout(() => {
+          if (this.flashEl) {
+            this.flashEl.classList.remove(cls);
+            this.flashEl.innerHTML = '';
+          }
+        }, 550);
+      }
+    }
+    setTimeout(() => {
+      if (!this.supportEl) return;
+      this.supportEl.classList.remove('error');
+      this.supportEl.textContent = this.inManualMode
+        ? 'Escribe el código y presiona Enter.'
+        : (this.loopHint || 'Escaneando... apunta la cámara al shipment o al QR de retorno.');
+    }, 900);
+  }
+
+  /* ====================================================================== */
+  /* Rama SÍ está en catálogo                                              */
+  /* ====================================================================== */
+
+  renderFound(row) {
+    const sauronUrl = `https://shipping-bo.adminml.com/sauron/shipments/shipment/${encodeURIComponent(row.ID)}`;
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">En catálogo</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${row.ID}</div>
+          <div class="driver-shipment-row"><span class="driver-badge">${row.Descripcion || '(sin descripción)'}</span></div>
+          <div class="driver-shipment-row">Costo USD: ${row.Costo_USD || '-'} · Costo MXN: ${row.Costo_MXN || '-'}</div>
+          <div class="driver-shipment-row">Tipo de envío: ${row.TIPO_DE_ENVIO || '-'}</div>
+          <div class="driver-shipment-row">Canalización: ${row.Canalizacion || '-'}</div>
+        </div>
+        <a href="${sauronUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
+        <h1 class="step-question">¿Cuál es el caso del paquete?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    AuditoriaHVSession.CASO_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => this.renderPhotoRequired(row, opt));
+      options.appendChild(btn);
+    });
+  }
+
+  /**
+   * Rama "en catálogo": foto siempre NUEVA y obligatoria — sin opción de
+   * reutilizar ni de omitir. Usa los mismos estilos de FormEngine.renderPhotoStep
+   * / enterPhotoCapture para mantener consistencia visual.
+   */
+  renderPhotoRequired(row, caso) {
+    this.container.innerHTML = `
+      <div class="step-screen photo-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Auditoría HV — Foto</div>
+        </div>
+        <h1 class="step-question">Toma una foto del paquete</h1>
+        <div class="photo-body"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.photoBody = this.container.querySelector('.photo-body');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopPhotoCamera();
+      this.renderFound(row);
+    });
+
+    this.enterPhotoCapture({
+      onCaptured: (dataUrl) => {
+        this.lastPhotoDataUrl = dataUrl;
+        this.saveFound(row, caso, dataUrl);
+      },
+    });
+  }
+
+  async saveFound(row, caso, foto) {
+    this.flash('ok', `${row.ID} · ${caso}`);
+    this.locked = false;
+    if (this.onScan) {
+      await this.onScan({
+        shipment_id: row.ID,
+        descripcion: row.Descripcion || '',
+        caso,
+        foto,
+      });
+    }
+    this.count += 1;
+    this.renderLoop();
+  }
+
+  /* ====================================================================== */
+  /* Rama NO está en catálogo                                              */
+  /* ====================================================================== */
+
+  renderNotFound(code) {
+    const sauronUrl = `https://shipping-bo.adminml.com/sauron/shipments/shipment/${encodeURIComponent(code)}`;
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Fuera de catálogo</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${code}</div>
+          <div class="driver-shipment-row">
+            <span class="driver-badge driver-badge-out">No está en el catálogo</span>
+          </div>
+        </div>
+        <a href="${sauronUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
+        <h1 class="step-question">¿Seguro que es On_Hold?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    const yesBtn = document.createElement('button');
+    yesBtn.type = 'button';
+    yesBtn.className = 'choice-btn';
+    yesBtn.textContent = 'Sí';
+    yesBtn.addEventListener('click', () => this.renderNotFoundCaso(code));
+    options.appendChild(yesBtn);
+
+    const noBtn = document.createElement('button');
+    noBtn.type = 'button';
+    noBtn.className = 'choice-btn';
+    noBtn.textContent = 'No';
+    noBtn.addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+    options.appendChild(noBtn);
+  }
+
+  renderNotFoundCaso(code) {
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Auditoría HV — On_Hold</div>
+        </div>
+        <h1 class="step-question">¿Cuál es el caso del paquete?</h1>
+        <div class="choice-options"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const options = this.container.querySelector('.choice-options');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.renderNotFound(code);
+    });
+
+    AuditoriaHVSession.CASO_OPTIONS.forEach((opt) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'choice-btn';
+      btn.textContent = opt;
+      btn.addEventListener('click', () => this.renderNotFoundPhotoStep(code, opt));
+      options.appendChild(btn);
+    });
+  }
+
+  /**
+   * Rama "fuera de catálogo": si ya hay una foto tomada antes en esta sesión
+   * ofrece reutilizarla o tomar una nueva; si no, entra directo a capturar.
+   */
+  renderNotFoundPhotoStep(code, caso) {
+    if (!this.lastPhotoDataUrl) {
+      this.renderNotFoundPhotoCapture(code, caso);
+      return;
+    }
+
+    this.container.innerHTML = `
+      <div class="step-screen photo-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Auditoría HV — Foto</div>
+        </div>
+        <h1 class="step-question">¿Usar la última foto tomada?</h1>
+        <div class="photo-body">
+          <div class="photo-preview">
+            <img alt="Última foto tomada" src="${this.lastPhotoDataUrl}" />
+          </div>
+        </div>
+        <div class="step-support"></div>
+      </div>
+    `;
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.renderNotFoundCaso(code);
+    });
+
+    const reuseBtn = document.createElement('button');
+    reuseBtn.type = 'button';
+    reuseBtn.className = 'btn btn-primary btn-block';
+    reuseBtn.style.margin = '8px 0';
+    reuseBtn.textContent = 'Reutilizar última foto';
+    reuseBtn.addEventListener('click', () => this.saveNotFound(code, caso, this.lastPhotoDataUrl));
+
+    const newBtn = document.createElement('button');
+    newBtn.type = 'button';
+    newBtn.className = 'btn btn-secondary btn-block';
+    newBtn.textContent = 'Tomar nueva foto';
+    newBtn.addEventListener('click', () => this.renderNotFoundPhotoCapture(code, caso));
+
+    const body = this.container.querySelector('.photo-body');
+    body.appendChild(reuseBtn);
+    body.appendChild(newBtn);
+  }
+
+  renderNotFoundPhotoCapture(code, caso) {
+    this.container.innerHTML = `
+      <div class="step-screen photo-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Auditoría HV — Foto</div>
+        </div>
+        <h1 class="step-question">Toma una foto del paquete</h1>
+        <div class="photo-body"></div>
+        <div class="step-support"></div>
+      </div>
+    `;
+    this.photoBody = this.container.querySelector('.photo-body');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopPhotoCamera();
+      this.renderNotFoundCaso(code);
+    });
+
+    this.enterPhotoCapture({
+      onCaptured: (dataUrl) => {
+        this.lastPhotoDataUrl = dataUrl;
+        this.saveNotFound(code, caso, dataUrl);
+      },
+    });
+  }
+
+  /**
+   * saveNotFound: descripción se guarda como literal "(fuera de catálogo)"
+   * — decisión de producto ante la ambigüedad del spec (el flujo no pide
+   * descripción libre en esta rama).
+   */
+  async saveNotFound(code, caso, foto) {
+    this.flash('ok', `${code} · ${caso}`);
+    this.locked = false;
+    if (this.onScan) {
+      await this.onScan({
+        shipment_id: code,
+        descripcion: '(fuera de catálogo)',
+        caso,
+        foto,
+      });
+    }
+    this.count += 1;
+    this.renderLoop();
+  }
+
+  /* ====================================================================== */
+  /* Cámara — mismo patrón visual que FormEngine.enterPhotoCapture          */
+  /* ====================================================================== */
+
+  async enterPhotoCapture({ onCaptured }) {
+    this.stopPhotoCamera();
+    this.supportEl.textContent = 'Encuadra y toma la foto con la cámara de la app.';
+    this.supportEl.classList.remove('error');
+
+    this.photoBody.innerHTML = `
+      <div class="scanner-viewport">
+        <video class="scanner-video" playsinline muted></video>
+      </div>
+    `;
+
+    if (!PhotoCamera.isSupported()) {
+      this.photoCameraUnavailable({ onCaptured });
+      return;
+    }
+
+    const video = this.photoBody.querySelector('.scanner-video');
+    this.photoCamera = new PhotoCamera();
+    try {
+      await this.photoCamera.start(video);
+    } catch (e) {
+      this.photoCameraUnavailable({ onCaptured });
+      return;
+    }
+
+    if (this.photoCamera.hasTorch()) {
+      const viewport = this.photoBody.querySelector('.scanner-viewport');
+      const torchBtn = document.createElement('button');
+      torchBtn.type = 'button';
+      torchBtn.className = 'scanner-torch';
+      torchBtn.setAttribute('aria-label', 'Linterna');
+      torchBtn.innerHTML = Icons.svg('flash', { size: 20 });
+      let on = false;
+      torchBtn.addEventListener('click', async () => {
+        on = !on;
+        const ok = await this.photoCamera.setTorch(on);
+        torchBtn.classList.toggle('active', ok && on);
+      });
+      viewport.appendChild(torchBtn);
+    }
+
+    const shutter = document.createElement('button');
+    shutter.type = 'button';
+    shutter.className = 'photo-cam-shutter';
+    shutter.innerHTML = `${Icons.svg('camera', { size: 20 })}<span>Tomar foto</span>`;
+    shutter.addEventListener('click', () => {
+      const data = this.photoCamera && this.photoCamera.capture({ maxDim: 1280, quality: 0.6 });
+      if (!data) {
+        this.supportEl.textContent = 'No se pudo capturar. Intenta de nuevo.';
+        this.supportEl.classList.add('error');
+        return;
+      }
+      this.vibrate(30);
+      this.stopPhotoCamera();
+      this.enterPhotoPreview(data, { onCaptured });
+    });
+    this.photoBody.appendChild(shutter);
+  }
+
+  photoCameraUnavailable({ onCaptured }) {
+    this.stopPhotoCamera();
+    this.photoBody.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">${Icons.svg('alertCircle', { size: 48 })}</div>
+        <p style="font-size: 1rem; margin-bottom: 16px;">Cámara no disponible</p>
+        <p style="font-size: 0.9rem; color: var(--color-text-muted);">No se pudo abrir la cámara de la app. Verifica el permiso de cámara e intenta de nuevo.</p>
+      </div>
+    `;
+    this.supportEl.textContent = 'Cámara no disponible';
+    this.supportEl.classList.add('error');
+
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'btn btn-primary btn-block';
+    retryBtn.innerHTML = `${Icons.svg('refresh', { size: 16 })}<span>Reintentar</span>`;
+    retryBtn.addEventListener('click', () => this.enterPhotoCapture({ onCaptured }));
+    this.photoBody.appendChild(retryBtn);
+  }
+
+  enterPhotoPreview(dataUrl, { onCaptured }) {
+    this.supportEl.textContent = '';
+    this.supportEl.classList.remove('error');
+
+    this.photoBody.innerHTML = `
+      <div class="photo-preview">
+        <img alt="Foto capturada" />
+        <div class="photo-preview-badge">${Icons.svg('checkCircle', { size: 20 })}</div>
+      </div>
+    `;
+    this.photoBody.querySelector('img').src = dataUrl;
+
+    const retakeBtn = document.createElement('button');
+    retakeBtn.type = 'button';
+    retakeBtn.className = 'btn btn-secondary btn-block';
+    retakeBtn.style.margin = '8px 0';
+    retakeBtn.innerHTML = `${Icons.svg('refresh', { size: 16 })}<span>Retomar</span>`;
+    retakeBtn.addEventListener('click', () => this.enterPhotoCapture({ onCaptured }));
+
+    const confirmBtn = document.createElement('button');
+    confirmBtn.type = 'button';
+    confirmBtn.className = 'btn btn-primary btn-block';
+    confirmBtn.innerHTML = `${Icons.svg('check', { size: 16 })}<span>Confirmar foto</span>`;
+    confirmBtn.addEventListener('click', () => onCaptured(dataUrl));
+
+    this.photoBody.appendChild(retakeBtn);
+    this.photoBody.appendChild(confirmBtn);
+  }
+}
+
 class DebugConsole {
   static entries = [];
   static maxEntries = 300;
@@ -8780,6 +8458,43 @@ class GridClient {
       }))
       .filter((r) => r.HU && r.SHIPMENT_ID);
   }
+
+  /** Igual que loadContenedorCerradoCatalog pero para la pestaña AUDITORIA_HV. */
+  async loadAuditoriaHVCatalog() {
+    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(AUDITORIA_HV_SHEET_RANGE)}`;
+    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '');
+      throw new Error(`No se pudo leer el catálogo de Auditoría HV: HTTP ${res.status}${bodyText ? ` — ${bodyText.slice(0, 300)}` : ''}`);
+    }
+    const body = await res.json();
+    const rows = Array.isArray(body?.values) ? body.values : [];
+    const [header, ...dataRows] = rows;
+    if (!header) return [];
+    const idx = {
+      ID: header.indexOf('ID'),
+      Descripcion: header.indexOf('Descripcion'),
+      Costo_USD: header.indexOf('Costo_USD'),
+      Costo_MXN: header.indexOf('Costo_MXN'),
+      TIPO_DE_ENVIO: header.indexOf('TIPO_DE_ENVIO'),
+      Canalizacion: header.indexOf('Canalizacion'),
+      SHP_RETURN_QR_ID: header.indexOf('SHP_RETURN_QR_ID'),
+      FECHA_DE_ACTUALIZACION: header.indexOf('FECHA_DE_ACTUALIZACION'),
+    };
+    return dataRows
+      .filter((r) => Array.isArray(r) && r.length)
+      .map((r) => ({
+        ID: String(r[idx.ID] ?? '').trim(),
+        Descripcion: String(r[idx.Descripcion] ?? '').trim(),
+        Costo_USD: String(r[idx.Costo_USD] ?? '').trim(),
+        Costo_MXN: String(r[idx.Costo_MXN] ?? '').trim(),
+        TIPO_DE_ENVIO: String(r[idx.TIPO_DE_ENVIO] ?? '').trim(),
+        Canalizacion: String(r[idx.Canalizacion] ?? '').trim(),
+        SHP_RETURN_QR_ID: String(r[idx.SHP_RETURN_QR_ID] ?? '').trim(),
+        FECHA_DE_ACTUALIZACION: String(r[idx.FECHA_DE_ACTUALIZACION] ?? '').trim(),
+      }))
+      .filter((r) => r.ID);
+  }
 }
 
 /**
@@ -8792,9 +8507,6 @@ class CapturaApp {
     this.catalogIndex = {};
     this.catalogLoadedAt = null;
     this.catalogAccessDenied = false;
-    this.driversCatalogIndex = {};
-    this.driversCatalogLoadedAt = null;
-    this.driversCatalogAccessDenied = false;
     this.outboxRecords = [];
     this.syncing = false;
     this.currentEngine = null;
@@ -9039,7 +8751,6 @@ class CapturaApp {
       await this.loadLastDoca();
       await this.loadLastLugar();
       await this.loadCatalog();
-      await this.loadDriversCatalog();
       await this.loadBarreduraCatalog();
       await this.loadOutboxFromStorage();
 
@@ -9099,35 +8810,6 @@ class CapturaApp {
       DebugConsole.log(`Error al cargar catálogo destino/doca: ${e.message}`, 'warn');
       this.catalogIndex = {};
       this.catalogLoadedAt = null;
-    }
-  }
-
-  /**
-   * Catálogo de rutas → shipments para Inbound/Drivers, publicado desde el
-   * uploader del dashboard (consolidado_auditoria.html). No bloquea el
-   * resto de los logs si falla o todavía no se publicó.
-   */
-  async loadDriversCatalog() {
-    this.driversCatalogAccessDenied = false;
-    try {
-      DebugConsole.log('Cargando catálogo Inbound/Drivers...', 'info');
-      const data = await this.gridClient.getStateBucket('catalogo_inbound_drivers');
-
-      if (!data || typeof data !== 'object') {
-        DebugConsole.log('Catálogo Inbound/Drivers vacío o no publicado', 'warn');
-        this.driversCatalogIndex = {};
-        this.driversCatalogLoadedAt = null;
-        return;
-      }
-
-      this.driversCatalogIndex = data.index && typeof data.index === 'object' ? data.index : data;
-      this.driversCatalogLoadedAt = data.generatedAt ? new Date(data.generatedAt) : Date.now();
-      DebugConsole.log(`Catálogo Inbound/Drivers cargado: ${Object.keys(this.driversCatalogIndex).length} rutas`, 'info');
-    } catch (e) {
-      this.driversCatalogAccessDenied = /^403$/.test(e.message);
-      DebugConsole.log(`Error al cargar catálogo Inbound/Drivers: ${e.message}`, 'warn');
-      this.driversCatalogIndex = {};
-      this.driversCatalogLoadedAt = null;
     }
   }
 
@@ -9737,16 +9419,6 @@ class CapturaApp {
       return;
     }
 
-    if (formId === 'inbound_drivers' && Object.keys(this.driversCatalogIndex).length === 0) {
-      this.showToast(
-        this.driversCatalogAccessDenied
-          ? 'Sin permiso para leer el catálogo de rutas'
-          : 'Catálogo de rutas no publicado — súbelo desde el dashboard',
-        'warn'
-      );
-      return;
-    }
-
     // Barredura necesita leer los registros recientes (dedup 12h) antes de
     // arrancar la sesión, así que se maneja por una ruta async aparte.
     if (formId === 'barredura') {
@@ -9767,6 +9439,12 @@ class CapturaApp {
       return;
     }
 
+    // Auditoría HV: lee el catálogo AUDITORIA_HV antes de arrancar la sesión.
+    if (formId === 'auditoria_hv') {
+      this.startAuditoriaHV();
+      return;
+    }
+
     this._screen = 'form';
     this.ensureBackGuard();
 
@@ -9783,22 +9461,6 @@ class CapturaApp {
       this.currentEngine = new DestinoDocaSession({
         catalogIndex: this.catalogIndex,
         initialDoca: this.lastDoca,
-        onScan: (values) => this.onFormComplete(formId, values, { stayInSession: true }),
-        onExit: () => this.renderMenu(),
-      });
-      this.currentEngine.render('form-container');
-      return;
-    }
-
-    // Inbound/Drivers tampoco usa el wizard genérico: la ruta se fija una
-    // vez por sesión (QR del conductor o manual) y los shipments se
-    // escanean en loop continuo contra el catálogo de esa ruta (ver
-    // InboundDriversSession).
-    if (formId === 'inbound_drivers') {
-      this.hideNavbar();
-      this.currentEngine = new InboundDriversSession({
-        catalogIndex: this.driversCatalogIndex,
-        catalogAccessDenied: this.driversCatalogAccessDenied,
         onScan: (values) => this.onFormComplete(formId, values, { stayInSession: true }),
         onExit: () => this.renderMenu(),
       });
@@ -9925,6 +9587,48 @@ class CapturaApp {
       foundToday: found,
       anyRecordToday: anyRecord,
       onScan: (values) => this.onFormComplete('cont_cerrado', values, { stayInSession: true }),
+      onExit: () => this.renderMenu(),
+    });
+    this.currentEngine.render('form-container');
+  }
+
+  /**
+   * Arranque de Auditoría HV: lee el catálogo AUDITORIA_HV (Google Sheets)
+   * mostrando un placeholder, y luego instancia la sesión. No hay dedup
+   * cross-device para este log (volumen bajo, no se pidió).
+   */
+  async startAuditoriaHV() {
+    this._screen = 'form';
+    this.ensureBackGuard();
+
+    const root = document.getElementById('app-root');
+    root.innerHTML = `
+      <div id="form-container">
+        <div class="step-screen">
+          <div class="step-progress-row">
+            <div class="step-progress">Auditoría HV</div>
+          </div>
+          <h1 class="step-question">Cargando…</h1>
+          <div class="step-support">Leyendo el catálogo de Auditoría HV.</div>
+        </div>
+      </div>
+    `;
+
+    let catalog = [];
+    try {
+      catalog = await this.gridClient.loadAuditoriaHVCatalog();
+    } catch (e) {
+      DebugConsole.log(`Error al cargar catálogo Auditoría HV: ${e.message}`, 'warn');
+      catalog = [];
+    }
+
+    // Si el usuario ya salió mientras cargaba, no montar la sesión.
+    if (this._screen !== 'form') return;
+
+    this.hideNavbar();
+    this.currentEngine = new AuditoriaHVSession({
+      catalog,
+      onScan: (values) => this.onFormComplete('auditoria_hv', values, { stayInSession: true }),
       onExit: () => this.renderMenu(),
     });
     this.currentEngine.render('form-container');

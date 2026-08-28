@@ -661,13 +661,10 @@
     <button class="btn-icon" id="btn-refresh" title="Actualizar">
       <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"/></svg>
     </button>
-    <button class="btn-icon" id="btn-download" title="Descargar consolidado (todo, JSON/CSV)">
+    <button class="btn-icon" id="btn-download-filtered" title="Exportar registros filtrados (CSV) — respeta rango de fecha, filtros y drill-down activos">
       <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
     </button>
-    <button class="btn-icon" id="btn-download-today" title="Exportar capturados de hoy (todos los logs, CSV)">
-      <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
-    </button>
-    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort, Inbound/Drivers o Barredura">
+    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort o Barredura">
       <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
     </button>
     <input type="file" id="catalog-file-input" accept=".csv,text/csv" hidden />
@@ -1479,12 +1476,12 @@
 
   /**
    * Mismo mecanismo de sharding diario que captura_auditoria.html (ver
-   * comentario allá): barredura/destino_doca/inbound_drivers ya no viven en
-   * un único {formId}_master, sino en {formId}_master_YYYY-MM-DD por día
-   * (hora de México). Todo lo anterior al cutover sigue en el bucket
-   * legacy, congelado — nunca se reescribió ni se migró.
+   * comentario allá): barredura/destino_doca ya no viven en un único
+   * {formId}_master, sino en {formId}_master_YYYY-MM-DD por día (hora de
+   * México). Todo lo anterior al cutover sigue en el bucket legacy,
+   * congelado — nunca se reescribió ni se migró.
    */
-  const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'inbound_drivers', 'premissort']);
+  const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'premissort']);
   const SHARD_CUTOVER_DATE = '2026-08-14';
 
   function shardDateKeyMexico(ts) {
@@ -1585,53 +1582,6 @@
     if (!records.length) throw new Error('Recovery CSV no contiene registros válidos');
     if (!meta || !meta.formId) meta = { ...(meta || {}), formId: records[0].formId };
     return { meta, records };
-  }
-
-  function buildDriversCatalogIndex(rows) {
-    if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
-
-    const header = rows[0].map(h => h.trim().toUpperCase());
-    const idx = (name) => header.indexOf(name);
-    const col = {
-      route: idx('ID_ROUTE'),
-      carrier: idx('CARRIER'),
-      placa: idx('PLACA'),
-      shipment: idx('SHIPMENT_ID'),
-      domain: idx('DOMAIN'),
-      cost: idx('COST_USD'),
-      resultado: idx('RESULTADO'),
-    };
-    const missing = Object.entries(col).filter(([, i]) => i === -1).map(([k]) => k);
-    if (missing.length > 0) {
-      throw new Error(`Faltan columnas en el CSV: ${missing.join(', ')}`);
-    }
-
-    const index = {};
-    for (let r = 1; r < rows.length; r++) {
-      const row = rows[r];
-      const routeId = (row[col.route] || '').trim();
-      const shipmentId = (row[col.shipment] || '').trim();
-      if (!routeId || !shipmentId) continue;
-
-      if (!index[routeId]) {
-        index[routeId] = {
-          carrier: (row[col.carrier] || '').trim(),
-          placa: (row[col.placa] || '').trim(),
-          shipments: [],
-        };
-      }
-      index[routeId].shipments.push({
-        shipment_id: shipmentId,
-        domain: (row[col.domain] || '').trim(),
-        cost_usd: Number(row[col.cost]) || 0,
-        resultado: (row[col.resultado] || '').trim(),
-      });
-    }
-
-    if (Object.keys(index).length === 0) {
-      throw new Error('No se encontraron rutas/shipments válidos en el CSV');
-    }
-    return index;
   }
 
   // Catálogo de Pre-Missort: el CSV trae una doca por fila y, en la
@@ -1742,15 +1692,15 @@
   /**
    * Detecta el tipo de catálogo a partir del header del CSV (ya en
    * mayúsculas), para que un solo botón de carga sirva para los 3
-   * catálogos publicables desde el dashboard. Inbound/Drivers se checa
-   * primero porque también trae SHIPMENT_ID (columna que por sí sola
-   * identificaría Barredura). Premissort no usa catálogo subido — consulta
-   * BigQuery en vivo por posición desde captura (ver GridClient.
-   * runGridSqlLookup en captura_auditoria.html).
+   * catálogos publicables desde el dashboard. Premissort no usa catálogo
+   * subido — consulta BigQuery en vivo por posición desde captura (ver
+   * GridClient.runGridSqlLookup en captura_auditoria.html).
    */
+  // Mismas 3 opciones que AuditoriaHVSession.CASO_OPTIONS en captura_auditoria.html.
+  const AUDITORIA_HV_CASO_OPTIONS = ['Vacío', 'Piezas faltantes', 'Sin divergencias'];
+
   function detectCatalogType(header) {
     const has = (name) => header.includes(name);
-    if (has('ID_ROUTE') && has('CARRIER') && has('SHIPMENT_ID')) return 'inbound_drivers';
     if (has('DESTINO') && has('DOCA')) return 'destino_doca';
     if (has('SHIPMENT_ID')) return 'barredura';
     return null;
@@ -1855,11 +1805,10 @@
         destino_doca: [],
         fury: [],
         linehaul: [],
-        inbound_fm: [],
-        inbound_drivers: [],
         barredura: [],
         premissort: [],
         cont_cerrado: [],
+        auditoria_hv: [],
       };
       this.currentLog = 'destino_doca';
       // Filtros y paginación
@@ -1930,8 +1879,7 @@
 
     setupEventListeners() {
       document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
-      document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
-      document.getElementById('btn-download-today').addEventListener('click', () => this.downloadToday());
+      document.getElementById('btn-download-filtered').addEventListener('click', () => this.downloadFiltered());
       document.getElementById('btn-upload-catalog').addEventListener('click', () => {
         document.getElementById('catalog-file-input').click();
       });
@@ -2181,6 +2129,17 @@
           this.areaFilter = '';
           this.displayedCount = 10;
           this.chartFilter = null;
+          // Default de fecha SOLO para Auditoría HV: fija hoy como rango,
+          // el usuario puede seguir editando los inputs libremente después.
+          if (logType === 'auditoria_hv') {
+            const today = new Date();
+            this.dateFrom = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            this.dateTo = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const pad = (n) => String(n).padStart(2, '0');
+            const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+            document.getElementById('date-from').value = todayStr;
+            document.getElementById('date-to').value = todayStr;
+          }
           this.render();
         });
         container.appendChild(tab);
@@ -2370,26 +2329,6 @@
           const count = records.filter(r => r.area === a).length;
           this.addKpiCard(container, count.toString(), a);
         });
-      } else if (this.currentLog === 'inbound_fm') {
-        const hallazgos = new Set(records.map(r => r.hallazgo));
-        this.addKpiCard(container, total.toString(), 'Total');
-        hallazgos.forEach(h => {
-          const count = records.filter(r => r.hallazgo === h).length;
-          this.addKpiCard(container, count.toString(), h);
-        });
-      } else if (this.currentLog === 'inbound_drivers') {
-        const estados = new Set(records.map(r => r.estado));
-        this.addKpiCard(container, total.toString(), 'Total');
-        estados.forEach(es => {
-          const count = records.filter(r => r.estado === es).length;
-          this.addKpiCard(container, count.toString(), es);
-        });
-        const totalCost = records.reduce((sum, r) => sum + (Number(r.cost_usd) || 0), 0);
-        this.addKpiCard(container, `$${totalCost.toFixed(2)}`, 'Costo USD auditado');
-        const divergentRoutes = new Set(records.filter(r => r.route_divergencia).map(r => r.route_id)).size;
-        if (divergentRoutes > 0) {
-          this.addKpiCard(container, divergentRoutes.toString(), 'Rutas con divergencia QR');
-        }
       } else if (this.currentLog === 'barredura') {
         this.addKpiCard(container, total.toString(), 'Total');
         // Acepta cualquiera de los 3 nombres que ha tenido este estado
@@ -2440,6 +2379,12 @@
         }
         const contenedores = new Set(records.map(r => r.hu).filter(Boolean)).size;
         this.addKpiCard(container, contenedores.toString(), 'Contenedores escaneados');
+      } else if (this.currentLog === 'auditoria_hv') {
+        this.addKpiCard(container, total.toString(), 'Total');
+        AUDITORIA_HV_CASO_OPTIONS.forEach((caso) => {
+          const count = records.filter(r => r.caso === caso).length;
+          this.addKpiCard(container, count.toString(), caso);
+        });
       }
     }
 
@@ -2513,13 +2458,6 @@
           builders = [() => this.buildSituacionChart(records)];
         } else if (this.currentLog === 'linehaul') {
           builders = [() => this.buildAreaChart(records)];
-        } else if (this.currentLog === 'inbound_fm') {
-          builders = [() => this.buildHallazgoChart(records)];
-        } else if (this.currentLog === 'inbound_drivers') {
-          builders = [
-            () => this.buildEstadoDriversChart(records),
-            () => this.buildCostByRouteChart(records),
-          ];
         } else if (this.currentLog === 'barredura') {
           builders = [
             () => this.buildBarreduraEstadoChart(records),
@@ -2532,6 +2470,8 @@
             () => this.buildPremissortMissortChart(records),
             () => this.buildPremissortEstadoChart(records),
           ];
+        } else if (this.currentLog === 'auditoria_hv') {
+          builders = [() => this.buildAuditoriaHVCasoChart(records)];
         }
 
         // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
@@ -2769,52 +2709,24 @@
       return { data, layout, chartKey: 'area', labels, predicates: this.fieldPredicates('area', labels) };
     }
 
-    buildHallazgoChart(records) {
-      const counts = this.countByField(records, 'hallazgo');
-      const labels = Object.keys(counts);
-
-      const data = [{
-        x: labels,
-        y: Object.values(counts),
-        type: 'bar',
-        marker: { color: '#FFD100' },
-      }];
-
-      const layout = {
-        title: 'Distribución de Hallazgos',
-        xaxis: { title: 'Hallazgo' },
-        yaxis: { title: 'Cantidad' },
-        plot_bgcolor: 'transparent',
-        paper_bgcolor: 'transparent',
-        font: { color: '#F4F6F8', size: 11 },
-        margin: { l: 50, r: 30, t: 40, b: 40 },
-      };
-
-      return { data, layout, chartKey: 'hallazgo', labels, predicates: this.fieldPredicates('hallazgo', labels) };
-    }
-
-    buildEstadoDriversChart(records) {
-      const counts = this.countByField(records, 'estado');
-      const colorMap = {
-        'Auditado OK': '#34C759',
-        'Divergencia': '#FF453A',
-        'Faltante confirmado': '#FFD100',
-      };
+    /** Distribución de "Caso" para Auditoría HV — mismo estilo de dona que buildResultadoChart. */
+    buildAuditoriaHVCasoChart(records) {
+      const counts = this.countByField(records, 'caso');
       const labels = Object.keys(counts);
 
       const data = [{
         labels,
-        values: labels.map(l => counts[l]),
+        values: Object.values(counts),
         type: 'pie',
         hole: 0.45,
         sort: false,
         textinfo: 'percent',
         textfont: { size: 11 },
-        marker: { colors: labels.map(l => colorMap[l] || '#8A7300') },
+        marker: { colors: ['#FFD100', '#FF453A', '#34C759', '#4A4A4A'] },
       }];
 
       const layout = {
-        title: 'Distribución de Estado',
+        title: 'Distribución de Caso',
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
@@ -2823,40 +2735,7 @@
         margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      return { data, layout, chartKey: 'estado-drivers', labels, predicates: this.fieldPredicates('estado', labels) };
-    }
-
-    buildCostByRouteChart(records) {
-      const totals = {};
-      records.forEach(r => {
-        const key = r.route_id || '(sin ruta)';
-        totals[key] = (totals[key] || 0) + (Number(r.cost_usd) || 0);
-      });
-      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 8);
-      const labels = sorted.map(([k]) => k);
-      const predicates = {};
-      labels.forEach((label) => {
-        predicates[label] = (r) => (r.route_id || '(sin ruta)') === label;
-      });
-
-      const data = [{
-        x: labels,
-        y: sorted.map(([, v]) => Number(v.toFixed(2))),
-        type: 'bar',
-        marker: { color: '#3987E5' },
-      }];
-
-      const layout = {
-        title: 'Costo USD por Ruta (Top 8)',
-        xaxis: { title: 'Ruta' },
-        yaxis: { title: 'USD' },
-        plot_bgcolor: 'transparent',
-        paper_bgcolor: 'transparent',
-        font: { color: '#F4F6F8', size: 11 },
-        margin: { l: 50, r: 30, t: 40, b: 40 },
-      };
-
-      return { data, layout, chartKey: 'cost-by-route', labels, predicates };
+      return { data, layout, chartKey: 'auditoria-hv-caso', labels, predicates: this.fieldPredicates('caso', labels) };
     }
 
     buildBarreduraEstadoChart(records) {
@@ -3706,96 +3585,30 @@
       }
     }
 
-    async downloadAll() {
-      // Consolidar todos los registros con su tipo
-      const allRecords = [];
-
-      for (const [logType, records] of Object.entries(this.logs)) {
-        records.forEach(rec => {
-          allRecords.push({
-            'Tipo de Log': FORMS_CONFIG[logType].title,
-            ...rec
-          });
-        });
-      }
-
-      if (allRecords.length === 0) {
-        alert('No hay registros para descargar');
-        return;
-      }
-
-      // Obtener todos los campos únicos
-      const allFields = new Set();
-      allRecords.forEach(rec => Object.keys(rec).forEach(k => allFields.add(k)));
-
-      // Crear encabezados en orden: Tipo de Log, luego los demás
-      const headers = ['Tipo de Log', ...Array.from(allFields).filter(f => f !== 'Tipo de Log')];
-
-      // Generar CSV manualmente (similar a CSVEngine pero con más flexibilidad)
-      const escapeCsv = (val) => {
-        if (val === null || val === undefined) return '';
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
-      };
-
-      const csvLines = [headers.map(escapeCsv).join(',')];
-      allRecords.forEach(rec => {
-        const row = headers.map(h => escapeCsv(rec[h] || '')).join(',');
-        csvLines.push(row);
-      });
-
-      const csv = '﻿' + csvLines.join('\n'); // BOM UTF-8
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `consolidado_${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
     /**
-     * Exporta en un solo CSV lo capturado HOY (fecha local del navegador,
-     * 00:00 a 23:59:59) en los 7 logs, sin importar el filtro de fecha ni
-     * la pestaña activa — misma idea que "Descargar" (todo, consolidado)
-     * pero acotado al día en curso.
+     * Exporta el log actualmente seleccionado (this.currentLog) respetando
+     * TODOS los filtros activos: rango de fecha (getFilteredRecords), el
+     * filtro de área de Barredura si aplica (ya incluido en
+     * getFilteredRecords) y el drill-down de gráfica activo (chartFilter),
+     * igual que hace filterTable()/renderAnalysis() para la tabla.
      */
-    async downloadToday() {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    downloadFiltered() {
+      let records = this.getFilteredRecords();
+      if (this.chartFilter) records = records.filter(this.chartFilter.predicate);
 
-      const allRecords = [];
-      for (const [logType, records] of Object.entries(this.logs)) {
-        // Los logs shardeados pueden tener this.logs acotado al filtro de
-        // fecha actual (esa es la ganancia de leer solo lo necesario) — si
-        // el filtro no incluye hoy, this.logs no trae el shard de hoy. Se
-        // lee directo en vez de asumir que ya está en memoria.
-        const source = SHARDED_FORMS.has(logType)
-          ? (await this.gridClient.getStateBucket(masterBucketNameFor(logType, shardDateKeyMexico(now.toISOString()))))?.records || []
-          : records;
-        source.forEach((rec) => {
-          const recDate = rec.ts ? new Date(rec.ts) : null;
-          if (!recDate || recDate < startOfDay || recDate >= endOfDay) return;
-          allRecords.push({ 'Tipo de Log': FORMS_CONFIG[logType].title, ...rec });
-        });
-      }
-
-      if (allRecords.length === 0) {
-        this.showNotification('No hay registros capturados hoy', 'error');
+      if (records.length === 0) {
+        this.showNotification('No hay registros en el rango/filtro seleccionado', 'error');
         return;
       }
 
-      const allFields = new Set();
-      allRecords.forEach((rec) => Object.keys(rec).forEach((k) => allFields.add(k)));
-      const headers = ['Tipo de Log', ...Array.from(allFields).filter((f) => f !== 'Tipo de Log')]
-        .map((h) => ({ field: h, header: h }));
-
-      this.downloadCsv(`capturados_hoy_${now.toISOString().split('T')[0]}.csv`, headers, allRecords);
-      this.showNotification(`Exportado · ${allRecords.length} registros de hoy`, 'success');
+      const config = FORMS_CONFIG[this.currentLog];
+      const filenameSlug = this.currentLog.replace(/[^a-z0-9_]/gi, '');
+      this.downloadCsv(
+        `${filenameSlug}_${new Date().toISOString().split('T')[0]}.csv`,
+        config.csvColumns,
+        records
+      );
+      this.showNotification(`Exportado · ${records.length} registros`, 'success');
     }
 
     // Descarga un CSV genérico (con BOM UTF-8) a partir de encabezados +
@@ -3862,9 +3675,9 @@
 
     /**
      * Único punto de carga de catálogo del dashboard: detecta el tipo
-     * (Pre-Missort, Inbound/Drivers o Barredura) por las columnas del CSV
-     * y lo publica en su State Bucket correspondiente. Sobreescribe el
-     * catálogo completo (no hace merge).
+     * (Pre-Missort o Barredura) por las columnas del CSV y lo publica en su
+     * State Bucket correspondiente. Sobreescribe el catálogo completo (no
+     * hace merge).
      */
     async uploadCatalogAuto(file) {
       const btn = document.getElementById('btn-upload-catalog');
@@ -3876,14 +3689,7 @@
         const header = rows[0].map(h => h.trim().toUpperCase());
         const type = detectCatalogType(header);
 
-        if (type === 'inbound_drivers') {
-          const index = buildDriversCatalogIndex(rows);
-          const routeCount = Object.keys(index).length;
-          const shipmentCount = Object.values(index).reduce((sum, r) => sum + r.shipments.length, 0);
-          await this.publishCatalogIndex('catalogo_inbound_drivers', index);
-          this.showNotification(`Catálogo Inbound/Drivers publicado · ${routeCount} rutas · ${shipmentCount} shipments`, 'success');
-          DebugConsole.log(`Catálogo Inbound/Drivers publicado: ${routeCount} rutas, ${shipmentCount} shipments`, 'info');
-        } else if (type === 'destino_doca') {
+        if (type === 'destino_doca') {
           const index = buildDestinoDocaCatalogIndex(rows);
           const destinoCount = Object.keys(index).length;
           const docaCount = Object.values(index).reduce((sum, docas) => sum + docas.length, 0);
@@ -3897,7 +3703,7 @@
           this.showNotification(`Catálogo Barredura publicado · ${shipmentCount} shipments`, 'success');
           DebugConsole.log(`Catálogo Barredura publicado: ${shipmentCount} shipments`, 'info');
         } else {
-          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), ID_ROUTE+CARRIER+SHIPMENT_ID (Inbound/Drivers), o SHIPMENT_ID (Barredura).');
+          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), o SHIPMENT_ID (Barredura).');
         }
       } catch (e) {
         this.showNotification(`Error al publicar catálogo: ${e.message}`, 'error');
@@ -3984,35 +3790,6 @@
       ],
       fields: [{ type: 'photo', id: 'foto' }],
     },
-    inbound_fm: {
-      title: 'Inbound FM',
-      csvColumns: [
-        { field: 'auditoria', header: 'Auditoría' },
-        { field: 'ts', header: 'Fecha/Hora' },
-        { field: 'patente', header: 'Patente' },
-        { field: 'diferencia_shipments', header: 'Diferencia de Shipments' },
-        { field: 'hallazgo', header: 'Hallazgo' },
-        { field: 'evidencia', header: 'Evidencia' },
-      ],
-      fields: [{ type: 'photo', id: 'evidencia' }],
-    },
-    inbound_drivers: {
-      title: 'Inbound / Drivers',
-      csvColumns: [
-        { field: 'auditoria', header: 'Auditoría' },
-        { field: 'ts', header: 'Fecha/Hora' },
-        { field: 'route_id', header: 'Ruta' },
-        { field: 'carrier', header: 'Carrier' },
-        { field: 'placa', header: 'Placa' },
-        { field: 'shipment_id', header: 'Shipment ID' },
-        { field: 'domain', header: 'Domain' },
-        { field: 'cost_usd', header: 'Cost USD' },
-        { field: 'resultado_auditoria', header: 'Tipo (Frágil/HV)' },
-        { field: 'estado', header: 'Estado' },
-        { field: 'foto', header: 'Foto' },
-      ],
-      fields: [{ type: 'photo', id: 'foto' }],
-    },
     barredura: {
       title: 'Barredura',
       csvColumns: [
@@ -4057,6 +3834,18 @@
         { field: 'detalle', header: 'Detalle' },
       ],
       fields: [],
+    },
+    auditoria_hv: {
+      title: 'Auditoría HV',
+      csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
+        { field: 'ts', header: 'Fecha' },
+        { field: 'shipment_id', header: 'Shipment ID' },
+        { field: 'descripcion', header: 'Descripción' },
+        { field: 'caso', header: 'Caso' },
+        { field: 'foto', header: 'Foto' },
+      ],
+      fields: [{ id: 'foto', type: 'photo' }],
     },
   };
 
