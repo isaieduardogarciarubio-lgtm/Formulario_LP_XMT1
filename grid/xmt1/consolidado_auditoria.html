@@ -2129,16 +2129,18 @@
           this.areaFilter = '';
           this.displayedCount = 10;
           this.chartFilter = null;
-          // Default de fecha SOLO para Auditoría HV: fija hoy como rango,
-          // el usuario puede seguir editando los inputs libremente después.
+          // Default de fecha SOLO para Auditoría HV: ayer y hoy (igual que
+          // el default general de la app), el usuario puede seguir editando
+          // los inputs libremente después.
           if (logType === 'auditoria_hv') {
             const today = new Date();
-            this.dateFrom = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+            this.dateFrom = yesterday;
             this.dateTo = new Date(today.getFullYear(), today.getMonth(), today.getDate());
             const pad = (n) => String(n).padStart(2, '0');
-            const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
-            document.getElementById('date-from').value = todayStr;
-            document.getElementById('date-to').value = todayStr;
+            const toInputValue = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            document.getElementById('date-from').value = toInputValue(yesterday);
+            document.getElementById('date-to').value = toInputValue(today);
           }
           this.render();
         });

@@ -316,6 +316,11 @@
         <path d="M18 20V10M12 20V4M6 20v-6"/>
       </svg>
     </a>
+    <button class="btn-icon" id="btn-download-filtered" title="Exportar registros filtrados (CSV) — respeta rango de fecha y drill-down activos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 3v13m0 0l-4-4m4 4l4-4M4 21h16"/>
+      </svg>
+    </button>
     <button class="btn-icon" id="btn-refresh" title="Actualizar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M23 4v6h-6"/>
@@ -688,6 +693,7 @@ class LogViewer {
 
   setupEventListeners() {
     document.getElementById('btn-refresh').addEventListener('click', () => this.refresh());
+    document.getElementById('btn-download-filtered').addEventListener('click', () => this.downloadFiltered());
     document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
     document.getElementById('date-from').addEventListener('change', async (e) => {
       this.dateFrom = parseLocalDateInput(e.target.value);
@@ -850,6 +856,49 @@ class LogViewer {
     }
 
     this.renderCharts(filteredRecords);
+  }
+
+  /**
+   * Exporta el log actualmente seleccionado respetando TODOS los filtros
+   * activos: rango de fecha (getFilteredRecords) y el drill-down de
+   * gráfica activo (chartFilter) — igual que hace filterTable()/render()
+   * para la tabla.
+   */
+  downloadFiltered() {
+    let records = this.getFilteredRecords();
+    if (this.chartFilter) records = records.filter(this.chartFilter.predicate);
+
+    if (records.length === 0) {
+      alert('No hay registros en el rango/filtro seleccionado');
+      return;
+    }
+
+    const columns = LOG_COLUMNS[this.currentLog] || [];
+    const filenameSlug = this.currentLog.replace(/[^a-z0-9_]/gi, '');
+    this.downloadCsv(`${filenameSlug}_${new Date().toISOString().split('T')[0]}.csv`, columns, records);
+  }
+
+  // Descarga un CSV genérico (con BOM UTF-8) a partir de encabezados + filas de objetos.
+  downloadCsv(filename, headers, rows) {
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      return (str.includes(',') || str.includes('"') || str.includes('\n'))
+        ? '"' + str.replace(/"/g, '""') + '"'
+        : str;
+    };
+    const lines = [headers.map(h => escapeCsv(h.header)).join(',')];
+    rows.forEach(row => {
+      lines.push(headers.map(h => escapeCsv(row[h.field])).join(','));
+    });
+    const csv = '﻿' + lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   /** Chip "Filtrando por: X" cuando hay un drill-down activo desde una gráfica. */
