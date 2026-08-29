@@ -7511,11 +7511,58 @@ class AuditoriaHVSession {
   }
 
   /**
-   * Rama "en catálogo": foto siempre NUEVA y obligatoria — sin opción de
-   * reutilizar ni de omitir. Usa los mismos estilos de FormEngine.renderPhotoStep
-   * / enterPhotoCapture para mantener consistencia visual.
+   * Rama "en catálogo": foto obligatoria, pero SÍ puede reutilizar la
+   * última tomada en la sesión — una misma Rx/receta puede cubrir varios
+   * paquetes distintos, así que no tiene sentido forzar una foto nueva por
+   * cada shipment si ya se fotografió la Rx hace un momento. Si no hay
+   * foto previa en la sesión entra directo a capturar.
    */
   renderPhotoRequired(row, caso) {
+    if (!this.lastPhotoDataUrl) {
+      this.renderPhotoCapture(row, caso);
+      return;
+    }
+
+    this.container.innerHTML = `
+      <div class="step-screen photo-screen">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Atrás">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Auditoría HV — Foto</div>
+        </div>
+        <h1 class="step-question">¿Usar la última foto tomada?</h1>
+        <div class="photo-body">
+          <div class="photo-preview">
+            <img alt="Última foto tomada" src="${this.lastPhotoDataUrl}" />
+          </div>
+        </div>
+        <div class="step-support"></div>
+      </div>
+    `;
+    this.supportEl = this.container.querySelector('.step-support');
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.renderFound(row);
+    });
+
+    const reuseBtn = document.createElement('button');
+    reuseBtn.type = 'button';
+    reuseBtn.className = 'btn btn-primary btn-block';
+    reuseBtn.style.margin = '8px 0';
+    reuseBtn.textContent = 'Reutilizar última foto';
+    reuseBtn.addEventListener('click', () => this.saveFound(row, caso, this.lastPhotoDataUrl));
+
+    const newBtn = document.createElement('button');
+    newBtn.type = 'button';
+    newBtn.className = 'btn btn-secondary btn-block';
+    newBtn.textContent = 'Tomar nueva foto';
+    newBtn.addEventListener('click', () => this.renderPhotoCapture(row, caso));
+
+    const body = this.container.querySelector('.photo-body');
+    body.appendChild(reuseBtn);
+    body.appendChild(newBtn);
+  }
+
+  /** Usa los mismos estilos de FormEngine.renderPhotoStep/enterPhotoCapture para mantener consistencia visual. */
+  renderPhotoCapture(row, caso) {
     this.container.innerHTML = `
       <div class="step-screen photo-screen">
         <div class="step-progress-row">
