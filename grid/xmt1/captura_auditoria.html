@@ -4457,7 +4457,6 @@ class DestinoDocaSession {
  * cualquier posición) no se vuelve a preguntar.
  */
 class PremissortSession {
-  static OUT_OF_CATALOG_OPTIONS = ['No es necesaria acción', 'Canalizado al área correspondiente'];
   static POSITION_PATTERN = /^[A-Z0-9-]{2,40}$/;
 
   constructor(opts = {}) {
@@ -5262,16 +5261,14 @@ class PremissortSession {
     options.appendChild(missortBtn);
 
     // "No contenerizado" ya es un paso final (a diferencia de Correcto/
-    // Missort, no lleva a otra pantalla) — sus 2 acciones posibles se
-    // ofrecen aquí mismo en vez de navegar a un segundo paso.
-    PremissortSession.OUT_OF_CATALOG_OPTIONS.forEach((opt) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'choice-btn';
-      btn.textContent = `No contenerizado — ${opt}`;
-      btn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId, opt));
-      options.appendChild(btn);
-    });
+    // Missort, no lleva a otra pantalla) — un solo botón, sin preguntar
+    // por una acción/canalización específica.
+    const outBtn = document.createElement('button');
+    outBtn.type = 'button';
+    outBtn.className = 'choice-btn';
+    outBtn.textContent = 'Fuera de contenedor';
+    outBtn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId));
+    options.appendChild(outBtn);
   }
 
   /** Falsa alarma por desfase del catálogo — el operador confirma que sí pertenece a la posición actual. Mismo resultado que un match normal (saveMatch), pero este shipment nunca estuvo en pending. */
@@ -5325,7 +5322,7 @@ class PremissortSession {
     }
   }
 
-  async saveOutOfCatalog(shipmentId, accion) {
+  async saveOutOfCatalog(shipmentId) {
     if (this.savingOut) return;
     this.savingOut = true;
     try {
@@ -5335,7 +5332,7 @@ class PremissortSession {
           hu: this.hu,
           shipment_id: shipmentId,
           estado: 'Sobrante - no contenerizado',
-          detalle: accion,
+          detalle: 'Fuera de contenedor',
         });
       }
       this.anyRecordToday.add(shipmentId);
@@ -5385,7 +5382,6 @@ class PremissortSession {
  * no tiene una posición física que auditar.
  */
 class ContenedorCerradoSession {
-  static OUT_OF_CATALOG_OPTIONS = ['No es necesaria acción', 'Canalizado al área correspondiente'];
 
   constructor(opts = {}) {
     this.onScan = opts.onScan;
@@ -6150,16 +6146,14 @@ class ContenedorCerradoSession {
     options.appendChild(missortBtn);
 
     // "No contenerizado" ya es un paso final (a diferencia de Correcto/
-    // Missort, no lleva a otra pantalla) — sus 2 acciones posibles se
-    // ofrecen aquí mismo en vez de navegar a un segundo paso.
-    ContenedorCerradoSession.OUT_OF_CATALOG_OPTIONS.forEach((opt) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'choice-btn';
-      btn.textContent = `No contenerizado — ${opt}`;
-      btn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId, opt));
-      options.appendChild(btn);
-    });
+    // Missort, no lleva a otra pantalla) — un solo botón, sin preguntar
+    // por una acción/canalización específica.
+    const outBtn = document.createElement('button');
+    outBtn.type = 'button';
+    outBtn.className = 'choice-btn';
+    outBtn.textContent = 'Fuera de contenedor';
+    outBtn.addEventListener('click', () => this.saveOutOfCatalog(shipmentId));
+    options.appendChild(outBtn);
   }
 
   /** Falsa alarma por desfase del catálogo — el operador confirma que sí pertenece a este HU. Mismo resultado que un match normal (saveMatch), pero este shipment nunca estuvo en pending. */
@@ -6211,7 +6205,7 @@ class ContenedorCerradoSession {
     }
   }
 
-  async saveOutOfCatalog(shipmentId, accion) {
+  async saveOutOfCatalog(shipmentId) {
     if (this.savingOut) return;
     this.savingOut = true;
     try {
@@ -6220,7 +6214,7 @@ class ContenedorCerradoSession {
           hu: this.hu,
           shipment_id: shipmentId,
           estado: 'Sobrante - no contenerizado',
-          detalle: accion,
+          detalle: 'Fuera de contenedor',
         });
       }
       this.anyRecordToday.add(shipmentId);
@@ -7261,15 +7255,97 @@ class AuditoriaHVSession {
       this.supportEl.insertAdjacentElement('afterend', link);
       this.startCamera();
     } else {
-      const { wrap, input } = ScanUI.buildHandheldInput({
-        placeholder: 'Shipment o QR de retorno',
-        isActive: () => !this.locked && ScanUI.mode() === 'handheld',
-        onSubmit: (val, inputEl) => {
-          this.handleScan(val);
-          inputEl.value = '';
-        },
+      // Hidden HID input — mismo patrón "escaneo sin teclado" que
+      // BarreduraSession/PremissortSession: el input real queda oculto
+      // (inputmode:'none') y solo se arma a modo texto en la ventana justo
+      // después del blur, para que el lector HID pueda escribir sin que el
+      // teclado en pantalla aparezca en dispositivos táctiles.
+      const hidInput = document.createElement('input');
+      hidInput.type = 'text';
+      hidInput.className = 'hh-hid-input';
+      hidInput.setAttribute('inputmode', 'none');
+      body.appendChild(hidInput);
+
+      const scanArea = document.createElement('div');
+      scanArea.className = 'hh-scan-area';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'hh-icon idle';
+      iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
+      scanArea.appendChild(iconWrap);
+      const lastCodeEl = document.createElement('div');
+      lastCodeEl.className = 'hh-last-code';
+      scanArea.appendChild(lastCodeEl);
+      body.appendChild(scanArea);
+      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
+
+      let modalOpen = false;
+      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
+
+      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
+
+      hidInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
+        e.preventDefault();
+        const raw = hidInput.value.trim();
+        if (!raw || this.locked) return;
+        hidInput.value = '';
+        lastCodeEl.textContent = raw;
+        lastCodeEl.className = 'hh-last-code visible';
+        this.handleScan(raw);
       });
-      body.appendChild(wrap);
+
+      armHid();
+
+      const manualBtn = document.createElement('button');
+      manualBtn.type = 'button';
+      manualBtn.className = 'btn-manual-hid';
+      manualBtn.innerHTML = Icons.svg('keyboard', { size: 22 });
+      body.appendChild(manualBtn);
+
+      const modal = document.createElement('div');
+      modal.className = 'hh-manual-modal';
+      modal.innerHTML = `
+        <div class="hh-manual-inner">
+          <p class="hh-manual-label">Shipment o QR de retorno</p>
+          <input type="text" class="hh-manual-input" placeholder="Shipment o QR de retorno" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
+          <div class="hh-manual-actions">
+            <button type="button" class="hh-manual-cancel">Cancelar</button>
+            <button type="button" class="hh-manual-confirm">Confirmar</button>
+          </div>
+        </div>`;
+      this.container.appendChild(modal);
+
+      const modalInput = modal.querySelector('.hh-manual-input');
+      const openModal = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+      const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
+      const confirmModal = () => {
+        const val = modalInput.value.trim();
+        if (!val) return;
+        modalInput.value = '';
+        closeModal();
+        this.handleScan(val);
+      };
+
+      manualBtn.addEventListener('click', openModal);
+      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
+      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
+      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
     }
   }
 
@@ -8461,8 +8537,12 @@ class GridClient {
 
   /** Igual que loadContenedorCerradoCatalog pero para la pestaña AUDITORIA_HV. */
   async loadAuditoriaHVCatalog() {
-    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(AUDITORIA_HV_SHEET_RANGE)}`;
-    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+    // cache: 'no-store' — sin esto, algunos WebView/navegadores pueden
+    // servir una respuesta GET cacheada en vez de golpear el proxy de
+    // Sheets de nuevo, lo que se vería igual que "el catálogo no lee la
+    // actualización reciente" aunque la sheet ya esté al día.
+    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(AUDITORIA_HV_SHEET_RANGE)}&_ts=${Date.now()}`;
+    const res = await this._fetchWithTimeout(url, { credentials: 'include', cache: 'no-store' });
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       throw new Error(`No se pudo leer el catálogo de Auditoría HV: HTTP ${res.status}${bodyText ? ` — ${bodyText.slice(0, 300)}` : ''}`);
@@ -8470,7 +8550,10 @@ class GridClient {
     const body = await res.json();
     const rows = Array.isArray(body?.values) ? body.values : [];
     const [header, ...dataRows] = rows;
-    if (!header) return [];
+    if (!header) {
+      DebugConsole.log('Catálogo Auditoría HV: la sheet no devolvió encabezado (¿pestaña/rango vacíos?)', 'warn');
+      return [];
+    }
     const idx = {
       ID: header.indexOf('ID'),
       Descripcion: header.indexOf('Descripcion'),
@@ -8481,6 +8564,17 @@ class GridClient {
       SHP_RETURN_QR_ID: header.indexOf('SHP_RETURN_QR_ID'),
       FECHA_DE_ACTUALIZACION: header.indexOf('FECHA_DE_ACTUALIZACION'),
     };
+    // Si alguna columna esperada no matchea el header real (nombre exacto
+    // distinto, típicamente por mayúsculas/espacios), header.indexOf
+    // devuelve -1 y esa columna sale vacía en TODAS las filas — se ve
+    // igual que "no lee nada nuevo" pero es un problema de nombre de
+    // columna, no de frescura. Se deja bien visible en consola para poder
+    // distinguir un caso del otro sin adivinar.
+    const missingCols = Object.entries(idx).filter(([, i]) => i === -1).map(([k]) => k);
+    if (missingCols.length) {
+      DebugConsole.log(`Catálogo Auditoría HV: encabezado real no tiene estas columnas esperadas: ${missingCols.join(', ')} (header real: ${header.join(' | ')})`, 'warn');
+    }
+    DebugConsole.log(`Catálogo Auditoría HV: ${dataRows.length} filas leídas de ${AUDITORIA_HV_SHEET_RANGE}`, 'info');
     return dataRows
       .filter((r) => Array.isArray(r) && r.length)
       .map((r) => ({
