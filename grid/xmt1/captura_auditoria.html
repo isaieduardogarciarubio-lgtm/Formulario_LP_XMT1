@@ -7156,6 +7156,13 @@ class AuditoriaHVSession {
       if (row.SHP_RETURN_QR_ID) this.catalogByReturnQr[row.SHP_RETURN_QR_ID.toUpperCase()] = row;
     });
 
+    // Dedup de On_Hold: un shipment fuera de catálogo confirmado como
+    // On_Hold solo se captura una vez por día (ver CapturaApp.
+    // loadRecentAuditoriaHV) — un match en catálogo SÍ puede repetirse
+    // (una misma Rx puede cubrir varios paquetes), así que el dedup solo
+    // aplica a la rama "fuera de catálogo".
+    this.onHoldCaptured = new Set(opts.onHoldCaptured || []);
+
     this.container = null;
     this.scanner = null;
     this.locked = false;
@@ -7428,6 +7435,13 @@ class AuditoriaHVSession {
     if (!resolved) {
       this.vibrate(40);
       this.flash('error', 'Código no reconocido.');
+      return;
+    }
+    // Dedup: un On_Hold ya confirmado hoy (rama fuera de catálogo) no se
+    // vuelve a preguntar — un match en catálogo sí puede repetirse.
+    if (!resolved.row && this.onHoldCaptured.has(resolved.code.toUpperCase())) {
+      this.vibrate([40, 60, 40]);
+      this.flash('error', `${resolved.code} ya se capturó como On_Hold hoy.`);
       return;
     }
     this.locked = true;
@@ -7769,6 +7783,11 @@ class AuditoriaHVSession {
   async saveNotFound(code, caso, foto) {
     this.flash('ok', `${code} · ${caso}`);
     this.locked = false;
+    // Marca el código como capturado ANTES del await: si se escanea de
+    // nuevo mientras la sincronización todavía está en curso, el guard de
+    // handleScan ya lo bloquea sin depender de que el registro haya
+    // terminado de sincronizarse.
+    this.onHoldCaptured.add(code.toUpperCase());
     if (this.onScan) {
       await this.onScan({
         shipment_id: code,
@@ -9120,6 +9139,43 @@ class CapturaApp {
     return { found, anyRecord };
   }
 
+  /**
+   * Dedup de Auditoría HV: un shipment marcado On_Hold (rama fuera de
+   * catálogo, ver descripcion === '(fuera de catálogo)' en saveNotFound)
+   * solo se captura una vez por día — a diferencia de un match en catálogo,
+   * que sí puede repetirse (una misma Rx puede cubrir varios paquetes en
+   * momentos distintos). auditoria_hv no está en SHARDED_FORMS, así que
+   * siempre es el mismo bucket auditoria_hv_master; se filtra por fecha en
+   * memoria en vez de depender de un shard por día.
+   */
+  async loadRecentAuditoriaHV() {
+    const onHoldCaptured = new Set();
+    const todayKey = shardDateKeyMexico(new Date().toISOString());
+    const bucketName = masterBucketNameFor('auditoria_hv', todayKey);
+
+    try {
+      const bucket = await this.gridClient.getStateBucket(bucketName);
+      if (bucket && Array.isArray(bucket.records)) {
+        bucket.records.forEach((r) => {
+          if (!r || !r.shipment_id || !r.ts) return;
+          if (r.descripcion !== '(fuera de catálogo)') return;
+          if (shardDateKeyMexico(r.ts) !== todayKey) return;
+          onHoldCaptured.add(String(r.shipment_id).toUpperCase());
+        });
+      }
+    } catch (e) {
+      DebugConsole.log(`No se pudo leer ${bucketName} para dedup de Auditoría HV: ${e.message}`, 'warn');
+    }
+
+    this.outboxRecords.forEach((r) => {
+      if (!r || r.formId !== 'auditoria_hv' || !r.shipment_id) return;
+      if (r.descripcion !== '(fuera de catálogo)') return;
+      onHoldCaptured.add(String(r.shipment_id).toUpperCase());
+    });
+
+    return onHoldCaptured;
+  }
+
   async loadOutboxFromStorage() {
     try {
       const all = await RecordStore.loadAll();
@@ -9750,7 +9806,7 @@ class CapturaApp {
             <div class="step-progress">Auditoría HV</div>
           </div>
           <h1 class="step-question">Cargando…</h1>
-          <div class="step-support">Leyendo el catálogo de Auditoría HV.</div>
+          <div class="step-support">Leyendo el catálogo de Auditoría HV y los On_Hold ya capturados hoy.</div>
         </div>
       </div>
     `;
@@ -9763,12 +9819,15 @@ class CapturaApp {
       catalog = [];
     }
 
+    const onHoldCaptured = await this.loadRecentAuditoriaHV();
+
     // Si el usuario ya salió mientras cargaba, no montar la sesión.
     if (this._screen !== 'form') return;
 
     this.hideNavbar();
     this.currentEngine = new AuditoriaHVSession({
       catalog,
+      onHoldCaptured,
       onScan: (values) => this.onFormComplete('auditoria_hv', values, { stayInSession: true }),
       onExit: () => this.renderMenu(),
     });
