@@ -7157,10 +7157,10 @@ class AuditoriaHVSession {
     });
 
     // Dedup de On_Hold: un shipment fuera de catálogo confirmado como
-    // On_Hold solo se captura una vez por día (ver CapturaApp.
-    // loadRecentAuditoriaHV) — un match en catálogo SÍ puede repetirse
-    // (una misma Rx puede cubrir varios paquetes), así que el dedup solo
-    // aplica a la rama "fuera de catálogo".
+    // On_Hold solo se captura una vez PARA SIEMPRE, sin importar el día
+    // (ver CapturaApp.loadRecentAuditoriaHV) — un match en catálogo SÍ
+    // puede repetirse (una misma Rx puede cubrir varios paquetes), así que
+    // el dedup solo aplica a la rama "fuera de catálogo".
     this.onHoldCaptured = new Set(opts.onHoldCaptured || []);
 
     this.container = null;
@@ -7441,7 +7441,7 @@ class AuditoriaHVSession {
     // vuelve a preguntar — un match en catálogo sí puede repetirse.
     if (!resolved.row && this.onHoldCaptured.has(resolved.code.toUpperCase())) {
       this.vibrate([40, 60, 40]);
-      this.flash('error', `${resolved.code} ya se capturó como On_Hold hoy.`);
+      this.flash('error', `${resolved.code} ya se capturó como On_Hold anteriormente.`);
       return;
     }
     this.locked = true;
@@ -9142,24 +9142,25 @@ class CapturaApp {
   /**
    * Dedup de Auditoría HV: un shipment marcado On_Hold (rama fuera de
    * catálogo, ver descripcion === '(fuera de catálogo)' en saveNotFound)
-   * solo se captura una vez por día — a diferencia de un match en catálogo,
-   * que sí puede repetirse (una misma Rx puede cubrir varios paquetes en
-   * momentos distintos). auditoria_hv no está en SHARDED_FORMS, así que
-   * siempre es el mismo bucket auditoria_hv_master; se filtra por fecha en
-   * memoria en vez de depender de un shard por día.
+   * solo se captura UNA VEZ para siempre, sin importar el día — a
+   * diferencia de un match en catálogo, que sí puede repetirse (una misma
+   * Rx puede cubrir varios paquetes en momentos distintos). Por eso se lee
+   * el histórico completo de auditoria_hv_master (bucket único, no
+   * shardeado) sin filtrar por fecha.
    */
   async loadRecentAuditoriaHV() {
     const onHoldCaptured = new Set();
-    const todayKey = shardDateKeyMexico(new Date().toISOString());
-    const bucketName = masterBucketNameFor('auditoria_hv', todayKey);
+    // Sin filtro de fecha a propósito: un On_Hold es de una sola vez para
+    // siempre, no por día calendario — se revisa el histórico completo de
+    // auditoria_hv_master (bucket único, no shardeado).
+    const bucketName = masterBucketNameFor('auditoria_hv', new Date().toISOString());
 
     try {
       const bucket = await this.gridClient.getStateBucket(bucketName);
       if (bucket && Array.isArray(bucket.records)) {
         bucket.records.forEach((r) => {
-          if (!r || !r.shipment_id || !r.ts) return;
+          if (!r || !r.shipment_id) return;
           if (r.descripcion !== '(fuera de catálogo)') return;
-          if (shardDateKeyMexico(r.ts) !== todayKey) return;
           onHoldCaptured.add(String(r.shipment_id).toUpperCase());
         });
       }
@@ -9806,7 +9807,7 @@ class CapturaApp {
             <div class="step-progress">Auditoría HV</div>
           </div>
           <h1 class="step-question">Cargando…</h1>
-          <div class="step-support">Leyendo el catálogo de Auditoría HV y los On_Hold ya capturados hoy.</div>
+          <div class="step-support">Leyendo el catálogo de Auditoría HV y los On_Hold ya capturados.</div>
         </div>
       </div>
     `;
