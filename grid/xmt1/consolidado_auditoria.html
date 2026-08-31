@@ -770,6 +770,26 @@
         Análisis
       </p>
 
+      <!-- Date Range Filter — fuera de analysis-content a propósito: debe seguir
+           visible aunque el rango/log actual no tenga registros, para que el
+           usuario pueda ajustarlo sin que los controles desaparezcan por completo. -->
+      <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+        <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
+        <input type="date" id="date-from" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+        <span style="color: var(--text-mut);">hasta</span>
+        <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+        <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
+      </div>
+
+      <!-- Filtro por área (lugar) — solo Barredura. Misma razón: fuera de
+           analysis-content para que no desaparezca si el filtro deja el área en 0 registros. -->
+      <div id="barredura-area-filter-wrap" style="display: none; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+        <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por área:</label>
+        <select id="area-filter" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: var(--font);">
+          <option value="">Todas</option>
+        </select>
+      </div>
+
       <div id="no-data-message" class="empty-state">
         <p>Todavía no hay registros sincronizados desde la app de captura.</p>
       </div>
@@ -784,23 +804,6 @@
         <!-- Export específico de Barredura (capturados) -->
         <div id="barredura-tools" style="display: none; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
           <button id="btn-export-capturados" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px;">Exportar capturados (CSV)</button>
-        </div>
-
-        <!-- Date Range Filter (siempre visible, aplica a ambas sub-vistas de Barredura y a los demás logs) -->
-        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
-          <input type="date" id="date-from" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
-          <span style="color: var(--text-mut);">hasta</span>
-          <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
-          <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
-        </div>
-
-        <!-- Filtro por área (lugar) — solo Barredura -->
-        <div id="barredura-area-filter-wrap" style="display: none; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por área:</label>
-          <select id="area-filter" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: var(--font);">
-            <option value="">Todas</option>
-          </select>
         </div>
 
         <!-- Sub-vista de Barredura: Historial completo vs Faltantes de costo. Mismo estilo de tabs que log-tabs. -->
@@ -2149,6 +2152,14 @@
     }
 
     renderAnalysis() {
+      // El filtro de fecha (HTML) y el de área quedan fuera de
+      // analysis-content y se evalúan aquí ANTES de cualquier return por
+      // "sin datos" — así los controles nunca desaparecen por completo,
+      // aunque el rango elegido no traiga registros.
+      const isBarredura = this.currentLog === 'barredura';
+      document.getElementById('barredura-area-filter-wrap').style.display = isBarredura ? 'flex' : 'none';
+      if (isBarredura) this.populateAreaFilter();
+
       const allRecords = this.logs[this.currentLog];
 
       if (!allRecords || allRecords.length === 0) {
@@ -2172,13 +2183,9 @@
       document.getElementById('barredura-tools').style.display =
         this.currentLog === 'barredura' ? 'flex' : 'none';
 
-      const isBarredura = this.currentLog === 'barredura';
       const viewTabs = document.getElementById('barredura-view-tabs');
       const costosPendientesEl = document.getElementById('barredura-costos-pendientes');
       const historialWrap = document.getElementById('historial-wrap');
-
-      document.getElementById('barredura-area-filter-wrap').style.display = isBarredura ? 'flex' : 'none';
-      if (isBarredura) this.populateAreaFilter();
 
       if (isBarredura) {
         viewTabs.style.display = 'flex';

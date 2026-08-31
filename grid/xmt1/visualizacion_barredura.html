@@ -335,6 +335,16 @@
   <div class="card">
     <div class="tabs" id="log-tabs" style="display: none;"></div>
 
+    <!-- Filtro de fecha fuera de analysis-content a propósito: debe seguir
+         visible aunque el rango/log actual no tenga registros. -->
+    <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+      <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
+      <input type="date" id="date-from" />
+      <span style="color: var(--text-mut);">hasta</span>
+      <input type="date" id="date-to" />
+      <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem;">Limpiar</button>
+    </div>
+
     <div id="no-data-message" class="empty-state">
       <p>Todavía no hay registros sincronizados.</p>
     </div>
@@ -344,13 +354,6 @@
       <div class="charts-grid" id="charts-grid"></div>
 
       <div class="table-wrapper">
-        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
-          <input type="date" id="date-from" />
-          <span style="color: var(--text-mut);">hasta</span>
-          <input type="date" id="date-to" />
-          <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem;">Limpiar</button>
-        </div>
         <div class="table-controls">
           <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
           <div id="chart-filter-chip" class="chart-filter-chip" style="display: none;">
