@@ -8551,8 +8551,13 @@ class GridClient {
    * consulta nueva por cada escaneo.
    */
   async loadPremissortCatalog() {
-    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(PREMISSORT_SHEET_RANGE)}`;
-    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+    // cache: 'no-store' + cache-busting por timestamp — sin esto, algunos
+    // WebView/navegadores pueden servir una respuesta GET cacheada en vez
+    // de golpear el proxy de Sheets de nuevo, lo que se ve igual que "el
+    // catálogo no lee la actualización reciente" aunque la sheet ya esté
+    // al día. Ver también el log de diagnóstico abajo.
+    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(PREMISSORT_SHEET_RANGE)}&_ts=${Date.now()}`;
+    const res = await this._fetchWithTimeout(url, { credentials: 'include', cache: 'no-store' });
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       throw new Error(`No se pudo leer el catálogo de Premissort: HTTP ${res.status}${bodyText ? ` — ${bodyText.slice(0, 300)}` : ''}`);
@@ -8560,12 +8565,20 @@ class GridClient {
     const body = await res.json();
     const rows = Array.isArray(body?.values) ? body.values : [];
     const [header, ...dataRows] = rows;
-    if (!header) return [];
+    if (!header) {
+      DebugConsole.log('Catálogo Premissort: la sheet no devolvió encabezado (¿pestaña/rango vacíos?)', 'warn');
+      return [];
+    }
     const idx = {
       POSICION: header.indexOf('POSICION'),
       HU: header.indexOf('HU'),
       SHIPMENT_ID: header.indexOf('SHIPMENT_ID'),
     };
+    const missingCols = Object.entries(idx).filter(([, i]) => i === -1).map(([k]) => k);
+    if (missingCols.length) {
+      DebugConsole.log(`Catálogo Premissort: encabezado real no tiene estas columnas esperadas: ${missingCols.join(', ')} (header real: ${header.join(' | ')})`, 'warn');
+    }
+    DebugConsole.log(`Catálogo Premissort: ${dataRows.length} filas leídas de ${PREMISSORT_SHEET_RANGE}`, 'info');
     return dataRows
       .filter((r) => Array.isArray(r) && r.length)
       .map((r) => ({
@@ -8578,8 +8591,8 @@ class GridClient {
 
   /** Igual que loadPremissortCatalog pero para la pestaña CONT_CERRADO (solo HU + SHIPMENT_ID, sin POSICION). */
   async loadContenedorCerradoCatalog() {
-    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(CONT_CERRADO_SHEET_RANGE)}`;
-    const res = await this._fetchWithTimeout(url, { credentials: 'include' });
+    const url = `${this.baseUrl}/api/v1/sheets/${encodeURIComponent(PREMISSORT_SHEET_ID)}?doc_id=${encodeURIComponent(this.docId)}&range=${encodeURIComponent(CONT_CERRADO_SHEET_RANGE)}&_ts=${Date.now()}`;
+    const res = await this._fetchWithTimeout(url, { credentials: 'include', cache: 'no-store' });
     if (!res.ok) {
       const bodyText = await res.text().catch(() => '');
       throw new Error(`No se pudo leer el catálogo de Contenedor Cerrado: HTTP ${res.status}${bodyText ? ` — ${bodyText.slice(0, 300)}` : ''}`);
@@ -8587,11 +8600,19 @@ class GridClient {
     const body = await res.json();
     const rows = Array.isArray(body?.values) ? body.values : [];
     const [header, ...dataRows] = rows;
-    if (!header) return [];
+    if (!header) {
+      DebugConsole.log('Catálogo Contenedor Cerrado: la sheet no devolvió encabezado (¿pestaña/rango vacíos?)', 'warn');
+      return [];
+    }
     const idx = {
       HU: header.indexOf('HU'),
       SHIPMENT_ID: header.indexOf('SHIPMENT_ID'),
     };
+    const missingCols = Object.entries(idx).filter(([, i]) => i === -1).map(([k]) => k);
+    if (missingCols.length) {
+      DebugConsole.log(`Catálogo Contenedor Cerrado: encabezado real no tiene estas columnas esperadas: ${missingCols.join(', ')} (header real: ${header.join(' | ')})`, 'warn');
+    }
+    DebugConsole.log(`Catálogo Contenedor Cerrado: ${dataRows.length} filas leídas de ${CONT_CERRADO_SHEET_RANGE}`, 'info');
     return dataRows
       .filter((r) => Array.isArray(r) && r.length)
       .map((r) => ({
