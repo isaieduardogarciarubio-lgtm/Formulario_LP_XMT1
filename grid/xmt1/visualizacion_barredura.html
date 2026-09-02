@@ -311,7 +311,7 @@
     </div>
   </div>
   <div class="header-right">
-    <a class="btn-icon" id="btn-datastudio" title="Abrir dashboard de Data Studio" href="https://datastudio.google.com/reporting/34756cb1-fa59-4b30-a6ee-f2c99dad4230/page/p_1eapajygzd" target="_blank" rel="noopener noreferrer">
+    <a class="btn-icon ext-open-link" id="btn-datastudio" title="Abrir dashboard de Data Studio" href="https://datastudio.google.com/reporting/34756cb1-fa59-4b30-a6ee-f2c99dad4230/page/p_1eapajygzd">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M18 20V10M12 20V4M6 20v-6"/>
       </svg>
@@ -643,6 +643,20 @@ class GridClient {
     }
   }
 }
+
+/**
+ * Enlaces externos (Data Studio, etc.): se abren con window.open()
+ * explícito, sin target="_blank" en el <a>. En algunos WebView un
+ * <a target="_blank"> dispara la apertura nativa de una pestaña Y, en
+ * paralelo, el interceptor de enlaces que Grid inyecta en el HTML abre
+ * una segunda vía postMessage al padre — dos pestañas para el mismo clic.
+ */
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a.ext-open-link');
+  if (!link) return;
+  e.preventDefault();
+  window.open(link.getAttribute('href'), '_blank');
+});
 
 class LogViewer {
   constructor() {

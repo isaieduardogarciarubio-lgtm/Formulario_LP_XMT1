@@ -5147,7 +5147,7 @@ class PremissortSession {
             <span class="driver-badge driver-badge-out">Pertenece a la posición ${elsewhere.posicion}</span>
           </div>
         </div>
-        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
+        <a href="${tmsUrl}" class="btn btn-secondary btn-block ext-open-link" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
         <h1 class="step-question">¿Ya lo colocaste en la posición correcta?</h1>
         <div class="driver-status-actions">
           <button type="button" class="driver-status-btn driver-status-btn-ok">Sí, ya lo coloqué</button>
@@ -5232,7 +5232,7 @@ class PremissortSession {
             <span class="driver-badge driver-badge-out">No aparece en el catálogo</span>
           </div>
         </div>
-        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
+        <a href="${tmsUrl}" class="btn btn-secondary btn-block ext-open-link" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
         <div class="step-support">El catálogo puede tener unos segundos de desfase — puede ser una falsa alarma (sí pertenece aquí), un Missort real (está en otro contenedor) que aún no se refleja, o de verdad no contenerizado.</div>
         <h1 class="step-question">¿Qué es este paquete?</h1>
         <div class="choice-options"></div>
@@ -6041,7 +6041,7 @@ class ContenedorCerradoSession {
             <span class="driver-badge driver-badge-out">Pertenece al HU ${elsewhere.hu}</span>
           </div>
         </div>
-        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
+        <a href="${tmsUrl}" class="btn btn-secondary btn-block ext-open-link" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
         <h1 class="step-question">¿Ya lo colocaste en el contenedor correcto?</h1>
         <div class="driver-status-actions">
           <button type="button" class="driver-status-btn driver-status-btn-ok">Sí, ya lo coloqué</button>
@@ -6117,7 +6117,7 @@ class ContenedorCerradoSession {
             <span class="driver-badge driver-badge-out">No aparece en el catálogo</span>
           </div>
         </div>
-        <a href="${tmsUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
+        <a href="${tmsUrl}" class="btn btn-secondary btn-block ext-open-link" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Corroborar en TMS</a>
         <div class="step-support">El catálogo puede tener unos segundos de desfase — puede ser una falsa alarma (sí pertenece aquí), un Missort real (está en otro contenedor) que aún no se refleja, o de verdad no contenerizado.</div>
         <h1 class="step-question">¿Qué es este paquete?</h1>
         <div class="choice-options"></div>
@@ -7000,7 +7000,7 @@ class BarreduraSession {
             <span class="driver-badge driver-badge-out">No está en el catálogo</span>
           </div>
         </div>
-        <a href="${sauronUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
+        <a href="${sauronUrl}" class="btn btn-secondary btn-block ext-open-link" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
         <h1 class="step-question">¿Cuál es el caso?</h1>
         <div class="choice-options"></div>
         <div class="step-support"></div>
@@ -7499,7 +7499,7 @@ class AuditoriaHVSession {
           <div class="driver-shipment-row">Tipo de envío: ${row.TIPO_DE_ENVIO || '-'}</div>
           <div class="driver-shipment-row">Canalización: ${row.Canalizacion || '-'}</div>
         </div>
-        <a href="${sauronUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
+        <a href="${sauronUrl}" class="btn btn-secondary btn-block ext-open-link" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
         <h1 class="step-question">¿Cuál es el caso del paquete?</h1>
         <div class="choice-options"></div>
         <div class="step-support"></div>
@@ -7637,7 +7637,7 @@ class AuditoriaHVSession {
             <span class="driver-badge driver-badge-out">No está en el catálogo</span>
           </div>
         </div>
-        <a href="${sauronUrl}" target="_blank" rel="noopener" class="btn btn-secondary btn-block" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
+        <a href="${sauronUrl}" class="btn btn-secondary btn-block ext-open-link" style="margin: 12px 0; display: block; text-align: center; text-decoration: none;">Ver en Sauron</a>
         <h1 class="step-question">¿Seguro que es On_Hold?</h1>
         <div class="choice-options"></div>
         <div class="step-support"></div>
@@ -8677,6 +8677,24 @@ class GridClient {
       .filter((r) => r.ID);
   }
 }
+
+/**
+ * Enlaces externos (Sauron/TMS): se abren con window.open() explícito, sin
+ * target="_blank" en el <a>. En algunos WebView (handheld con MDM) un
+ * <a target="_blank"> dispara la apertura nativa de una pestaña Y, en
+ * paralelo, el interceptor de enlaces que Grid inyecta en el HTML (ver más
+ * abajo en el archivo, "Grid: outbound link"/requestParentPopup) intenta
+ * abrir una segunda vía postMessage al padre — dos pestañas para el mismo
+ * clic. Al no declarar target="_blank" en el <a> y disparar window.open()
+ * nosotros mismos (que Grid también intercepta, de forma segura y única),
+ * queda un solo punto de apertura.
+ */
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a.ext-open-link');
+  if (!link) return;
+  e.preventDefault();
+  window.open(link.getAttribute('href'), '_blank');
+});
 
 /**
  * Main application controller

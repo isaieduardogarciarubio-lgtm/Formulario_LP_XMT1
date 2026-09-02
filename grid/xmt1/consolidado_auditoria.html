@@ -655,7 +655,7 @@
   </div>
 
   <div class="header-right">
-    <a class="btn-icon" id="btn-datastudio" title="Abrir dashboard de Data Studio" href="https://datastudio.google.com/reporting/34756cb1-fa59-4b30-a6ee-f2c99dad4230/page/p_1eapajygzd" target="_blank" rel="noopener noreferrer">
+    <a class="btn-icon ext-open-link" id="btn-datastudio" title="Abrir dashboard de Data Studio" href="https://datastudio.google.com/reporting/34756cb1-fa59-4b30-a6ee-f2c99dad4230/page/p_1eapajygzd">
       <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm0-160v-280h80v280h-80Zm200 0v-440h80v440h-80Zm200 0v-320h80v320h-80Zm200 0v-560h80v560h-80Z"/></svg>
     </a>
     <button class="btn-icon" id="btn-refresh" title="Actualizar">
@@ -1795,6 +1795,20 @@
     if (!v) return '(sin caso)';
     return KNOWN_CASOS.includes(v) ? v : 'Otro';
   }
+
+  /**
+   * Enlaces externos (Data Studio, etc.): se abren con window.open()
+   * explícito, sin target="_blank" en el <a>. En algunos WebView un
+   * <a target="_blank"> dispara la apertura nativa de una pestaña Y, en
+   * paralelo, el interceptor de enlaces que Grid inyecta en el HTML abre
+   * una segunda vía postMessage al padre — dos pestañas para el mismo clic.
+   */
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a.ext-open-link');
+    if (!link) return;
+    e.preventDefault();
+    window.open(link.getAttribute('href'), '_blank');
+  });
 
   // ==========================================================================
   // AuditDashboard
