@@ -2377,9 +2377,9 @@
         const missorts = records.filter(isMissort).length;
         this.addKpiCard(container, missorts.toString(), 'Missorts');
         const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
-        this.addKpiCard(container, noContenerizado.toString(), 'No contenerizado');
+        this.addKpiCard(container, noContenerizado.toString(), 'No follow');
         const encontrados = records.filter(r => r.estado === 'Encontrado').length;
-        this.addKpiCard(container, encontrados.toString(), 'Encontrados');
+        this.addKpiCard(container, encontrados.toString(), 'Follow');
         const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
         if (pendienteReubicar > 0) {
           this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
@@ -2393,9 +2393,9 @@
         const missorts = records.filter(isMissort).length;
         this.addKpiCard(container, missorts.toString(), 'Missorts');
         const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
-        this.addKpiCard(container, noContenerizado.toString(), 'No contenerizado');
+        this.addKpiCard(container, noContenerizado.toString(), 'No follow');
         const encontrados = records.filter(r => r.estado === 'Encontrado').length;
-        this.addKpiCard(container, encontrados.toString(), 'Encontrados');
+        this.addKpiCard(container, encontrados.toString(), 'Follow');
         const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
         if (pendienteReubicar > 0) {
           this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
@@ -2622,12 +2622,12 @@
       const noContenerizado = records.filter(noContenerizadoTest).length;
       const sinHallazgo = records.length - pendiente - reubicado - noContenerizado;
 
-      const labels = ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'];
+      const labels = ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No follow'];
       const predicates = {
         'Sin hallazgo': sinHallazgoTest,
         'Missort — reubicado': reubicadoTest,
         'Missort — pendiente': pendienteTest,
-        'No contenerizado': noContenerizadoTest,
+        'No follow': noContenerizadoTest,
       };
 
       const data = [{
@@ -3015,13 +3015,13 @@
             // siendo la razón de ser de la auditoría, no se diluye en verde.
             if (isMissort(record)) {
               td.className = 'status-warn';
-              td.textContent = value === 'Encontrado' ? 'Encontrado (missort reubicado)' : value;
+              td.textContent = value === 'Encontrado' ? 'Follow (missort reubicado)' : value;
             } else if (isNoContenerizado(value)) {
               td.className = 'status-critical';
-              td.textContent = 'No contenerizado';
+              td.textContent = 'No follow';
             } else {
               td.className = value === 'Encontrado' ? 'status-good' : 'status-critical';
-              td.textContent = value;
+              td.textContent = value === 'Encontrado' ? 'Follow' : value;
             }
           } else if (this.currentLog === 'barredura' && col.field === 'costo_usd') {
             // Costo USD: columna editable, no viene de la captura — se

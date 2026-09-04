@@ -5108,7 +5108,7 @@ class PremissortSession {
     this.handled.set(shipmentId, 'Encontrado');
     this.foundToday.add(shipmentId);
     this.anyRecordToday.add(shipmentId);
-    this.flash('ok', `${shipmentId} · Encontrado`);
+    this.flash('ok', `${shipmentId} · Follow`);
     if (this.pendingToggleEl) {
       this.pendingToggleEl.textContent = `${this.handled.size} / ${this.total} encontrados · ${this.pending.size} faltantes`;
     }
@@ -5279,7 +5279,7 @@ class PremissortSession {
       this.handled.set(shipmentId, 'Encontrado');
       this.foundToday.add(shipmentId);
       this.anyRecordToday.add(shipmentId);
-      this.flash('ok', `${shipmentId} · Encontrado`);
+      this.flash('ok', `${shipmentId} · Follow`);
       if (this.onScan) {
         try {
           await this.onScan({
@@ -6003,7 +6003,7 @@ class ContenedorCerradoSession {
     this.handled.set(shipmentId, 'Encontrado');
     this.foundToday.add(shipmentId);
     this.anyRecordToday.add(shipmentId);
-    this.flash('ok', `${shipmentId} · Encontrado`);
+    this.flash('ok', `${shipmentId} · Follow`);
     if (this.pendingToggleEl) {
       this.pendingToggleEl.textContent = `${this.handled.size} / ${this.total} encontrados · ${this.pending.size} faltantes`;
     }
@@ -6164,7 +6164,7 @@ class ContenedorCerradoSession {
       this.handled.set(shipmentId, 'Encontrado');
       this.foundToday.add(shipmentId);
       this.anyRecordToday.add(shipmentId);
-      this.flash('ok', `${shipmentId} · Encontrado`);
+      this.flash('ok', `${shipmentId} · Follow`);
       if (this.onScan) {
         try {
           await this.onScan({
