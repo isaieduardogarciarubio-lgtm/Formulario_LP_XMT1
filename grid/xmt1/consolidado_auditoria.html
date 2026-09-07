@@ -1484,7 +1484,11 @@
    * México). Todo lo anterior al cutover sigue en el bucket legacy,
    * congelado — nunca se reescribió ni se migró.
    */
-  const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'premissort']);
+  // cont_cerrado faltaba aquí aunque captura_auditoria.html SÍ lo shardea
+  // por día — el dashboard leía el bucket legacy vacío cont_cerrado_master
+  // en vez de cont_cerrado_master_YYYY-MM-DD, así que este log nunca
+  // mostraba datos aquí.
+  const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'premissort', 'cont_cerrado']);
   const SHARD_CUTOVER_DATE = '2026-08-14';
 
   function shardDateKeyMexico(ts) {
@@ -2380,10 +2384,6 @@
         this.addKpiCard(container, noContenerizado.toString(), 'No follow');
         const encontrados = records.filter(r => r.estado === 'Encontrado').length;
         this.addKpiCard(container, encontrados.toString(), 'Follow');
-        const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-        if (pendienteReubicar > 0) {
-          this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
-        }
         const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
         this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');
       } else if (this.currentLog === 'cont_cerrado') {
@@ -2396,10 +2396,6 @@
         this.addKpiCard(container, noContenerizado.toString(), 'No follow');
         const encontrados = records.filter(r => r.estado === 'Encontrado').length;
         this.addKpiCard(container, encontrados.toString(), 'Follow');
-        const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-        if (pendienteReubicar > 0) {
-          this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
-        }
         const contenedores = new Set(records.map(r => r.hu).filter(Boolean)).size;
         this.addKpiCard(container, contenedores.toString(), 'Contenedores escaneados');
       } else if (this.currentLog === 'auditoria_hv') {
@@ -2610,35 +2606,37 @@
       return { data, layout, chartKey: 'situacion', labels, predicates: this.fieldPredicates('situacion', labels) };
     }
 
-    /** Los dos hallazgos que busca esta auditoría: Missort (ver isMissort) y No contenerizado (ver isNoContenerizado). */
+    /**
+     * Los dos hallazgos que busca esta auditoría: Missort (ver isMissort,
+     * unifica reubicado + pendiente en un solo tipo — la distinción ya no
+     * se muestra aquí, solo importa que hubo un missort) y No follow (ver
+     * isNoContenerizado). El resto es Follow.
+     */
     buildPremissortMissortChart(records) {
-      const pendienteTest = (r) => r.estado === 'Sobrante - pendiente reubicar';
-      const reubicadoTest = (r) => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '');
+      const missortTest = (r) => isMissort(r);
       const noContenerizadoTest = (r) => isNoContenerizado(r.estado);
-      const sinHallazgoTest = (r) => !pendienteTest(r) && !reubicadoTest(r) && !noContenerizadoTest(r);
+      const followTest = (r) => !missortTest(r) && !noContenerizadoTest(r);
 
-      const pendiente = records.filter(pendienteTest).length;
-      const reubicado = records.filter(reubicadoTest).length;
+      const missort = records.filter(missortTest).length;
       const noContenerizado = records.filter(noContenerizadoTest).length;
-      const sinHallazgo = records.length - pendiente - reubicado - noContenerizado;
+      const follow = records.length - missort - noContenerizado;
 
-      const labels = ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No follow'];
+      const labels = ['Follow', 'Missort', 'No follow'];
       const predicates = {
-        'Sin hallazgo': sinHallazgoTest,
-        'Missort — reubicado': reubicadoTest,
-        'Missort — pendiente': pendienteTest,
+        'Follow': followTest,
+        'Missort': missortTest,
         'No follow': noContenerizadoTest,
       };
 
       const data = [{
         labels,
-        values: [sinHallazgo, reubicado, pendiente, noContenerizado],
+        values: [follow, missort, noContenerizado],
         type: 'pie',
         hole: 0.45,
         sort: false,
         textinfo: 'percent',
         textfont: { size: 11 },
-        marker: { colors: ['#FFD100', '#FF9E45', '#FF5C6C', '#8A7300'] },
+        marker: { colors: ['#FFD100', '#FF9E45', '#8A7300'] },
       }];
 
       const layout = {
