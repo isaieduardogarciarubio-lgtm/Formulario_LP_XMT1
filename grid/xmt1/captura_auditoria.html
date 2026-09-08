@@ -2230,6 +2230,21 @@ const FORMS_CONFIG = {
       { id: 'foto', type: 'photo', required: true },
     ],
   },
+
+  // Log temporal, sin catálogo: escaneo rápido en loop de un solo campo
+  // (shipment) con nota opcional antes de guardar (ver
+  // RegistroShipmentsSession). Un shipment ya registrado no se puede
+  // volver a registrar (dedup permanente, sin importar el día).
+  registro_shipments: {
+    id: 'registro_shipments',
+    title: "Registro de Shipment's",
+    description: 'Escaneo rápido de shipments con nota opcional',
+    icon: 'inbox',
+    fields: [
+      { id: 'shipment_id', type: 'scanner', idType: 'shipment' },
+      { id: 'nota', type: 'textarea', required: false },
+    ],
+  },
 };
 
 /**
@@ -2245,6 +2260,7 @@ const HISTORY_FIELD_MAP = {
   premissort: { id: 'shipment_id', result: 'estado' },
   cont_cerrado: { id: 'shipment_id', result: 'estado' },
   auditoria_hv: { id: 'shipment_id', result: 'caso' },
+  registro_shipments: { id: 'shipment_id', result: 'nota' },
 };
 
 /**
@@ -7913,6 +7929,358 @@ class AuditoriaHVSession {
   }
 }
 
+/**
+ * RegistroShipmentsSession — log temporal y simple: escaneo rápido de
+ * shipments (sin catálogo, sin validación contra ninguna fuente externa),
+ * con una nota de texto libre opcional antes de guardar. Un shipment ya
+ * registrado (en cualquier sesión, cualquier día — ver CapturaApp.
+ * loadRecentRegistroShipments, dedup permanente) no se puede volver a
+ * registrar.
+ */
+class RegistroShipmentsSession {
+  constructor(opts = {}) {
+    this.onScan = opts.onScan;
+    this.onExit = opts.onExit;
+    this.registered = new Set(opts.registered || []);
+
+    this.container = null;
+    this.scanner = null;
+    this.locked = false;
+    this.inManualMode = false;
+    this.count = 0;
+  }
+
+  render(containerId) {
+    this.container = document.getElementById(containerId);
+    this.renderLoop();
+  }
+
+  destroy() {
+    this.stopScanner();
+  }
+
+  stopScanner() {
+    if (this.scanner) {
+      this.scanner.stop();
+      this.scanner = null;
+    }
+  }
+
+  vibrate(pattern) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(pattern);
+      } catch (e) {}
+    }
+  }
+
+  /* ====================================================================== */
+  /* Loop de escaneo                                                       */
+  /* ====================================================================== */
+
+  renderLoop() {
+    this.stopScanner();
+    this.locked = false;
+    this.inManualMode = false;
+    const camera = ScanUI.mode() === 'camera';
+    this.loopHint = camera ? 'Escaneando... apunta la cámara al shipment.' : '';
+
+    this.container.innerHTML = `
+      <div class="step-screen scanner-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Salir">${Icons.svg('arrowLeft', { size: 28 })}</button>
+          <div class="step-progress">Registro de Shipment's</div>
+        </div>
+        <div class="scan-mode-slot"></div>
+        <h1 class="step-question">Escanea el Shipment</h1>
+        <div class="scanner-body"></div>
+        <div class="step-support"></div>
+        <div class="session-counter">${this.count} registrados en esta sesión</div>
+      </div>
+      <div class="session-flash"></div>
+    `;
+
+    this.flashEl = this.container.querySelector('.session-flash');
+    this.supportEl = this.container.querySelector('.step-support');
+    this.supportEl.textContent = this.loopHint;
+    this.counterEl = this.container.querySelector('.session-counter');
+    this.container.querySelector('.scan-mode-slot').replaceWith(ScanUI.buildToggle(() => this.renderLoop()));
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.stopScanner();
+      if (this.onExit) this.onExit();
+    });
+
+    const body = this.container.querySelector('.scanner-body');
+    if (camera) {
+      body.innerHTML = `
+        <div class="scanner-viewport">
+          <video class="scanner-video" playsinline muted></video>
+          <div class="scanner-frame"><span class="scanner-line"></span></div>
+        </div>
+      `;
+      const link = document.createElement('button');
+      link.type = 'button';
+      link.className = 'session-manual-link';
+      link.textContent = 'Entrada manual';
+      link.addEventListener('click', () => this.enterManualEntry());
+      this.supportEl.insertAdjacentElement('afterend', link);
+      this.startCamera();
+    } else {
+      // Hidden HID input — mismo patrón "escaneo sin teclado" que
+      // Barredura/Premissort/Auditoría HV.
+      const hidInput = document.createElement('input');
+      hidInput.type = 'text';
+      hidInput.className = 'hh-hid-input';
+      hidInput.setAttribute('inputmode', 'none');
+      body.appendChild(hidInput);
+
+      const scanArea = document.createElement('div');
+      scanArea.className = 'hh-scan-area';
+      const iconWrap = document.createElement('div');
+      iconWrap.className = 'hh-icon idle';
+      iconWrap.innerHTML = Icons.svg('scan', { size: 64 });
+      scanArea.appendChild(iconWrap);
+      const lastCodeEl = document.createElement('div');
+      lastCodeEl.className = 'hh-last-code';
+      scanArea.appendChild(lastCodeEl);
+      body.appendChild(scanArea);
+      scanArea.addEventListener('click', () => hidInput.focus({ preventScroll: true }));
+
+      let modalOpen = false;
+      const isActive = () => !!body && body.contains(hidInput) && ScanUI.mode() === 'handheld' && !this.locked && !modalOpen;
+
+      let raceArmed = false;
+      const armHid = () => {
+        if (!isActive()) return;
+        if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute('inputmode') === 'text') return;
+        raceArmed = false;
+        hidInput.setAttribute('inputmode', 'none');
+        hidInput.focus({ preventScroll: true });
+        setTimeout(() => {
+          if (!isActive() || document.activeElement !== hidInput) return;
+          hidInput.setAttribute('inputmode', 'text');
+          raceArmed = true;
+        }, 50);
+      };
+
+      hidInput.addEventListener('focus', () => iconWrap.classList.add('armed'));
+      hidInput.addEventListener('blur', () => { iconWrap.classList.remove('armed'); raceArmed = false; requestAnimationFrame(armHid); });
+
+      hidInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.keyCode !== 13) return;
+        e.preventDefault();
+        const raw = hidInput.value.trim();
+        if (!raw || this.locked) return;
+        hidInput.value = '';
+        lastCodeEl.textContent = raw;
+        lastCodeEl.className = 'hh-last-code visible';
+        this.handleScan(raw);
+      });
+
+      armHid();
+
+      const manualBtn = document.createElement('button');
+      manualBtn.type = 'button';
+      manualBtn.className = 'btn-manual-hid';
+      manualBtn.innerHTML = Icons.svg('keyboard', { size: 22 });
+      body.appendChild(manualBtn);
+
+      const modal = document.createElement('div');
+      modal.className = 'hh-manual-modal';
+      modal.innerHTML = `
+        <div class="hh-manual-inner">
+          <p class="hh-manual-label">Shipment ID</p>
+          <input type="text" class="hh-manual-input" placeholder="Shipment ID" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" />
+          <div class="hh-manual-actions">
+            <button type="button" class="hh-manual-cancel">Cancelar</button>
+            <button type="button" class="hh-manual-confirm">Confirmar</button>
+          </div>
+        </div>`;
+      this.container.appendChild(modal);
+
+      const modalInput = modal.querySelector('.hh-manual-input');
+      const openModal = () => { modalOpen = true; modal.classList.add('open'); setTimeout(() => modalInput.focus(), 60); };
+      const closeModal = () => { modalOpen = false; modal.classList.remove('open'); setTimeout(armHid, 80); };
+      const confirmModal = () => {
+        const val = modalInput.value.trim();
+        if (!val) return;
+        modalInput.value = '';
+        closeModal();
+        this.handleScan(val);
+      };
+
+      manualBtn.addEventListener('click', openModal);
+      modal.querySelector('.hh-manual-cancel').addEventListener('click', closeModal);
+      modal.querySelector('.hh-manual-confirm').addEventListener('click', confirmModal);
+      modalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); confirmModal(); } });
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+    }
+  }
+
+  async startCamera() {
+    if (!ScannerEngine.isSupported()) {
+      this.supportEl.textContent = 'Cámara no disponible — usa entrada manual.';
+      this.supportEl.classList.add('error');
+      return;
+    }
+    const video = this.container.querySelector('.scanner-video');
+    this.scanner = new ScannerEngine();
+    try {
+      await this.scanner.start(video, (text) => this.handleScan(text));
+    } catch (e) {
+      this.supportEl.textContent = 'No se pudo activar la cámara — usa entrada manual.';
+      this.supportEl.classList.add('error');
+    }
+  }
+
+  enterManualEntry() {
+    if (this.scanner) this.scanner.pause();
+    this.inManualMode = true;
+
+    this.container.querySelector('.scanner-body').innerHTML = `
+      <div class="step-input-wrap">
+        <input type="text" class="step-input session-manual-input" placeholder="Escribe el Shipment ID" />
+      </div>
+    `;
+    const input = this.container.querySelector('.session-manual-input');
+    this.supportEl.textContent = 'Escribe el código y presiona Enter.';
+    this.supportEl.classList.remove('error');
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const val = input.value.trim();
+      if (!val) return;
+      this.handleScan(val);
+      input.value = '';
+    });
+
+    setTimeout(() => input.focus(), 60);
+  }
+
+  /** Extrae y valida el shipment escaneado — mismo patrón numérico que ScanParser.ID_PATTERN. */
+  resolveScan(rawText) {
+    const extracted = ScanParser.extract(rawText);
+    const raw = extracted ? extracted.value : String(rawText || '').trim();
+    if (!raw || !ScanParser.ID_PATTERN.test(raw)) return null;
+    return raw;
+  }
+
+  handleScan(rawText) {
+    if (this.locked) return;
+    const shipmentId = this.resolveScan(rawText);
+    if (!shipmentId) {
+      this.vibrate(40);
+      this.flash('error', 'Código no reconocido.');
+      return;
+    }
+    // Dedup permanente: un shipment ya registrado no se vuelve a preguntar.
+    if (this.registered.has(shipmentId)) {
+      this.vibrate([40, 60, 40]);
+      this.flash('error', `${shipmentId} ya fue registrado antes.`);
+      return;
+    }
+    this.locked = true;
+    this.stopScanner();
+    this.renderConfirm(shipmentId);
+  }
+
+  flash(kind, message) {
+    if (this.supportEl) {
+      this.supportEl.textContent = message;
+      this.supportEl.classList.toggle('error', kind === 'error');
+    }
+    if (this.flashEl) {
+      const cls = kind === 'ok' ? 'active-ok' : (kind === 'error' ? 'active-error' : '');
+      if (cls) {
+        this.flashEl.innerHTML = Icons.svg(kind === 'ok' ? 'checkCircle' : 'resultError', { size: 96 });
+        this.flashEl.classList.add(cls);
+        setTimeout(() => {
+          if (this.flashEl) {
+            this.flashEl.classList.remove(cls);
+            this.flashEl.innerHTML = '';
+          }
+        }, 550);
+      }
+    }
+    setTimeout(() => {
+      if (!this.supportEl) return;
+      this.supportEl.classList.remove('error');
+      this.supportEl.textContent = this.inManualMode
+        ? 'Escribe el Shipment ID y presiona Enter.'
+        : (this.loopHint || 'Escaneando... apunta la cámara al shipment.');
+    }, 900);
+  }
+
+  /* ====================================================================== */
+  /* Confirmación: nota opcional antes de guardar                          */
+  /* ====================================================================== */
+
+  renderConfirm(shipmentId) {
+    this.container.innerHTML = `
+      <div class="step-screen step-screen-compact">
+        <div class="step-progress-row">
+          <button type="button" class="icon-btn-plain step-back-btn" aria-label="Cancelar">${Icons.svg('close', { size: 24 })}</button>
+          <div class="step-progress">Registro de Shipment's</div>
+        </div>
+        <div class="driver-shipment-card">
+          <div class="driver-shipment-id">${shipmentId}</div>
+        </div>
+        <h1 class="step-question">¿Alguna nota? (opcional)</h1>
+        <div class="step-input-wrap">
+          <textarea class="step-input session-nota-input" rows="3" placeholder="Escribe una nota si aplica..."></textarea>
+        </div>
+        <div class="step-support"></div>
+      </div>
+    `;
+
+    this.supportEl = this.container.querySelector('.step-support');
+    const notaInput = this.container.querySelector('.session-nota-input');
+
+    this.container.querySelector('.step-back-btn').addEventListener('click', () => {
+      this.locked = false;
+      this.renderLoop();
+    });
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn btn-primary btn-block';
+    saveBtn.style.margin = '12px 0';
+    saveBtn.innerHTML = `${Icons.svg('check', { size: 16 })}<span>Guardar</span>`;
+    saveBtn.addEventListener('click', () => this.save(shipmentId, notaInput.value.trim()));
+    this.container.querySelector('.step-screen').appendChild(saveBtn);
+
+    // Enter guarda directo (sin Shift) — mismo espíritu "rápido" del resto
+    // de la app; la nota sí puede abrir el teclado en pantalla si el
+    // operador decide usarla (a diferencia del HID de escaneo).
+    notaInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        this.save(shipmentId, notaInput.value.trim());
+      }
+    });
+    setTimeout(() => notaInput.focus(), 60);
+  }
+
+  async save(shipmentId, nota) {
+    if (this.saving) return;
+    this.saving = true;
+    try {
+      this.registered.add(shipmentId);
+      this.flash('ok', `${shipmentId} · Registrado`);
+      if (this.onScan) {
+        await this.onScan({ shipment_id: shipmentId, nota });
+      }
+      this.count += 1;
+      this.locked = false;
+      this.renderLoop();
+    } finally {
+      this.saving = false;
+    }
+  }
+}
+
 class DebugConsole {
   static entries = [];
   static maxEntries = 300;
@@ -9216,6 +9584,36 @@ class CapturaApp {
     return onHoldCaptured;
   }
 
+  /**
+   * Dedup de Registro de Shipment's: un shipment ya registrado no se
+   * vuelve a registrar, para siempre — igual que el dedup de On_Hold de
+   * Auditoría HV, se lee el histórico completo (bucket único, no
+   * shardeado) sin filtrar por fecha.
+   */
+  async loadRecentRegistroShipments() {
+    const registered = new Set();
+    const bucketName = masterBucketNameFor('registro_shipments', new Date().toISOString());
+
+    try {
+      const bucket = await this.gridClient.getStateBucket(bucketName);
+      if (bucket && Array.isArray(bucket.records)) {
+        bucket.records.forEach((r) => {
+          if (!r || !r.shipment_id) return;
+          registered.add(String(r.shipment_id).toUpperCase());
+        });
+      }
+    } catch (e) {
+      DebugConsole.log(`No se pudo leer ${bucketName} para dedup de Registro de Shipment's: ${e.message}`, 'warn');
+    }
+
+    this.outboxRecords.forEach((r) => {
+      if (!r || r.formId !== 'registro_shipments' || !r.shipment_id) return;
+      registered.add(String(r.shipment_id).toUpperCase());
+    });
+
+    return registered;
+  }
+
   async loadOutboxFromStorage() {
     try {
       const all = await RecordStore.loadAll();
@@ -9682,6 +10080,12 @@ class CapturaApp {
       return;
     }
 
+    // Registro de Shipment's: lee lo ya registrado (dedup permanente) antes de arrancar la sesión.
+    if (formId === 'registro_shipments') {
+      this.startRegistroShipments();
+      return;
+    }
+
     this._screen = 'form';
     this.ensureBackGuard();
 
@@ -9869,6 +10273,41 @@ class CapturaApp {
       catalog,
       onHoldCaptured,
       onScan: (values) => this.onFormComplete('auditoria_hv', values, { stayInSession: true }),
+      onExit: () => this.renderMenu(),
+    });
+    this.currentEngine.render('form-container');
+  }
+
+  /**
+   * Arranque de Registro de Shipment's: lee lo ya registrado (dedup
+   * permanente) mostrando un placeholder, y luego instancia la sesión.
+   */
+  async startRegistroShipments() {
+    this._screen = 'form';
+    this.ensureBackGuard();
+
+    const root = document.getElementById('app-root');
+    root.innerHTML = `
+      <div id="form-container">
+        <div class="step-screen">
+          <div class="step-progress-row">
+            <div class="step-progress">Registro de Shipment's</div>
+          </div>
+          <h1 class="step-question">Cargando…</h1>
+          <div class="step-support">Leyendo lo ya registrado para la deduplicación.</div>
+        </div>
+      </div>
+    `;
+
+    const registered = await this.loadRecentRegistroShipments();
+
+    // Si el usuario ya salió mientras cargaba, no montar la sesión.
+    if (this._screen !== 'form') return;
+
+    this.hideNavbar();
+    this.currentEngine = new RegistroShipmentsSession({
+      registered,
+      onScan: (values) => this.onFormComplete('registro_shipments', values, { stayInSession: true }),
       onExit: () => this.renderMenu(),
     });
     this.currentEngine.render('form-container');
