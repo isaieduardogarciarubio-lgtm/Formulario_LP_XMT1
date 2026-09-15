@@ -365,6 +365,29 @@
     .search-input::placeholder {
       color: var(--text-mut);
     }
+    /* Chip de filtro activo por clic en gráfica (drill-down) */
+    .chart-filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255, 209, 0, .12);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .chart-filter-chip button {
+      background: none;
+      border: none;
+      color: inherit;
+      font-size: 15px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+    }
 
     table {
       width: 100%;
@@ -611,7 +634,7 @@
     #field-error-logs-panel { max-height: 0; }
     #field-error-logs-panel.open { max-height: 380px; }
   </style>
-<script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KXHH66CFA1XB2SDYFD9BEG8D";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script></head>
+<script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KXHH66CFA1XB2SDYFD9BEG8D";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script><script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KXHH66CFA1XB2SDYFD9BEG8D";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KXHH66CFA1XB2SDYFD9BEG8D"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script></head>
 
 <body>
 
@@ -632,16 +655,16 @@
   </div>
 
   <div class="header-right">
+    <a class="btn-icon ext-open-link" id="btn-datastudio" title="Abrir dashboard de Data Studio" href="https://datastudio.google.com/reporting/34756cb1-fa59-4b30-a6ee-f2c99dad4230/page/p_1eapajygzd">
+      <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M120-120v-80h720v80H120Zm0-160v-280h80v280h-80Zm200 0v-440h80v440h-80Zm200 0v-320h80v320h-80Zm200 0v-560h80v560h-80Z"/></svg>
+    </a>
     <button class="btn-icon" id="btn-refresh" title="Actualizar">
       <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"/></svg>
     </button>
-    <button class="btn-icon" id="btn-download" title="Descargar consolidado (todo, JSON/CSV)">
+    <button class="btn-icon" id="btn-download-filtered" title="Exportar registros filtrados (CSV) — respeta rango de fecha, filtros y drill-down activos">
       <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
     </button>
-    <button class="btn-icon" id="btn-download-today" title="Exportar capturados de hoy (todos los logs, CSV)">
-      <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-320 280-520l56-58 104 104v-326h80v326l104-104 56 58-200 200ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
-    </button>
-    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort, Inbound/Drivers o Barredura">
+    <button class="btn-icon" id="btn-upload-catalog" title="Cargar catálogo (CSV) — detecta automáticamente si es Pre-Missort o Barredura">
       <svg class="icon" width="20" height="20" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M440-320v-326L336-542l-56-58 200-200 200 200-56 58-104-104v326h-80ZM240-160q-33 0-56.5-23.5T160-240v-120h80v120h480v-120h80v120q0 33-23.5 56.5T720-160H240Z"/></svg>
     </button>
     <input type="file" id="catalog-file-input" accept=".csv,text/csv" hidden />
@@ -747,6 +770,26 @@
         Análisis
       </p>
 
+      <!-- Date Range Filter — fuera de analysis-content a propósito: debe seguir
+           visible aunque el rango/log actual no tenga registros, para que el
+           usuario pueda ajustarlo sin que los controles desaparezcan por completo. -->
+      <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+        <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
+        <input type="date" id="date-from" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+        <span style="color: var(--text-mut);">hasta</span>
+        <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
+        <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
+      </div>
+
+      <!-- Filtro por área (lugar) — solo Barredura. Misma razón: fuera de
+           analysis-content para que no desaparezca si el filtro deja el área en 0 registros. -->
+      <div id="barredura-area-filter-wrap" style="display: none; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+        <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por área:</label>
+        <select id="area-filter" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: var(--font);">
+          <option value="">Todas</option>
+        </select>
+      </div>
+
       <div id="no-data-message" class="empty-state">
         <p>Todavía no hay registros sincronizados desde la app de captura.</p>
       </div>
@@ -761,23 +804,6 @@
         <!-- Export específico de Barredura (capturados) -->
         <div id="barredura-tools" style="display: none; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
           <button id="btn-export-capturados" class="btn-secondary" style="font-size: 0.85rem; padding: 8px 16px;">Exportar capturados (CSV)</button>
-        </div>
-
-        <!-- Date Range Filter (siempre visible, aplica a ambas sub-vistas de Barredura y a los demás logs) -->
-        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
-          <input type="date" id="date-from" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
-          <span style="color: var(--text-mut);">hasta</span>
-          <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
-          <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
-        </div>
-
-        <!-- Filtro por área (lugar) — solo Barredura -->
-        <div id="barredura-area-filter-wrap" style="display: none; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por área:</label>
-          <select id="area-filter" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font-family: var(--font);">
-            <option value="">Todas</option>
-          </select>
         </div>
 
         <!-- Sub-vista de Barredura: Historial completo vs Faltantes de costo. Mismo estilo de tabs que log-tabs. -->
@@ -800,6 +826,10 @@
         <div class="table-wrapper" id="historial-wrap">
           <div class="table-controls">
             <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
+            <div id="chart-filter-chip" class="chart-filter-chip" style="display: none;">
+              <span id="chart-filter-chip-label"></span>
+              <button type="button" id="chart-filter-chip-clear" aria-label="Quitar filtro de gráfica" title="Quitar filtro">&times;</button>
+            </div>
           </div>
           <table id="records-table">
             <thead id="table-head"></thead>
@@ -1449,12 +1479,16 @@
 
   /**
    * Mismo mecanismo de sharding diario que captura_auditoria.html (ver
-   * comentario allá): barredura/destino_doca/inbound_drivers ya no viven en
-   * un único {formId}_master, sino en {formId}_master_YYYY-MM-DD por día
-   * (hora de México). Todo lo anterior al cutover sigue en el bucket
-   * legacy, congelado — nunca se reescribió ni se migró.
+   * comentario allá): barredura/destino_doca ya no viven en un único
+   * {formId}_master, sino en {formId}_master_YYYY-MM-DD por día (hora de
+   * México). Todo lo anterior al cutover sigue en el bucket legacy,
+   * congelado — nunca se reescribió ni se migró.
    */
-  const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'inbound_drivers', 'premissort']);
+  // cont_cerrado faltaba aquí aunque captura_auditoria.html SÍ lo shardea
+  // por día — el dashboard leía el bucket legacy vacío cont_cerrado_master
+  // en vez de cont_cerrado_master_YYYY-MM-DD, así que este log nunca
+  // mostraba datos aquí.
+  const SHARDED_FORMS = new Set(['barredura', 'destino_doca', 'premissort', 'cont_cerrado']);
   const SHARD_CUTOVER_DATE = '2026-08-14';
 
   function shardDateKeyMexico(ts) {
@@ -1555,53 +1589,6 @@
     if (!records.length) throw new Error('Recovery CSV no contiene registros válidos');
     if (!meta || !meta.formId) meta = { ...(meta || {}), formId: records[0].formId };
     return { meta, records };
-  }
-
-  function buildDriversCatalogIndex(rows) {
-    if (rows.length < 2) throw new Error('El CSV no tiene filas de datos');
-
-    const header = rows[0].map(h => h.trim().toUpperCase());
-    const idx = (name) => header.indexOf(name);
-    const col = {
-      route: idx('ID_ROUTE'),
-      carrier: idx('CARRIER'),
-      placa: idx('PLACA'),
-      shipment: idx('SHIPMENT_ID'),
-      domain: idx('DOMAIN'),
-      cost: idx('COST_USD'),
-      resultado: idx('RESULTADO'),
-    };
-    const missing = Object.entries(col).filter(([, i]) => i === -1).map(([k]) => k);
-    if (missing.length > 0) {
-      throw new Error(`Faltan columnas en el CSV: ${missing.join(', ')}`);
-    }
-
-    const index = {};
-    for (let r = 1; r < rows.length; r++) {
-      const row = rows[r];
-      const routeId = (row[col.route] || '').trim();
-      const shipmentId = (row[col.shipment] || '').trim();
-      if (!routeId || !shipmentId) continue;
-
-      if (!index[routeId]) {
-        index[routeId] = {
-          carrier: (row[col.carrier] || '').trim(),
-          placa: (row[col.placa] || '').trim(),
-          shipments: [],
-        };
-      }
-      index[routeId].shipments.push({
-        shipment_id: shipmentId,
-        domain: (row[col.domain] || '').trim(),
-        cost_usd: Number(row[col.cost]) || 0,
-        resultado: (row[col.resultado] || '').trim(),
-      });
-    }
-
-    if (Object.keys(index).length === 0) {
-      throw new Error('No se encontraron rutas/shipments válidos en el CSV');
-    }
-    return index;
   }
 
   // Catálogo de Pre-Missort: el CSV trae una doca por fila y, en la
@@ -1712,15 +1699,15 @@
   /**
    * Detecta el tipo de catálogo a partir del header del CSV (ya en
    * mayúsculas), para que un solo botón de carga sirva para los 3
-   * catálogos publicables desde el dashboard. Inbound/Drivers se checa
-   * primero porque también trae SHIPMENT_ID (columna que por sí sola
-   * identificaría Barredura). Premissort no usa catálogo subido — consulta
-   * BigQuery en vivo por posición desde captura (ver GridClient.
-   * runGridSqlLookup en captura_auditoria.html).
+   * catálogos publicables desde el dashboard. Premissort no usa catálogo
+   * subido — consulta BigQuery en vivo por posición desde captura (ver
+   * GridClient.runGridSqlLookup en captura_auditoria.html).
    */
+  // Mismas 3 opciones que AuditoriaHVSession.CASO_OPTIONS en captura_auditoria.html.
+  const AUDITORIA_HV_CASO_OPTIONS = ['Vacío', 'Piezas faltantes', 'Sin divergencias'];
+
   function detectCatalogType(header) {
     const has = (name) => header.includes(name);
-    if (has('ID_ROUTE') && has('CARRIER') && has('SHIPMENT_ID')) return 'inbound_drivers';
     if (has('DESTINO') && has('DOCA')) return 'destino_doca';
     if (has('SHIPMENT_ID')) return 'barredura';
     return null;
@@ -1813,6 +1800,20 @@
     return KNOWN_CASOS.includes(v) ? v : 'Otro';
   }
 
+  /**
+   * Enlaces externos (Data Studio, etc.): se abren con window.open()
+   * explícito, sin target="_blank" en el <a>. En algunos WebView un
+   * <a target="_blank"> dispara la apertura nativa de una pestaña Y, en
+   * paralelo, el interceptor de enlaces que Grid inyecta en el HTML abre
+   * una segunda vía postMessage al padre — dos pestañas para el mismo clic.
+   */
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a.ext-open-link');
+    if (!link) return;
+    e.preventDefault();
+    window.open(link.getAttribute('href'), '_blank');
+  });
+
   // ==========================================================================
   // AuditDashboard
   // ==========================================================================
@@ -1825,11 +1826,10 @@
         destino_doca: [],
         fury: [],
         linehaul: [],
-        inbound_fm: [],
-        inbound_drivers: [],
         barredura: [],
         premissort: [],
         cont_cerrado: [],
+        auditoria_hv: [],
       };
       this.currentLog = 'destino_doca';
       // Filtros y paginación
@@ -1841,6 +1841,11 @@
       this.barreduraView = 'historial';
       // Filtro por área (lugar) — solo aplica a Barredura. '' = todas.
       this.areaFilter = '';
+      // Drill-down: clic en una porción de un pie chart filtra la tabla de
+      // abajo. { chartKey, label, predicate }. Se limpia al cambiar de log
+      // o de cualquier otro filtro, para no dejar un filtro "fantasma"
+      // sobre un set de datos distinto al que lo generó.
+      this.chartFilter = null;
       this.recoveryBatches = [];
       this.recoveryRegistry = {};
       this.RECOVERY_PREFIX = 'RECOVERY_AUDITORIAS__';
@@ -1895,8 +1900,7 @@
 
     setupEventListeners() {
       document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
-      document.getElementById('btn-download').addEventListener('click', () => this.downloadAll());
-      document.getElementById('btn-download-today').addEventListener('click', () => this.downloadToday());
+      document.getElementById('btn-download-filtered').addEventListener('click', () => this.downloadFiltered());
       document.getElementById('btn-upload-catalog').addEventListener('click', () => {
         document.getElementById('catalog-file-input').click();
       });
@@ -1930,12 +1934,14 @@
       document.getElementById('date-from').addEventListener('change', async (e) => {
         this.dateFrom = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
+        this.chartFilter = null;
         await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
       document.getElementById('date-to').addEventListener('change', async (e) => {
         this.dateTo = parseLocalDateInput(e.target.value);
         this.displayedCount = 10;
+        this.chartFilter = null;
         await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
@@ -1945,6 +1951,7 @@
         document.getElementById('date-from').value = '';
         document.getElementById('date-to').value = '';
         this.displayedCount = 10;
+        this.chartFilter = null;
         await this.reloadShardedLogsForCurrentFilter();
         this.render();
       });
@@ -1957,6 +1964,7 @@
         btn.addEventListener('click', () => {
           this.barreduraView = btn.dataset.view;
           this.displayedCount = 10;
+          this.chartFilter = null;
           this.render();
         });
       });
@@ -1964,7 +1972,14 @@
       document.getElementById('area-filter').addEventListener('change', (e) => {
         this.areaFilter = e.target.value;
         this.displayedCount = 10;
+        this.chartFilter = null;
         this.render();
+      });
+
+      document.getElementById('chart-filter-chip-clear').addEventListener('click', () => {
+        this.chartFilter = null;
+        this.displayedCount = 10;
+        this.renderAnalysis();
       });
     }
 
@@ -2134,6 +2149,20 @@
           this.barreduraView = 'historial';
           this.areaFilter = '';
           this.displayedCount = 10;
+          this.chartFilter = null;
+          // Default de fecha SOLO para Auditoría HV: ayer y hoy (igual que
+          // el default general de la app), el usuario puede seguir editando
+          // los inputs libremente después.
+          if (logType === 'auditoria_hv') {
+            const today = new Date();
+            const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+            this.dateFrom = yesterday;
+            this.dateTo = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const pad = (n) => String(n).padStart(2, '0');
+            const toInputValue = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            document.getElementById('date-from').value = toInputValue(yesterday);
+            document.getElementById('date-to').value = toInputValue(today);
+          }
           this.render();
         });
         container.appendChild(tab);
@@ -2141,6 +2170,14 @@
     }
 
     renderAnalysis() {
+      // El filtro de fecha (HTML) y el de área quedan fuera de
+      // analysis-content y se evalúan aquí ANTES de cualquier return por
+      // "sin datos" — así los controles nunca desaparecen por completo,
+      // aunque el rango elegido no traiga registros.
+      const isBarredura = this.currentLog === 'barredura';
+      document.getElementById('barredura-area-filter-wrap').style.display = isBarredura ? 'flex' : 'none';
+      if (isBarredura) this.populateAreaFilter();
+
       const allRecords = this.logs[this.currentLog];
 
       if (!allRecords || allRecords.length === 0) {
@@ -2164,13 +2201,9 @@
       document.getElementById('barredura-tools').style.display =
         this.currentLog === 'barredura' ? 'flex' : 'none';
 
-      const isBarredura = this.currentLog === 'barredura';
       const viewTabs = document.getElementById('barredura-view-tabs');
       const costosPendientesEl = document.getElementById('barredura-costos-pendientes');
       const historialWrap = document.getElementById('historial-wrap');
-
-      document.getElementById('barredura-area-filter-wrap').style.display = isBarredura ? 'flex' : 'none';
-      if (isBarredura) this.populateAreaFilter();
 
       if (isBarredura) {
         viewTabs.style.display = 'flex';
@@ -2196,22 +2229,43 @@
       // paginados); la tabla sí pagina, para no renderizar cientos de filas.
       this.renderKpis(filteredRecords);
 
+      // Drill-down por clic en gráfica: solo estrecha la tabla de abajo, no
+      // los KPIs ni las gráficas — así la gráfica sigue mostrando la
+      // distribución completa como referencia mientras la tabla se enfoca
+      // en la porción elegida.
+      const tableRecords = this.chartFilter
+        ? filteredRecords.filter(this.chartFilter.predicate)
+        : filteredRecords;
+      this.renderChartFilterChip();
+
       if (!isBarredura || this.barreduraView === 'historial') {
-        const displayedRecords = filteredRecords.slice(0, this.displayedCount);
+        const displayedRecords = tableRecords.slice(0, this.displayedCount);
         this.renderTable(displayedRecords);
 
         const btnLoadMore = document.getElementById('btn-load-more');
         const paginationInfo = document.getElementById('pagination-info');
-        if (filteredRecords.length > this.displayedCount) {
+        if (tableRecords.length > this.displayedCount) {
           btnLoadMore.style.display = 'inline-block';
-          paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
+          paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${tableRecords.length}`;
         } else {
           btnLoadMore.style.display = 'none';
-          paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+          paginationInfo.textContent = `Total: ${tableRecords.length}`;
         }
       }
 
       this.renderCharts(filteredRecords);
+    }
+
+    /** Chip "Filtrando por: X" cuando hay un drill-down activo desde una gráfica. */
+    renderChartFilterChip() {
+      const chip = document.getElementById('chart-filter-chip');
+      const label = document.getElementById('chart-filter-chip-label');
+      if (this.chartFilter) {
+        chip.style.display = 'inline-flex';
+        label.textContent = `Filtrando por: ${this.chartFilter.label}`;
+      } else {
+        chip.style.display = 'none';
+      }
     }
 
     /**
@@ -2302,26 +2356,6 @@
           const count = records.filter(r => r.area === a).length;
           this.addKpiCard(container, count.toString(), a);
         });
-      } else if (this.currentLog === 'inbound_fm') {
-        const hallazgos = new Set(records.map(r => r.hallazgo));
-        this.addKpiCard(container, total.toString(), 'Total');
-        hallazgos.forEach(h => {
-          const count = records.filter(r => r.hallazgo === h).length;
-          this.addKpiCard(container, count.toString(), h);
-        });
-      } else if (this.currentLog === 'inbound_drivers') {
-        const estados = new Set(records.map(r => r.estado));
-        this.addKpiCard(container, total.toString(), 'Total');
-        estados.forEach(es => {
-          const count = records.filter(r => r.estado === es).length;
-          this.addKpiCard(container, count.toString(), es);
-        });
-        const totalCost = records.reduce((sum, r) => sum + (Number(r.cost_usd) || 0), 0);
-        this.addKpiCard(container, `$${totalCost.toFixed(2)}`, 'Costo USD auditado');
-        const divergentRoutes = new Set(records.filter(r => r.route_divergencia).map(r => r.route_id)).size;
-        if (divergentRoutes > 0) {
-          this.addKpiCard(container, divergentRoutes.toString(), 'Rutas con divergencia QR');
-        }
       } else if (this.currentLog === 'barredura') {
         this.addKpiCard(container, total.toString(), 'Total');
         // Acepta cualquiera de los 3 nombres que ha tenido este estado
@@ -2347,13 +2381,9 @@
         const missorts = records.filter(isMissort).length;
         this.addKpiCard(container, missorts.toString(), 'Missorts');
         const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
-        this.addKpiCard(container, noContenerizado.toString(), 'No contenerizado');
+        this.addKpiCard(container, noContenerizado.toString(), 'No follow');
         const encontrados = records.filter(r => r.estado === 'Encontrado').length;
-        this.addKpiCard(container, encontrados.toString(), 'Encontrados');
-        const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-        if (pendienteReubicar > 0) {
-          this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
-        }
+        this.addKpiCard(container, encontrados.toString(), 'Follow');
         const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
         this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');
       } else if (this.currentLog === 'cont_cerrado') {
@@ -2363,15 +2393,17 @@
         const missorts = records.filter(isMissort).length;
         this.addKpiCard(container, missorts.toString(), 'Missorts');
         const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
-        this.addKpiCard(container, noContenerizado.toString(), 'No contenerizado');
+        this.addKpiCard(container, noContenerizado.toString(), 'No follow');
         const encontrados = records.filter(r => r.estado === 'Encontrado').length;
-        this.addKpiCard(container, encontrados.toString(), 'Encontrados');
-        const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-        if (pendienteReubicar > 0) {
-          this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
-        }
+        this.addKpiCard(container, encontrados.toString(), 'Follow');
         const contenedores = new Set(records.map(r => r.hu).filter(Boolean)).size;
         this.addKpiCard(container, contenedores.toString(), 'Contenedores escaneados');
+      } else if (this.currentLog === 'auditoria_hv') {
+        this.addKpiCard(container, total.toString(), 'Total');
+        AUDITORIA_HV_CASO_OPTIONS.forEach((caso) => {
+          const count = records.filter(r => r.caso === caso).length;
+          this.addKpiCard(container, count.toString(), caso);
+        });
       }
     }
 
@@ -2389,6 +2421,15 @@
         counts[key] = (counts[key] || 0) + 1;
       });
       return counts;
+    }
+
+    /** Un predicado de drill-down por cada label, reproduciendo el mismo bucketing que countByField. */
+    fieldPredicates(field, labels) {
+      const predicates = {};
+      labels.forEach((label) => {
+        predicates[label] = (r) => ((r[field] || '').toString().trim() || '(sin dato)') === label;
+      });
+      return predicates;
     }
 
     renderCharts(records) {
@@ -2436,13 +2477,6 @@
           builders = [() => this.buildSituacionChart(records)];
         } else if (this.currentLog === 'linehaul') {
           builders = [() => this.buildAreaChart(records)];
-        } else if (this.currentLog === 'inbound_fm') {
-          builders = [() => this.buildHallazgoChart(records)];
-        } else if (this.currentLog === 'inbound_drivers') {
-          builders = [
-            () => this.buildEstadoDriversChart(records),
-            () => this.buildCostByRouteChart(records),
-          ];
         } else if (this.currentLog === 'barredura') {
           builders = [
             () => this.buildBarreduraEstadoChart(records),
@@ -2455,6 +2489,8 @@
             () => this.buildPremissortMissortChart(records),
             () => this.buildPremissortEstadoChart(records),
           ];
+        } else if (this.currentLog === 'auditoria_hv') {
+          builders = [() => this.buildAuditoriaHVCasoChart(records)];
         }
 
         // Fase 1: crear y anexar TODOS los divs primero. Con CSS Grid
@@ -2473,19 +2509,63 @@
         });
 
         // Fase 2: con el grid ya en su layout final, dibujar cada gráfica.
-        specs.forEach(({ div, data, layout }) => {
+        specs.forEach(({ div, data, layout, chartKey, labels, predicates }) => {
+          // Si esta gráfica tiene una porción/barra elegida por drill-down,
+          // se resalta sin tener que cambiar su paleta de colores: en pie
+          // se "saca" (pull) y lleva borde; en barra, se atenúa todo lo
+          // demás (opacity) y la barra elegida queda al 100%.
+          if (chartKey && predicates && this.chartFilter && this.chartFilter.chartKey === chartKey) {
+            const idx = labels.indexOf(this.chartFilter.label);
+            if (idx !== -1) {
+              if (data[0].type === 'pie') {
+                data[0].pull = labels.map((_, i) => (i === idx ? 0.06 : 0));
+                data[0].marker = {
+                  ...data[0].marker,
+                  line: { color: '#F4F6F8', width: labels.map((_, i) => (i === idx ? 2 : 0)) },
+                };
+              } else {
+                data[0].marker = {
+                  ...data[0].marker,
+                  opacity: labels.map((_, i) => (i === idx ? 1 : 0.35)),
+                };
+              }
+            }
+          }
+
           Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+
+          // Drill-down: clic en una porción/barra filtra la tabla de abajo
+          // por esa categoría; clic de nuevo sobre la misma la quita.
+          if (chartKey && predicates) {
+            div.style.cursor = 'pointer';
+            div.on('plotly_click', (evt) => {
+              const pt = evt.points && evt.points[0];
+              if (!pt) return;
+              const label = labels[pt.pointNumber];
+              const isSame = this.chartFilter
+                && this.chartFilter.chartKey === chartKey
+                && this.chartFilter.label === label;
+              this.chartFilter = isSame ? null : { chartKey, label, predicate: predicates[label] };
+              this.displayedCount = 10;
+              this.renderAnalysis();
+            });
+          }
         });
       });
     }
 
     buildResultadoChart(records) {
       const counts = this.countByField(records, 'resultado');
+      const labels = Object.keys(counts);
 
       const data = [{
-        labels: Object.keys(counts),
+        labels,
         values: Object.values(counts),
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#4A4A4A'] },
       }];
 
@@ -2499,14 +2579,15 @@
         margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'resultado', labels, predicates: this.fieldPredicates('resultado', labels) };
     }
 
     buildSituacionChart(records) {
       const counts = this.countByField(records, 'situacion');
+      const labels = Object.keys(counts);
 
       const data = [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2522,21 +2603,40 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'situacion', labels, predicates: this.fieldPredicates('situacion', labels) };
     }
 
-    /** Los dos hallazgos que busca esta auditoría: Missort (ver isMissort) y No contenerizado (ver isNoContenerizado). */
+    /**
+     * Los dos hallazgos que busca esta auditoría: Missort (ver isMissort,
+     * unifica reubicado + pendiente en un solo tipo — la distinción ya no
+     * se muestra aquí, solo importa que hubo un missort) y No follow (ver
+     * isNoContenerizado). El resto es Follow.
+     */
     buildPremissortMissortChart(records) {
-      const pendiente = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-      const reubicado = records.filter(r => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '')).length;
-      const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
-      const sinHallazgo = records.length - pendiente - reubicado - noContenerizado;
+      const missortTest = (r) => isMissort(r);
+      const noContenerizadoTest = (r) => isNoContenerizado(r.estado);
+      const followTest = (r) => !missortTest(r) && !noContenerizadoTest(r);
+
+      const missort = records.filter(missortTest).length;
+      const noContenerizado = records.filter(noContenerizadoTest).length;
+      const follow = records.length - missort - noContenerizado;
+
+      const labels = ['Follow', 'Missort', 'No follow'];
+      const predicates = {
+        'Follow': followTest,
+        'Missort': missortTest,
+        'No follow': noContenerizadoTest,
+      };
 
       const data = [{
-        labels: ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'],
-        values: [sinHallazgo, reubicado, pendiente, noContenerizado],
+        labels,
+        values: [follow, missort, noContenerizado],
         type: 'pie',
-        marker: { colors: ['#FFD100', '#FF9E45', '#FF5C6C', '#8A7300'] },
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
+        marker: { colors: ['#FFD100', '#FF9E45', '#8A7300'] },
       }];
 
       const layout = {
@@ -2549,14 +2649,15 @@
         margin: { l: 20, r: 20, t: 40, b: 50 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'premissort-missort', labels, predicates };
     }
 
     buildPremissortEstadoChart(records) {
       const counts = this.countByField(records, 'estado');
+      const labels = Object.keys(counts);
 
       const data = [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2572,16 +2673,17 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'premissort-estado', labels, predicates: this.fieldPredicates('estado', labels) };
     }
 
     buildDestinoChart(records) {
       const counts = this.countByField(records, 'destino');
 
       const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const labels = sorted.map(([k]) => k);
 
       const data = [{
-        x: sorted.map(([k]) => k),
+        x: labels,
         y: sorted.map(([, v]) => v),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2597,16 +2699,21 @@
         margin: { l: 50, r: 30, t: 40, b: 40 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'destino', labels, predicates: this.fieldPredicates('destino', labels) };
     }
 
     buildAreaChart(records) {
       const counts = this.countByField(records, 'area');
+      const labels = Object.keys(counts);
 
       const data = [{
-        labels: Object.keys(counts),
+        labels,
         values: Object.values(counts),
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#8A7300', '#4A4A4A'] },
       }];
 
@@ -2620,50 +2727,27 @@
         margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'area', labels, predicates: this.fieldPredicates('area', labels) };
     }
 
-    buildHallazgoChart(records) {
-      const counts = this.countByField(records, 'hallazgo');
-
-      const data = [{
-        x: Object.keys(counts),
-        y: Object.values(counts),
-        type: 'bar',
-        marker: { color: '#FFD100' },
-      }];
-
-      const layout = {
-        title: 'Distribución de Hallazgos',
-        xaxis: { title: 'Hallazgo' },
-        yaxis: { title: 'Cantidad' },
-        plot_bgcolor: 'transparent',
-        paper_bgcolor: 'transparent',
-        font: { color: '#F4F6F8', size: 11 },
-        margin: { l: 50, r: 30, t: 40, b: 40 },
-      };
-
-      return { data, layout };
-    }
-
-    buildEstadoDriversChart(records) {
-      const counts = this.countByField(records, 'estado');
-      const colorMap = {
-        'Auditado OK': '#34C759',
-        'Divergencia': '#FF453A',
-        'Faltante confirmado': '#FFD100',
-      };
+    /** Distribución de "Caso" para Auditoría HV — mismo estilo de dona que buildResultadoChart. */
+    buildAuditoriaHVCasoChart(records) {
+      const counts = this.countByField(records, 'caso');
       const labels = Object.keys(counts);
 
       const data = [{
         labels,
-        values: labels.map(l => counts[l]),
+        values: Object.values(counts),
         type: 'pie',
-        marker: { colors: labels.map(l => colorMap[l] || '#8A7300') },
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
+        marker: { colors: ['#FFD100', '#FF453A', '#34C759', '#4A4A4A'] },
       }];
 
       const layout = {
-        title: 'Distribución de Estado',
+        title: 'Distribución de Caso',
         plot_bgcolor: 'transparent',
         paper_bgcolor: 'transparent',
         font: { color: '#F4F6F8', size: 11 },
@@ -2672,45 +2756,27 @@
         margin: { l: 20, r: 20, t: 40, b: 20 },
       };
 
-      return { data, layout };
-    }
-
-    buildCostByRouteChart(records) {
-      const totals = {};
-      records.forEach(r => {
-        const key = r.route_id || '(sin ruta)';
-        totals[key] = (totals[key] || 0) + (Number(r.cost_usd) || 0);
-      });
-      const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 8);
-
-      const data = [{
-        x: sorted.map(([k]) => k),
-        y: sorted.map(([, v]) => Number(v.toFixed(2))),
-        type: 'bar',
-        marker: { color: '#3987E5' },
-      }];
-
-      const layout = {
-        title: 'Costo USD por Ruta (Top 8)',
-        xaxis: { title: 'Ruta' },
-        yaxis: { title: 'USD' },
-        plot_bgcolor: 'transparent',
-        paper_bgcolor: 'transparent',
-        font: { color: '#F4F6F8', size: 11 },
-        margin: { l: 50, r: 30, t: 40, b: 40 },
-      };
-
-      return { data, layout };
+      return { data, layout, chartKey: 'auditoria-hv-caso', labels, predicates: this.fieldPredicates('caso', labels) };
     }
 
     buildBarreduraEstadoChart(records) {
       const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
       const fueraCatalogo = records.length - enCatalogo;
 
+      const labels = ['Dentro de catálogo', 'Fuera de catálogo'];
+      const predicates = {
+        'Dentro de catálogo': (r) => isDentroDeCatalogo(r.estado),
+        'Fuera de catálogo': (r) => !isDentroDeCatalogo(r.estado),
+      };
+
       const data = [{
-        labels: ['Dentro de catálogo', 'Fuera de catálogo'],
+        labels,
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         // Todas las gráficas de la app usan tonos de amarillo, no verde/rojo.
         marker: { colors: ['#FFD100', '#8A7300'] },
       }];
@@ -2725,7 +2791,7 @@
         margin: { l: 20, r: 20, t: 40, b: 50 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-estado', labels, predicates };
     }
 
     /** Costo USD capturado por tipo de caso (suma). */
@@ -2736,6 +2802,8 @@
         totals[caso] = (totals[caso] || 0) + (Number(r.costo_usd) || 0);
       });
       const casos = Object.keys(totals);
+      const predicates = {};
+      casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
       const data = [{
         x: casos,
@@ -2762,14 +2830,17 @@
         margin: { l: 50, r: 30, t: 40, b: 60 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-costo', labels: casos, predicates };
     }
 
     buildBarreduraLugarChart(records) {
       const counts = this.countByField(records.map(r => ({ lugar: bucketLugar(r.lugar) })), 'lugar');
+      const labels = Object.keys(counts);
+      const predicates = {};
+      labels.forEach((label) => { predicates[label] = (r) => bucketLugar(r.lugar) === label; });
 
       const data = [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -2788,13 +2859,15 @@
         margin: { l: 50, r: 30, t: 40, b: 60 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-lugar', labels, predicates };
     }
 
     /** Cantidad de registros por tipo de caso (conteo, no costo). */
     buildBarreduraCasoCountChart(records) {
       const counts = this.countByField(records.map(r => ({ caso: bucketCaso(r.caso) })), 'caso');
       const casos = Object.keys(counts);
+      const predicates = {};
+      casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
       const data = [{
         x: casos,
@@ -2813,7 +2886,7 @@
         margin: { l: 50, r: 30, t: 40, b: 60 },
       };
 
-      return { data, layout };
+      return { data, layout, chartKey: 'barredura-caso-count', labels: casos, predicates };
     }
 
     /**
@@ -2940,13 +3013,13 @@
             // siendo la razón de ser de la auditoría, no se diluye en verde.
             if (isMissort(record)) {
               td.className = 'status-warn';
-              td.textContent = value === 'Encontrado' ? 'Encontrado (missort reubicado)' : value;
+              td.textContent = value === 'Encontrado' ? 'Follow (missort reubicado)' : value;
             } else if (isNoContenerizado(value)) {
               td.className = 'status-critical';
-              td.textContent = 'No contenerizado';
+              td.textContent = 'No follow';
             } else {
               td.className = value === 'Encontrado' ? 'status-good' : 'status-critical';
-              td.textContent = value;
+              td.textContent = value === 'Encontrado' ? 'Follow' : value;
             }
           } else if (this.currentLog === 'barredura' && col.field === 'costo_usd') {
             // Costo USD: columna editable, no viene de la captura — se
@@ -3461,7 +3534,8 @@
         return;
       }
 
-      const filteredRecords = this.getFilteredRecords();
+      let filteredRecords = this.getFilteredRecords();
+      if (this.chartFilter) filteredRecords = filteredRecords.filter(this.chartFilter.predicate);
       const queryLower = query.toLowerCase();
       const config = FORMS_CONFIG[this.currentLog];
       const searchResults = filteredRecords.filter(r => {
@@ -3532,96 +3606,30 @@
       }
     }
 
-    async downloadAll() {
-      // Consolidar todos los registros con su tipo
-      const allRecords = [];
-
-      for (const [logType, records] of Object.entries(this.logs)) {
-        records.forEach(rec => {
-          allRecords.push({
-            'Tipo de Log': FORMS_CONFIG[logType].title,
-            ...rec
-          });
-        });
-      }
-
-      if (allRecords.length === 0) {
-        alert('No hay registros para descargar');
-        return;
-      }
-
-      // Obtener todos los campos únicos
-      const allFields = new Set();
-      allRecords.forEach(rec => Object.keys(rec).forEach(k => allFields.add(k)));
-
-      // Crear encabezados en orden: Tipo de Log, luego los demás
-      const headers = ['Tipo de Log', ...Array.from(allFields).filter(f => f !== 'Tipo de Log')];
-
-      // Generar CSV manualmente (similar a CSVEngine pero con más flexibilidad)
-      const escapeCsv = (val) => {
-        if (val === null || val === undefined) return '';
-        const str = String(val);
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
-      };
-
-      const csvLines = [headers.map(escapeCsv).join(',')];
-      allRecords.forEach(rec => {
-        const row = headers.map(h => escapeCsv(rec[h] || '')).join(',');
-        csvLines.push(row);
-      });
-
-      const csv = '﻿' + csvLines.join('\n'); // BOM UTF-8
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `consolidado_${new Date().toISOString().split('T')[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    }
-
     /**
-     * Exporta en un solo CSV lo capturado HOY (fecha local del navegador,
-     * 00:00 a 23:59:59) en los 7 logs, sin importar el filtro de fecha ni
-     * la pestaña activa — misma idea que "Descargar" (todo, consolidado)
-     * pero acotado al día en curso.
+     * Exporta el log actualmente seleccionado (this.currentLog) respetando
+     * TODOS los filtros activos: rango de fecha (getFilteredRecords), el
+     * filtro de área de Barredura si aplica (ya incluido en
+     * getFilteredRecords) y el drill-down de gráfica activo (chartFilter),
+     * igual que hace filterTable()/renderAnalysis() para la tabla.
      */
-    async downloadToday() {
-      const now = new Date();
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
+    downloadFiltered() {
+      let records = this.getFilteredRecords();
+      if (this.chartFilter) records = records.filter(this.chartFilter.predicate);
 
-      const allRecords = [];
-      for (const [logType, records] of Object.entries(this.logs)) {
-        // Los logs shardeados pueden tener this.logs acotado al filtro de
-        // fecha actual (esa es la ganancia de leer solo lo necesario) — si
-        // el filtro no incluye hoy, this.logs no trae el shard de hoy. Se
-        // lee directo en vez de asumir que ya está en memoria.
-        const source = SHARDED_FORMS.has(logType)
-          ? (await this.gridClient.getStateBucket(masterBucketNameFor(logType, shardDateKeyMexico(now.toISOString()))))?.records || []
-          : records;
-        source.forEach((rec) => {
-          const recDate = rec.ts ? new Date(rec.ts) : null;
-          if (!recDate || recDate < startOfDay || recDate >= endOfDay) return;
-          allRecords.push({ 'Tipo de Log': FORMS_CONFIG[logType].title, ...rec });
-        });
-      }
-
-      if (allRecords.length === 0) {
-        this.showNotification('No hay registros capturados hoy', 'error');
+      if (records.length === 0) {
+        this.showNotification('No hay registros en el rango/filtro seleccionado', 'error');
         return;
       }
 
-      const allFields = new Set();
-      allRecords.forEach((rec) => Object.keys(rec).forEach((k) => allFields.add(k)));
-      const headers = ['Tipo de Log', ...Array.from(allFields).filter((f) => f !== 'Tipo de Log')]
-        .map((h) => ({ field: h, header: h }));
-
-      this.downloadCsv(`capturados_hoy_${now.toISOString().split('T')[0]}.csv`, headers, allRecords);
-      this.showNotification(`Exportado · ${allRecords.length} registros de hoy`, 'success');
+      const config = FORMS_CONFIG[this.currentLog];
+      const filenameSlug = this.currentLog.replace(/[^a-z0-9_]/gi, '');
+      this.downloadCsv(
+        `${filenameSlug}_${new Date().toISOString().split('T')[0]}.csv`,
+        config.csvColumns,
+        records
+      );
+      this.showNotification(`Exportado · ${records.length} registros`, 'success');
     }
 
     // Descarga un CSV genérico (con BOM UTF-8) a partir de encabezados +
@@ -3688,9 +3696,9 @@
 
     /**
      * Único punto de carga de catálogo del dashboard: detecta el tipo
-     * (Pre-Missort, Inbound/Drivers o Barredura) por las columnas del CSV
-     * y lo publica en su State Bucket correspondiente. Sobreescribe el
-     * catálogo completo (no hace merge).
+     * (Pre-Missort o Barredura) por las columnas del CSV y lo publica en su
+     * State Bucket correspondiente. Sobreescribe el catálogo completo (no
+     * hace merge).
      */
     async uploadCatalogAuto(file) {
       const btn = document.getElementById('btn-upload-catalog');
@@ -3702,14 +3710,7 @@
         const header = rows[0].map(h => h.trim().toUpperCase());
         const type = detectCatalogType(header);
 
-        if (type === 'inbound_drivers') {
-          const index = buildDriversCatalogIndex(rows);
-          const routeCount = Object.keys(index).length;
-          const shipmentCount = Object.values(index).reduce((sum, r) => sum + r.shipments.length, 0);
-          await this.publishCatalogIndex('catalogo_inbound_drivers', index);
-          this.showNotification(`Catálogo Inbound/Drivers publicado · ${routeCount} rutas · ${shipmentCount} shipments`, 'success');
-          DebugConsole.log(`Catálogo Inbound/Drivers publicado: ${routeCount} rutas, ${shipmentCount} shipments`, 'info');
-        } else if (type === 'destino_doca') {
+        if (type === 'destino_doca') {
           const index = buildDestinoDocaCatalogIndex(rows);
           const destinoCount = Object.keys(index).length;
           const docaCount = Object.values(index).reduce((sum, docas) => sum + docas.length, 0);
@@ -3723,7 +3724,7 @@
           this.showNotification(`Catálogo Barredura publicado · ${shipmentCount} shipments`, 'success');
           DebugConsole.log(`Catálogo Barredura publicado: ${shipmentCount} shipments`, 'info');
         } else {
-          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), ID_ROUTE+CARRIER+SHIPMENT_ID (Inbound/Drivers), o SHIPMENT_ID (Barredura).');
+          throw new Error('No se reconoce el tipo de catálogo. Columnas esperadas: DESTINO+DOCA (Pre-Missort), o SHIPMENT_ID (Barredura).');
         }
       } catch (e) {
         this.showNotification(`Error al publicar catálogo: ${e.message}`, 'error');
@@ -3810,35 +3811,6 @@
       ],
       fields: [{ type: 'photo', id: 'foto' }],
     },
-    inbound_fm: {
-      title: 'Inbound FM',
-      csvColumns: [
-        { field: 'auditoria', header: 'Auditoría' },
-        { field: 'ts', header: 'Fecha/Hora' },
-        { field: 'patente', header: 'Patente' },
-        { field: 'diferencia_shipments', header: 'Diferencia de Shipments' },
-        { field: 'hallazgo', header: 'Hallazgo' },
-        { field: 'evidencia', header: 'Evidencia' },
-      ],
-      fields: [{ type: 'photo', id: 'evidencia' }],
-    },
-    inbound_drivers: {
-      title: 'Inbound / Drivers',
-      csvColumns: [
-        { field: 'auditoria', header: 'Auditoría' },
-        { field: 'ts', header: 'Fecha/Hora' },
-        { field: 'route_id', header: 'Ruta' },
-        { field: 'carrier', header: 'Carrier' },
-        { field: 'placa', header: 'Placa' },
-        { field: 'shipment_id', header: 'Shipment ID' },
-        { field: 'domain', header: 'Domain' },
-        { field: 'cost_usd', header: 'Cost USD' },
-        { field: 'resultado_auditoria', header: 'Tipo (Frágil/HV)' },
-        { field: 'estado', header: 'Estado' },
-        { field: 'foto', header: 'Foto' },
-      ],
-      fields: [{ type: 'photo', id: 'foto' }],
-    },
     barredura: {
       title: 'Barredura',
       csvColumns: [
@@ -3883,6 +3855,18 @@
         { field: 'detalle', header: 'Detalle' },
       ],
       fields: [],
+    },
+    auditoria_hv: {
+      title: 'Auditoría HV',
+      csvColumns: [
+        { field: 'auditoria', header: 'Auditoría' },
+        { field: 'ts', header: 'Fecha' },
+        { field: 'shipment_id', header: 'Shipment ID' },
+        { field: 'descripcion', header: 'Descripción' },
+        { field: 'caso', header: 'Caso' },
+        { field: 'foto', header: 'Foto' },
+      ],
+      fields: [{ id: 'foto', type: 'photo' }],
     },
   };
 
@@ -3957,6 +3941,146 @@
   var nativeOpen = window.open;
   window.open = function(rawUrl, target, features){
     if(!isAllowedUrl(rawUrl)) return null;
+    if(requestParentPopup(rawUrl)) return null;
+    return nativeOpen ? nativeOpen.call(window, normalizeUrl(rawUrl).href, target, features) : null;
+  };
+})();
+</script>
+<script>
+/* Grid: sync iframe URL mutations to parent address bar */
+(function(){
+  function notifyParent(search, hash){
+    if(!window.parent || window.parent === window) return;
+    try{
+      window.parent.postMessage(
+        {type:"grid-url-sync", search:search, hash:hash},
+        window.location.origin
+      );
+    }catch(_){}
+  }
+  function parseAndNotify(url){
+    try{
+      var p = new URL(String(url), window.location.href);
+      notifyParent(p.search, p.hash);
+    }catch(_){}
+  }
+  var _push = history.pushState.bind(history);
+  var _replace = history.replaceState.bind(history);
+  history.pushState = function(state, title, url){
+    _push(state, title, url);
+    if(url != null) parseAndNotify(url);
+  };
+  history.replaceState = function(state, title, url){
+    _replace(state, title, url);
+    if(url != null) parseAndNotify(url);
+  };
+  window.addEventListener("hashchange", function(){
+    notifyParent(window.location.search, window.location.hash);
+  });
+})();
+</script>
+<script>
+/* Grid: only allow approved Grid domains to open unsandboxed tabs */
+(function(){
+  var allowedHosts = ["figma.com", "www.figma.com", "furydocs.io", "zeroheight.com", "google.com", "docs.google.com", "meet.google.com", "grid.adminml.com", "grid-artifacts.adminml.com", "mercadolibre.atlassian.net", "mercadolibre-opsgenie.atlassian.net", "app.datadoghq.com", "grafana-service.furycloud.io", "web.furycloud.io", "nasdaq-meli.app.opsgenie.com", "meli.enterprise.slack.com"];
+  var allowedSuffixes = [".adminml.com", ".atlassian.net", ".google.com", ".furycloud.io", ".melioffice.com", ".melisystems.com"];
+  var allowedPathPrefixes = {"github.com": ["/melisource/"], "www.github.com": ["/melisource/"], "reclameaqui.com.br": ["/empresa/mercado-pago/"], "www.reclameaqui.com.br": ["/empresa/mercado-pago/"]};
+  function normalizeUrl(rawUrl){
+    try {
+      return new URL(String(rawUrl || ""), window.location.href);
+    } catch (_err) {
+      return null;
+    }
+  }
+  function isAllowedUrl(rawUrl){
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed) return false;
+    if(parsed.protocol === "slack:") return true;
+    if(parsed.protocol !== "https:") return false;
+    var h = (parsed.hostname || "").toLowerCase();
+    if(!h) return false;
+    if(allowedHosts.indexOf(h) !== -1) return true;
+    for(var i = 0; i < allowedSuffixes.length; i++){
+      var s = allowedSuffixes[i];
+      if(h === s.slice(1) || (h.length > s.length && h.slice(-s.length) === s)) return true;
+    }
+    var pathPrefixes = allowedPathPrefixes[h];
+    if(pathPrefixes){
+      var p = parsed.pathname || "/";
+      for(var j = 0; j < pathPrefixes.length; j++){
+        if(p.slice(0, pathPrefixes[j].length) === pathPrefixes[j]) return true;
+      }
+    }
+    return false;
+  }
+  function requestParentPopup(rawUrl){
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed || !window.parent || window.parent === window) return false;
+    try {
+      window.parent.postMessage({type: "grid-open-safe-popup", url: parsed.href}, window.location.origin);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+  /* Open synchronously from the parent window, inside the click's call stack, so
+     the browser keeps the transient user activation (a click in a same-origin
+     child propagates activation to its ancestors). Forwarding via postMessage
+     runs window.open in an async handler, which popup blockers reject.
+     We deliberately open WITHOUT the "noopener" feature: with it the browser
+     returns null even on success, so a genuinely blocked popup would be
+     indistinguishable from a successful one. Instead we detect a real block via a
+     null handle and sever the opener ourselves.
+     Returns true only when a tab actually opened; false when there is no
+     accessible parent, the call throws (opaque/cross-origin), or the popup was
+     blocked — the caller then lets the native target="_blank" run.
+     SECURITY: rawUrl is always gated by isAllowedUrl() first, and popup.opener is
+     nulled to prevent reverse tabnabbing (equivalent guarantee to "noopener"). */
+  function openInParent(rawUrl){
+    if(!window.parent || window.parent === window) return false;
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed) return false;
+    try {
+      var popup = window.parent.open(parsed.href, "_blank");
+      if(!popup) return false;
+      try { popup.opener = null; } catch (_e) {}
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  document.addEventListener("click", function(event){
+    var target = event.target;
+    var anchor = target && target.closest ? target.closest("a[href]") : null;
+    if(!anchor) return;
+    var href = anchor.getAttribute("href") || "";
+    if(!href || href.charAt(0) === "#") return;
+    var opensNewTab = anchor.target === "_blank" || event.ctrlKey || event.metaKey || event.button === 1;
+    if(!opensNewTab) return;
+    // SECURITY: only allowlisted destinations may escape the sandbox.
+    if(!isAllowedUrl(href)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    /* Open a clean tab from the unsandboxed parent, within the click gesture.
+       Suppress the native navigation ONLY when the parent open actually
+       succeeded; otherwise (no parent, cross-origin, or popup blocked) let the
+       native target="_blank" proceed so the allowed link still opens. We do NOT
+       fall back to the async postMessage bridge here: by the time it runs the
+       user activation is gone, so it cannot reopen a blocked popup — it would
+       just swallow the click and leave the link dead. */
+    if(openInParent(href)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+
+  var nativeOpen = window.open;
+  window.open = function(rawUrl, target, features){
+    if(!isAllowedUrl(rawUrl)) return null;
+    if(openInParent(rawUrl)) return null;
     if(requestParentPopup(rawUrl)) return null;
     return nativeOpen ? nativeOpen.call(window, normalizeUrl(rawUrl).href, target, features) : null;
   };

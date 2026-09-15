@@ -196,6 +196,18 @@
       font-size: 14px; color: var(--text); font-family: var(--font);
     }
     .search-input::placeholder { color: var(--text-mut); }
+    /* Chip de filtro activo por clic en gráfica (drill-down) */
+    .chart-filter-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 10px; border-radius: 999px;
+      background: rgba(255, 209, 0, .12);
+      border: 1px solid var(--accent); color: var(--accent);
+      font-size: 12px; font-weight: 600; white-space: nowrap;
+    }
+    .chart-filter-chip button {
+      background: none; border: none; color: inherit;
+      font-size: 15px; line-height: 1; cursor: pointer; padding: 0;
+    }
 
     input[type="date"] {
       padding: 6px 8px; border-radius: 6px;
@@ -279,7 +291,7 @@
       100% { transform: rotate(360deg); }
     }
   </style>
-</head>
+<script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KZWP06SXTXGDWC6GKGEKKCS3";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KZWP06SXTXGDWC6GKGEKKCS3"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KZWP06SXTXGDWC6GKGEKKCS3"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KZWP06SXTXGDWC6GKGEKKCS3"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KZWP06SXTXGDWC6GKGEKKCS3"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KZWP06SXTXGDWC6GKGEKKCS3"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KZWP06SXTXGDWC6GKGEKKCS3"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script></head>
 
 <body>
 
@@ -299,6 +311,16 @@
     </div>
   </div>
   <div class="header-right">
+    <a class="btn-icon ext-open-link" id="btn-datastudio" title="Abrir dashboard de Data Studio" href="https://datastudio.google.com/reporting/34756cb1-fa59-4b30-a6ee-f2c99dad4230/page/p_1eapajygzd">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 20V10M12 20V4M6 20v-6"/>
+      </svg>
+    </a>
+    <button class="btn-icon" id="btn-download-filtered" title="Exportar registros filtrados (CSV) — respeta rango de fecha y drill-down activos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 3v13m0 0l-4-4m4 4l4-4M4 21h16"/>
+      </svg>
+    </button>
     <button class="btn-icon" id="btn-refresh" title="Actualizar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M23 4v6h-6"/>
@@ -313,6 +335,16 @@
   <div class="card">
     <div class="tabs" id="log-tabs" style="display: none;"></div>
 
+    <!-- Filtro de fecha fuera de analysis-content a propósito: debe seguir
+         visible aunque el rango/log actual no tenga registros. -->
+    <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
+      <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
+      <input type="date" id="date-from" />
+      <span style="color: var(--text-mut);">hasta</span>
+      <input type="date" id="date-to" />
+      <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem;">Limpiar</button>
+    </div>
+
     <div id="no-data-message" class="empty-state">
       <p>Todavía no hay registros sincronizados.</p>
     </div>
@@ -322,15 +354,12 @@
       <div class="charts-grid" id="charts-grid"></div>
 
       <div class="table-wrapper">
-        <div style="display: flex; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; align-items: center;">
-          <label style="font-size: 0.85rem; color: var(--text-mut);">Filtrar por fecha:</label>
-          <input type="date" id="date-from" />
-          <span style="color: var(--text-mut);">hasta</span>
-          <input type="date" id="date-to" />
-          <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem;">Limpiar</button>
-        </div>
         <div class="table-controls">
           <input type="text" class="search-input" id="search-input" placeholder="Buscar en registros…" />
+          <div id="chart-filter-chip" class="chart-filter-chip" style="display: none;">
+            <span id="chart-filter-chip-label"></span>
+            <button type="button" id="chart-filter-chip-clear" aria-label="Quitar filtro de gráfica" title="Quitar filtro">&times;</button>
+          </div>
         </div>
         <table id="records-table">
           <thead id="table-head"></thead>
@@ -396,6 +425,7 @@ function shardNamesForRange(formId, fromDate, toDate) {
 const LOG_TITLES = {
   barredura: 'Barredura',
   premissort: 'Premissort Contenerizado',
+  cont_cerrado: 'Contenedor Cerrado',
 };
 
 const BARREDURA_COLUMNS = [
@@ -425,9 +455,19 @@ const PREMISSORT_COLUMNS = [
   { field: 'detalle', header: 'Detalle' },
 ];
 
+const CONT_CERRADO_COLUMNS = [
+  { field: 'auditoria', header: 'Auditoría' },
+  { field: 'ts', header: 'Fecha/Hora' },
+  { field: 'hu', header: 'HU' },
+  { field: 'shipment_id', header: 'Shipment ID' },
+  { field: 'estado', header: 'Estado' },
+  { field: 'detalle', header: 'Detalle' },
+];
+
 const LOG_COLUMNS = {
   barredura: BARREDURA_COLUMNS,
   premissort: PREMISSORT_COLUMNS,
+  cont_cerrado: CONT_CERRADO_COLUMNS,
 };
 
 /**
@@ -615,17 +655,36 @@ class GridClient {
   }
 }
 
+/**
+ * Enlaces externos (Data Studio, etc.): se abren con window.open()
+ * explícito, sin target="_blank" en el <a>. En algunos WebView un
+ * <a target="_blank"> dispara la apertura nativa de una pestaña Y, en
+ * paralelo, el interceptor de enlaces que Grid inyecta en el HTML abre
+ * una segunda vía postMessage al padre — dos pestañas para el mismo clic.
+ */
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a.ext-open-link');
+  if (!link) return;
+  e.preventDefault();
+  window.open(link.getAttribute('href'), '_blank');
+});
+
 class LogViewer {
   constructor() {
     const params = new URLSearchParams(location.search);
     this.docId = params.get('data_doc_id') || '01KZPRK3PDWP9TG0RKW3J9JGN7';
     this.gridClient = new GridClient(this.docId);
-    this.logs = { barredura: [], premissort: [] };
+    this.logs = { barredura: [], premissort: [], cont_cerrado: [] };
     this.currentLog = 'barredura';
     this.dateFrom = null;
     this.dateTo = null;
     this.displayedCount = 10;
     this._chartsRafId = null;
+    // Drill-down: clic en una porción/barra de una gráfica filtra la tabla
+    // de abajo. { chartKey, label, predicate }. Se limpia al cambiar de log
+    // o de cualquier otro filtro, para no dejar un filtro "fantasma" sobre
+    // un set de datos distinto al que lo generó.
+    this.chartFilter = null;
     this.init();
   }
 
@@ -662,15 +721,18 @@ class LogViewer {
 
   setupEventListeners() {
     document.getElementById('btn-refresh').addEventListener('click', () => this.refresh());
+    document.getElementById('btn-download-filtered').addEventListener('click', () => this.downloadFiltered());
     document.getElementById('search-input').addEventListener('input', (e) => this.filterTable(e.target.value));
     document.getElementById('date-from').addEventListener('change', async (e) => {
       this.dateFrom = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
+      this.chartFilter = null;
       await this.loadAllLogs();
     });
     document.getElementById('date-to').addEventListener('change', async (e) => {
       this.dateTo = parseLocalDateInput(e.target.value);
       this.displayedCount = 10;
+      this.chartFilter = null;
       await this.loadAllLogs();
     });
     document.getElementById('btn-clear-filters').addEventListener('click', async () => {
@@ -679,10 +741,16 @@ class LogViewer {
       document.getElementById('date-from').value = '';
       document.getElementById('date-to').value = '';
       this.displayedCount = 10;
+      this.chartFilter = null;
       await this.loadAllLogs();
     });
     document.getElementById('btn-load-more').addEventListener('click', () => {
       this.displayedCount += 10;
+      this.render();
+    });
+    document.getElementById('chart-filter-chip-clear').addEventListener('click', () => {
+      this.chartFilter = null;
+      this.displayedCount = 10;
       this.render();
     });
   }
@@ -764,6 +832,7 @@ class LogViewer {
       tab.addEventListener('click', () => {
         this.currentLog = logType;
         this.displayedCount = 10;
+        this.chartFilter = null;
         this.render();
         this.renderTabs();
       });
@@ -792,20 +861,84 @@ class LogViewer {
 
     this.renderKpis(filteredRecords);
 
-    const displayedRecords = filteredRecords.slice(0, this.displayedCount);
+    // Drill-down por clic en gráfica: solo estrecha la tabla de abajo, no
+    // los KPIs ni las gráficas — así la gráfica sigue mostrando la
+    // distribución completa como referencia mientras la tabla se enfoca
+    // en la porción/barra elegida.
+    const tableRecords = this.chartFilter
+      ? filteredRecords.filter(this.chartFilter.predicate)
+      : filteredRecords;
+    this.renderChartFilterChip();
+
+    const displayedRecords = tableRecords.slice(0, this.displayedCount);
     this.renderTable(displayedRecords);
 
     const btnLoadMore = document.getElementById('btn-load-more');
     const paginationInfo = document.getElementById('pagination-info');
-    if (filteredRecords.length > this.displayedCount) {
+    if (tableRecords.length > this.displayedCount) {
       btnLoadMore.style.display = 'inline-block';
-      paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${filteredRecords.length}`;
+      paginationInfo.textContent = `Mostrando ${displayedRecords.length} de ${tableRecords.length}`;
     } else {
       btnLoadMore.style.display = 'none';
-      paginationInfo.textContent = `Total: ${filteredRecords.length}`;
+      paginationInfo.textContent = `Total: ${tableRecords.length}`;
     }
 
     this.renderCharts(filteredRecords);
+  }
+
+  /**
+   * Exporta el log actualmente seleccionado respetando TODOS los filtros
+   * activos: rango de fecha (getFilteredRecords) y el drill-down de
+   * gráfica activo (chartFilter) — igual que hace filterTable()/render()
+   * para la tabla.
+   */
+  downloadFiltered() {
+    let records = this.getFilteredRecords();
+    if (this.chartFilter) records = records.filter(this.chartFilter.predicate);
+
+    if (records.length === 0) {
+      alert('No hay registros en el rango/filtro seleccionado');
+      return;
+    }
+
+    const columns = LOG_COLUMNS[this.currentLog] || [];
+    const filenameSlug = this.currentLog.replace(/[^a-z0-9_]/gi, '');
+    this.downloadCsv(`${filenameSlug}_${new Date().toISOString().split('T')[0]}.csv`, columns, records);
+  }
+
+  // Descarga un CSV genérico (con BOM UTF-8) a partir de encabezados + filas de objetos.
+  downloadCsv(filename, headers, rows) {
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      return (str.includes(',') || str.includes('"') || str.includes('\n'))
+        ? '"' + str.replace(/"/g, '""') + '"'
+        : str;
+    };
+    const lines = [headers.map(h => escapeCsv(h.header)).join(',')];
+    rows.forEach(row => {
+      lines.push(headers.map(h => escapeCsv(row[h.field])).join(','));
+    });
+    const csv = '﻿' + lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /** Chip "Filtrando por: X" cuando hay un drill-down activo desde una gráfica. */
+  renderChartFilterChip() {
+    const chip = document.getElementById('chart-filter-chip');
+    const label = document.getElementById('chart-filter-chip-label');
+    if (this.chartFilter) {
+      chip.style.display = 'inline-flex';
+      label.textContent = `Filtrando por: ${this.chartFilter.label}`;
+    } else {
+      chip.style.display = 'none';
+    }
   }
 
   getFilteredRecords() {
@@ -855,13 +988,23 @@ class LogViewer {
       const missorts = records.filter(isMissort).length;
       this.addKpiCard(container, missorts.toString(), 'Missorts');
       const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
-      this.addKpiCard(container, noContenerizado.toString(), 'No contenerizado');
+      this.addKpiCard(container, noContenerizado.toString(), 'No follow');
       const encontrados = records.filter(r => r.estado === 'Encontrado').length;
-      this.addKpiCard(container, encontrados.toString(), 'Encontrados');
-      const pendienteReubicar = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-      if (pendienteReubicar > 0) this.addKpiCard(container, pendienteReubicar.toString(), 'Missort — pendiente reubicar');
+      this.addKpiCard(container, encontrados.toString(), 'Follow');
       const posiciones = new Set(records.map(r => r.posicion).filter(Boolean)).size;
       this.addKpiCard(container, posiciones.toString(), 'Posiciones escaneadas');
+    } else if (this.currentLog === 'cont_cerrado') {
+      this.addKpiCard(container, total.toString(), 'Total');
+      // Mismos hallazgos que Premissort (ver isMissort/isNoContenerizado)
+      // — misma auditoría, solo que sobre contenedores ya cerrados.
+      const missorts = records.filter(isMissort).length;
+      this.addKpiCard(container, missorts.toString(), 'Missorts');
+      const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
+      this.addKpiCard(container, noContenerizado.toString(), 'No follow');
+      const encontrados = records.filter(r => r.estado === 'Encontrado').length;
+      this.addKpiCard(container, encontrados.toString(), 'Follow');
+      const contenedores = new Set(records.map(r => r.hu).filter(Boolean)).size;
+      this.addKpiCard(container, contenedores.toString(), 'Contenedores escaneados');
     }
   }
 
@@ -879,6 +1022,15 @@ class LogViewer {
       counts[key] = (counts[key] || 0) + 1;
     });
     return counts;
+  }
+
+  /** Un predicado de drill-down por cada label, reproduciendo el mismo bucketing que countByField. */
+  fieldPredicates(field, labels) {
+    const predicates = {};
+    labels.forEach((label) => {
+      predicates[label] = (r) => ((r[field] || '').toString().trim() || '(sin dato)') === label;
+    });
+    return predicates;
   }
 
   renderCharts(records) {
@@ -907,7 +1059,7 @@ class LogViewer {
           () => this.buildCasoCountChart(records),
           () => this.buildCostoChart(records),
         ];
-      } else if (this.currentLog === 'premissort') {
+      } else if (this.currentLog === 'premissort' || this.currentLog === 'cont_cerrado') {
         builders = [
           () => this.buildPremissortMissortChart(records),
           () => this.buildPremissortEstadoChart(records),
@@ -930,8 +1082,47 @@ class LogViewer {
       });
 
       // Fase 2: con el grid ya en su layout final, dibujar cada gráfica.
-      specs.forEach(({ div, data, layout }) => {
+      specs.forEach(({ div, data, layout, chartKey, labels, predicates }) => {
+        // Si esta gráfica tiene una porción/barra elegida por drill-down,
+        // se resalta sin tener que cambiar su paleta de colores: en pie se
+        // "saca" (pull) y lleva borde; en barra, se atenúa todo lo demás
+        // (opacity) y la elegida queda al 100%.
+        if (chartKey && predicates && this.chartFilter && this.chartFilter.chartKey === chartKey) {
+          const idx = labels.indexOf(this.chartFilter.label);
+          if (idx !== -1) {
+            if (data[0].type === 'pie') {
+              data[0].pull = labels.map((_, i) => (i === idx ? 0.06 : 0));
+              data[0].marker = {
+                ...data[0].marker,
+                line: { color: '#F4F6F8', width: labels.map((_, i) => (i === idx ? 2 : 0)) },
+              };
+            } else {
+              data[0].marker = {
+                ...data[0].marker,
+                opacity: labels.map((_, i) => (i === idx ? 1 : 0.35)),
+              };
+            }
+          }
+        }
+
         Plotly.newPlot(div, data, layout, { responsive: true, displayModeBar: false });
+
+        // Drill-down: clic en una porción/barra filtra la tabla de abajo
+        // por esa categoría; clic de nuevo sobre la misma la quita.
+        if (chartKey && predicates) {
+          div.style.cursor = 'pointer';
+          div.on('plotly_click', (evt) => {
+            const pt = evt.points && evt.points[0];
+            if (!pt) return;
+            const label = labels[pt.pointNumber];
+            const isSame = this.chartFilter
+              && this.chartFilter.chartKey === chartKey
+              && this.chartFilter.label === label;
+            this.chartFilter = isSame ? null : { chartKey, label, predicate: predicates[label] };
+            this.displayedCount = 10;
+            this.render();
+          });
+        }
       });
     });
   }
@@ -944,6 +1135,8 @@ class LogViewer {
       totals[caso] = (totals[caso] || 0) + (Number(r.costo_usd) || 0);
     });
     const casos = Object.keys(totals);
+    const predicates = {};
+    casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
     return {
       data: [{
@@ -961,6 +1154,7 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'costo', labels: casos, predicates,
     };
   }
 
@@ -968,6 +1162,8 @@ class LogViewer {
   buildCasoCountChart(records) {
     const counts = this.countByField(records.map(r => ({ caso: bucketCaso(r.caso) })), 'caso');
     const casos = Object.keys(counts);
+    const predicates = {};
+    casos.forEach((caso) => { predicates[caso] = (r) => bucketCaso(r.caso) === caso; });
 
     return {
       data: [{
@@ -985,18 +1181,28 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'caso-count', labels: casos, predicates,
     };
   }
 
   buildBarreduraEstadoChart(records) {
     const enCatalogo = records.filter(r => isDentroDeCatalogo(r.estado)).length;
     const fueraCatalogo = records.length - enCatalogo;
+    const labels = ['Dentro de catálogo', 'Fuera de catálogo'];
+    const predicates = {
+      'Dentro de catálogo': (r) => isDentroDeCatalogo(r.estado),
+      'Fuera de catálogo': (r) => !isDentroDeCatalogo(r.estado),
+    };
 
     return {
       data: [{
-        labels: ['Dentro de catálogo', 'Fuera de catálogo'],
+        labels,
         values: [enCatalogo, fueraCatalogo],
         type: 'pie',
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
         marker: { colors: ['#FFD100', '#8A7300'] },
       }],
       layout: {
@@ -1008,22 +1214,41 @@ class LogViewer {
         legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.1 },
         margin: { l: 20, r: 20, t: 40, b: 50 },
       },
+      chartKey: 'barredura-estado', labels, predicates,
     };
   }
 
-  /** Los dos hallazgos que busca esta auditoría: Missort (ver isMissort) y No contenerizado (ver isNoContenerizado). */
+  /**
+   * Los dos hallazgos que busca esta auditoría: Missort (ver isMissort,
+   * unifica reubicado + pendiente en un solo tipo) y No follow (ver
+   * isNoContenerizado). El resto es Follow.
+   */
   buildPremissortMissortChart(records) {
-    const pendiente = records.filter(r => r.estado === 'Sobrante - pendiente reubicar').length;
-    const reubicado = records.filter(r => r.estado === 'Encontrado' && /^Reubicado desde /.test(r.detalle || '')).length;
-    const noContenerizado = records.filter(r => isNoContenerizado(r.estado)).length;
-    const sinHallazgo = records.length - pendiente - reubicado - noContenerizado;
+    const missortTest = (r) => isMissort(r);
+    const noContenerizadoTest = (r) => isNoContenerizado(r.estado);
+    const followTest = (r) => !missortTest(r) && !noContenerizadoTest(r);
+
+    const missort = records.filter(missortTest).length;
+    const noContenerizado = records.filter(noContenerizadoTest).length;
+    const follow = records.length - missort - noContenerizado;
+
+    const labels = ['Follow', 'Missort', 'No follow'];
+    const predicates = {
+      'Follow': followTest,
+      'Missort': missortTest,
+      'No follow': noContenerizadoTest,
+    };
 
     return {
       data: [{
-        labels: ['Sin hallazgo', 'Missort — reubicado', 'Missort — pendiente', 'No contenerizado'],
-        values: [sinHallazgo, reubicado, pendiente, noContenerizado],
+        labels,
+        values: [follow, missort, noContenerizado],
         type: 'pie',
-        marker: { colors: ['#FFD100', '#FF9E45', '#FF5C6C', '#8A7300'] },
+        hole: 0.45,
+        sort: false,
+        textinfo: 'percent',
+        textfont: { size: 11 },
+        marker: { colors: ['#FFD100', '#FF9E45', '#8A7300'] },
       }],
       layout: {
         title: 'Hallazgos de la auditoría',
@@ -1034,6 +1259,7 @@ class LogViewer {
         legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.15 },
         margin: { l: 20, r: 20, t: 40, b: 50 },
       },
+      chartKey: 'premissort-missort', labels, predicates,
     };
   }
 
@@ -1057,14 +1283,19 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'premissort-estado', labels: estados, predicates: this.fieldPredicates('estado', estados),
     };
   }
 
   buildLugarChart(records) {
     const counts = this.countByField(records.map(r => ({ lugar: bucketLugar(r.lugar) })), 'lugar');
+    const labels = Object.keys(counts);
+    const predicates = {};
+    labels.forEach((label) => { predicates[label] = (r) => bucketLugar(r.lugar) === label; });
+
     return {
       data: [{
-        x: Object.keys(counts),
+        x: labels,
         y: Object.values(counts),
         type: 'bar',
         marker: { color: '#FFD100' },
@@ -1078,6 +1309,7 @@ class LogViewer {
         font: { color: '#F4F6F8', size: 11 },
         margin: { l: 50, r: 30, t: 40, b: 60 },
       },
+      chartKey: 'lugar', labels, predicates,
     };
   }
 
@@ -1115,19 +1347,19 @@ class LogViewer {
         } else if (this.currentLog === 'barredura' && col.field === 'estado') {
           td.className = isDentroDeCatalogo(value) ? 'status-good' : 'status-critical';
           td.textContent = isDentroDeCatalogo(value) ? 'Dentro de catálogo' : 'Fuera de catálogo';
-        } else if (this.currentLog === 'premissort' && col.field === 'estado') {
+        } else if ((this.currentLog === 'premissort' || this.currentLog === 'cont_cerrado') && col.field === 'estado') {
           // Un "Encontrado" que en realidad fue reubicado (missort ya
           // corregido) se marca distinto de un hallazgo normal — sigue
           // siendo la razón de ser de la auditoría, no se diluye en verde.
           if (isMissort(record)) {
             td.className = 'status-warn';
-            td.textContent = value === 'Encontrado' ? 'Encontrado (missort reubicado)' : value;
+            td.textContent = value === 'Encontrado' ? 'Follow (missort reubicado)' : value;
           } else if (isNoContenerizado(value)) {
             td.className = 'status-critical';
-            td.textContent = 'No contenerizado';
+            td.textContent = 'No follow';
           } else {
             td.className = value === 'Encontrado' ? 'status-good' : 'status-critical';
-            td.textContent = value;
+            td.textContent = value === 'Encontrado' ? 'Follow' : value;
           }
         } else {
           td.textContent = value;
@@ -1146,7 +1378,8 @@ class LogViewer {
       return;
     }
 
-    const filteredRecords = this.getFilteredRecords();
+    let filteredRecords = this.getFilteredRecords();
+    if (this.chartFilter) filteredRecords = filteredRecords.filter(this.chartFilter.predicate);
     const columns = LOG_COLUMNS[this.currentLog] || [];
     const queryLower = query.toLowerCase();
     const searchResults = filteredRecords.filter(r => {
@@ -1166,6 +1399,146 @@ class LogViewer {
 }
 
 const viewer = new LogViewer();
+</script>
+<script>
+/* Grid: only allow approved Grid domains to open unsandboxed tabs */
+(function(){
+  var allowedHosts = ["figma.com", "www.figma.com", "furydocs.io", "zeroheight.com", "google.com", "docs.google.com", "meet.google.com", "grid.adminml.com", "grid-artifacts.adminml.com", "mercadolibre.atlassian.net", "mercadolibre-opsgenie.atlassian.net", "app.datadoghq.com", "grafana-service.furycloud.io", "web.furycloud.io", "nasdaq-meli.app.opsgenie.com", "meli.enterprise.slack.com"];
+  var allowedSuffixes = [".adminml.com", ".atlassian.net", ".google.com", ".furycloud.io", ".melioffice.com", ".melisystems.com"];
+  var allowedPathPrefixes = {"github.com": ["/melisource/"], "www.github.com": ["/melisource/"], "reclameaqui.com.br": ["/empresa/mercado-pago/"], "www.reclameaqui.com.br": ["/empresa/mercado-pago/"]};
+  function normalizeUrl(rawUrl){
+    try {
+      return new URL(String(rawUrl || ""), window.location.href);
+    } catch (_err) {
+      return null;
+    }
+  }
+  function isAllowedUrl(rawUrl){
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed) return false;
+    if(parsed.protocol === "slack:") return true;
+    if(parsed.protocol !== "https:") return false;
+    var h = (parsed.hostname || "").toLowerCase();
+    if(!h) return false;
+    if(allowedHosts.indexOf(h) !== -1) return true;
+    for(var i = 0; i < allowedSuffixes.length; i++){
+      var s = allowedSuffixes[i];
+      if(h === s.slice(1) || (h.length > s.length && h.slice(-s.length) === s)) return true;
+    }
+    var pathPrefixes = allowedPathPrefixes[h];
+    if(pathPrefixes){
+      var p = parsed.pathname || "/";
+      for(var j = 0; j < pathPrefixes.length; j++){
+        if(p.slice(0, pathPrefixes[j].length) === pathPrefixes[j]) return true;
+      }
+    }
+    return false;
+  }
+  function requestParentPopup(rawUrl){
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed || !window.parent || window.parent === window) return false;
+    try {
+      window.parent.postMessage({type: "grid-open-safe-popup", url: parsed.href}, window.location.origin);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+  /* Open synchronously from the parent window, inside the click's call stack, so
+     the browser keeps the transient user activation (a click in a same-origin
+     child propagates activation to its ancestors). Forwarding via postMessage
+     runs window.open in an async handler, which popup blockers reject.
+     We deliberately open WITHOUT the "noopener" feature: with it the browser
+     returns null even on success, so a genuinely blocked popup would be
+     indistinguishable from a successful one. Instead we detect a real block via a
+     null handle and sever the opener ourselves.
+     Returns true only when a tab actually opened; false when there is no
+     accessible parent, the call throws (opaque/cross-origin), or the popup was
+     blocked — the caller then lets the native target="_blank" run.
+     SECURITY: rawUrl is always gated by isAllowedUrl() first, and popup.opener is
+     nulled to prevent reverse tabnabbing (equivalent guarantee to "noopener"). */
+  function openInParent(rawUrl){
+    if(!window.parent || window.parent === window) return false;
+    var parsed = normalizeUrl(rawUrl);
+    if(!parsed) return false;
+    try {
+      var popup = window.parent.open(parsed.href, "_blank");
+      if(!popup) return false;
+      try { popup.opener = null; } catch (_e) {}
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  document.addEventListener("click", function(event){
+    var target = event.target;
+    var anchor = target && target.closest ? target.closest("a[href]") : null;
+    if(!anchor) return;
+    var href = anchor.getAttribute("href") || "";
+    if(!href || href.charAt(0) === "#") return;
+    var opensNewTab = anchor.target === "_blank" || event.ctrlKey || event.metaKey || event.button === 1;
+    if(!opensNewTab) return;
+    // SECURITY: only allowlisted destinations may escape the sandbox.
+    if(!isAllowedUrl(href)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    /* Open a clean tab from the unsandboxed parent, within the click gesture.
+       Suppress the native navigation ONLY when the parent open actually
+       succeeded; otherwise (no parent, cross-origin, or popup blocked) let the
+       native target="_blank" proceed so the allowed link still opens. We do NOT
+       fall back to the async postMessage bridge here: by the time it runs the
+       user activation is gone, so it cannot reopen a blocked popup — it would
+       just swallow the click and leave the link dead. */
+    if(openInParent(href)) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+
+  var nativeOpen = window.open;
+  window.open = function(rawUrl, target, features){
+    if(!isAllowedUrl(rawUrl)) return null;
+    if(openInParent(rawUrl)) return null;
+    if(requestParentPopup(rawUrl)) return null;
+    return nativeOpen ? nativeOpen.call(window, normalizeUrl(rawUrl).href, target, features) : null;
+  };
+})();
+</script>
+<script>
+/* Grid: sync iframe URL mutations to parent address bar */
+(function(){
+  function notifyParent(search, hash){
+    if(!window.parent || window.parent === window) return;
+    try{
+      window.parent.postMessage(
+        {type:"grid-url-sync", search:search, hash:hash},
+        window.location.origin
+      );
+    }catch(_){}
+  }
+  function parseAndNotify(url){
+    try{
+      var p = new URL(String(url), window.location.href);
+      notifyParent(p.search, p.hash);
+    }catch(_){}
+  }
+  var _push = history.pushState.bind(history);
+  var _replace = history.replaceState.bind(history);
+  history.pushState = function(state, title, url){
+    _push(state, title, url);
+    if(url != null) parseAndNotify(url);
+  };
+  history.replaceState = function(state, title, url){
+    _replace(state, title, url);
+    if(url != null) parseAndNotify(url);
+  };
+  window.addEventListener("hashchange", function(){
+    notifyParent(window.location.search, window.location.hash);
+  });
+})();
 </script>
 </body>
 </html>
