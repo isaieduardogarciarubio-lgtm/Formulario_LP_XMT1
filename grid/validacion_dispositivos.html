@@ -100,6 +100,7 @@
       flex-shrink: 0;
       object-fit: contain;
       border-radius: var(--r-sm);
+      color: var(--text);
     }
 
     .nav-actions {
@@ -243,26 +244,6 @@
       color: var(--on-state);
     }
 
-    .search-input {
-      padding: 12px 16px;
-      font-family: inherit;
-      font-size: 14px;
-      border: 1px solid var(--border);
-      border-radius: var(--r-md);
-      background: var(--surface);
-      color: var(--text);
-      transition: border-color 0.2s;
-    }
-
-    .search-input:focus {
-      outline: none;
-      border-color: var(--state);
-    }
-
-    .search-input::placeholder {
-      color: var(--text-mut);
-    }
-
     /* ──── TOGGLE HANDHELD / CÁMARA ──── */
     /* Handheld (lector HID integrado que "teclea" el código + Enter) es el */
     /* modo principal de captura; Cámara queda como alternativa.            */
@@ -314,6 +295,211 @@
 
     .scan-hint.error {
       color: var(--c-red);
+    }
+
+    /* ──── ESCANEO KEYBOARDLESS (patrón hh-hid-input) ──── */
+    /* Input real oculto (1x1px, fuera de pantalla) que recibe lo que        */
+    /* "teclea" el lector HID de la handheld sin disparar el teclado en      */
+    /* pantalla en dispositivos táctiles. El área visible es solo el ícono   */
+    /* + último código leído; la entrada manual deliberada vive aparte en    */
+    /* un modal con su propio input real (ahí sí puede aparecer el teclado). */
+    .hh-hid-input {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+      border: 0;
+      padding: 0;
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .hh-scan-area {
+      flex: 1;
+      min-height: 220px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px 24px 12px;
+      cursor: default;
+      user-select: none;
+      transition: background 0.2s;
+      border-radius: var(--r-lg);
+    }
+
+    .hh-icon {
+      color: var(--text);
+      margin-bottom: 20px;
+      transition: color 0.3s;
+    }
+
+    .hh-icon svg {
+      width: 72px;
+      height: 72px;
+      display: block;
+    }
+
+    .hh-icon.idle {
+      animation: hh-float 4s ease-in-out infinite;
+    }
+
+    .hh-icon.processing {
+      color: var(--text-mut);
+      animation: hh-fade 0.8s ease-in-out infinite alternate;
+    }
+
+    @keyframes hh-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-7px); }
+    }
+
+    @keyframes hh-fade {
+      from { opacity: 1; }
+      to { opacity: 0.4; }
+    }
+
+    .hh-last-code {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-mut);
+      letter-spacing: 0.06em;
+      font-variant-numeric: tabular-nums;
+      opacity: 0;
+      transition: opacity 0.3s ease 0.1s;
+    }
+
+    .hh-last-code.visible {
+      opacity: 0.6;
+    }
+
+    .btn-manual-hid {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--r-pill);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+      margin: 8px auto 0;
+    }
+
+    .btn-manual-hid:hover {
+      color: var(--text);
+      border-color: var(--c-orange);
+    }
+
+    .hh-manual-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: flex-end;
+      justify-content: stretch;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease;
+      z-index: 200;
+    }
+
+    .hh-manual-modal.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .hh-manual-inner {
+      width: 100%;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      border-radius: 20px 20px 0 0;
+      padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+      transform: translateY(100%);
+      transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+
+    .hh-manual-modal.open .hh-manual-inner {
+      transform: translateY(0);
+    }
+
+    .hh-manual-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-mut);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 12px;
+    }
+
+    .hh-manual-input {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-md);
+      padding: 14px 16px;
+      font-size: 16px;
+      font-family: inherit;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+      letter-spacing: 0.02em;
+    }
+
+    .hh-manual-input:focus {
+      border-color: var(--text);
+    }
+
+    .hh-manual-input::placeholder {
+      color: var(--text-mut);
+    }
+
+    .hh-manual-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .hh-manual-cancel {
+      flex: 1;
+      padding: 13px;
+      background: transparent;
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-md);
+      color: var(--text-mut);
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .hh-manual-cancel:hover {
+      color: var(--text);
+      background: var(--surface-2);
+    }
+
+    .hh-manual-confirm {
+      flex: 2;
+      padding: 13px;
+      background: var(--text);
+      border: none;
+      border-radius: var(--r-md);
+      color: var(--bg);
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+
+    .hh-manual-confirm:hover {
+      opacity: 0.86;
     }
 
     /* ──── RESULTADO ──── */
@@ -621,7 +807,7 @@
   <section class="stage active" id="stage-scanner" data-state="valid">
     <nav class="nav">
       <div class="brand">
-        <img id="navbar-logo-img" class="navbar-logo" alt="Validate" />
+        <svg id="navbar-logo-img" class="navbar-logo" viewBox="0 -960 960 960" fill="currentColor" aria-label="Devices"><path d="M480-540ZM80-160v-80h400v80H80Zm120-120q-33 0-56.5-23.5T120-360v-360q0-33 23.5-56.5T200-800h560q33 0 56.5 23.5T840-720H200v360h280v80H200Zm600 40v-320H640v320h160Zm-180 80q-25 0-42.5-17.5T560-220v-360q0-25 17.5-42.5T620-640h200q25 0 42.5 17.5T880-580v360q0 25-17.5 42.5T820-160H620Zm100-300q13 0 21.5-9t8.5-21q0-13-8.5-21.5T720-520q-12 0-21 8.5t-9 21.5q0 12 9 21t21 9Zm0 60Z"/></svg>
       </div>
       <div class="mode-toggle">
         <button class="mode-btn active" id="btn-mode-entrada" data-mode="entrada">Entrada</button>
@@ -656,7 +842,7 @@
   <section class="stage" id="stage-valid" data-state="valid">
     <nav class="nav">
       <div class="brand">
-        <img id="navbar-logo-img-2" class="navbar-logo" alt="Validate" />
+        <svg id="navbar-logo-img-2" class="navbar-logo" viewBox="0 -960 960 960" fill="currentColor" aria-label="Devices"><path d="M480-540ZM80-160v-80h400v80H80Zm120-120q-33 0-56.5-23.5T120-360v-360q0-33 23.5-56.5T200-800h560q33 0 56.5 23.5T840-720H200v360h280v80H200Zm600 40v-320H640v320h160Zm-180 80q-25 0-42.5-17.5T560-220v-360q0-25 17.5-42.5T620-640h200q25 0 42.5 17.5T880-580v360q0 25-17.5 42.5T820-160H620Zm100-300q13 0 21.5-9t8.5-21q0-13-8.5-21.5T720-520q-12 0-21 8.5t-9 21.5q0 12 9 21t21 9Zm0 60Z"/></svg>
       </div>
       <div class="nav-actions">
         <button class="icon-btn" id="btn-debug-2" title="Depuración">
@@ -688,7 +874,7 @@
   <section class="stage" id="stage-denied" data-state="denied">
     <nav class="nav">
       <div class="brand">
-        <img id="navbar-logo-img-3" class="navbar-logo" alt="Validate" />
+        <svg id="navbar-logo-img-3" class="navbar-logo" viewBox="0 -960 960 960" fill="currentColor" aria-label="Devices"><path d="M480-540ZM80-160v-80h400v80H80Zm120-120q-33 0-56.5-23.5T120-360v-360q0-33 23.5-56.5T200-800h560q33 0 56.5 23.5T840-720H200v360h280v80H200Zm600 40v-320H640v320h160Zm-180 80q-25 0-42.5-17.5T560-220v-360q0-25 17.5-42.5T620-640h200q25 0 42.5 17.5T880-580v360q0 25-17.5 42.5T820-160H620Zm100-300q13 0 21.5-9t8.5-21q0-13-8.5-21.5T720-520q-12 0-21 8.5t-9 21.5q0 12 9 21t21 9Zm0 60Z"/></svg>
       </div>
       <div class="nav-actions">
         <button class="icon-btn" id="btn-debug-3" title="Depuración">
@@ -972,22 +1158,10 @@
       }
 
       async init() {
-        this.loadLogo();
         await this.loadUser();
         await this.loadDevices();
         this.bindEvents();
         this.applyScanMode();
-      }
-
-      loadLogo() {
-        const url = "https://grid.adminml.com/d/" + NAVBAR_LOGO_DOC_ID + "?dl=1";
-        ["navbar-logo-img", "navbar-logo-img-2", "navbar-logo-img-3"].forEach((id) => {
-          const navImg = document.getElementById(id);
-          if (navImg) {
-            navImg.src = url;
-            navImg.style.display = "block";
-          }
-        });
       }
 
       async loadUser() {
@@ -1045,36 +1219,133 @@
         }
       }
 
-      // Input siempre enfocado y auto-reenfocado: el lector HID solo
-      // "escribe" donde está el foco. Enter confirma, igual que la
-      // búsqueda manual que reemplaza.
+      // Input real oculto (inputmode alternando none/text) que recibe lo que
+      // "teclea" el lector HID de la handheld sin abrir el teclado en
+      // pantalla en dispositivos táctiles — mismo patrón que Premissort
+      // Contenerizado / Contenedor Cerrado en captura_auditoria.html.
+      // El foco se re-arma en cada blur; si el operador toca deliberadamente
+      // el área de escaneo, inputmode pasa a "text" tras 50ms (armHid) para
+      // permitir escritura manual sin que el teclado aparezca de golpe con
+      // cada ráfaga del lector.
       enterHandheldState() {
         this.scanner.stop();
         const body = document.getElementById("scanner-body");
-        body.innerHTML = `<input type="text" class="search-input" id="handheld-input" placeholder="Escanea con el lector..." style="width: 100%;" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />`;
+        body.innerHTML = "";
 
         const hint = document.getElementById("scan-hint");
-        hint.textContent = "Modo handheld — escanea con el lector (o escribe y Enter).";
+        hint.textContent = "Modo handheld — escanea con el lector.";
         hint.classList.remove("error");
 
-        const input = document.getElementById("handheld-input");
+        const hidInput = document.createElement("input");
+        hidInput.type = "text";
+        hidInput.className = "hh-hid-input";
+        hidInput.setAttribute("inputmode", "none");
+        hidInput.setAttribute("autocomplete", "off");
+        hidInput.setAttribute("autocorrect", "off");
+        hidInput.setAttribute("autocapitalize", "off");
+        hidInput.spellcheck = false;
+        body.appendChild(hidInput);
 
-        input.addEventListener("keydown", (e) => {
+        const scanArea = document.createElement("div");
+        scanArea.className = "hh-scan-area";
+        const iconWrap = document.createElement("div");
+        iconWrap.className = "hh-icon idle";
+        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10.01"/><line x1="10" y1="10" x2="10" y2="10.01"/><line x1="14" y1="10" x2="14" y2="10.01"/><line x1="18" y1="10" x2="18" y2="10.01"/><line x1="6" y1="14" x2="18" y2="14"/></svg>`;
+        scanArea.appendChild(iconWrap);
+        const lastCodeEl = document.createElement("div");
+        lastCodeEl.className = "hh-last-code";
+        scanArea.appendChild(lastCodeEl);
+        body.appendChild(scanArea);
+        scanArea.addEventListener("click", () => hidInput.focus({ preventScroll: true }));
+
+        let modalOpen = false;
+        const isActive = () =>
+          !!body &&
+          body.contains(hidInput) &&
+          this.scanMode === "handheld" &&
+          !modalOpen;
+
+        let raceArmed = false;
+        const armHid = () => {
+          if (!isActive()) return;
+          if (raceArmed && document.activeElement === hidInput && hidInput.getAttribute("inputmode") === "text") return;
+          raceArmed = false;
+          hidInput.setAttribute("inputmode", "none");
+          hidInput.focus({ preventScroll: true });
+          setTimeout(() => {
+            if (!isActive() || document.activeElement !== hidInput) return;
+            hidInput.setAttribute("inputmode", "text");
+            raceArmed = true;
+          }, 50);
+        };
+
+        hidInput.addEventListener("focus", () => iconWrap.classList.add("armed"));
+        hidInput.addEventListener("blur", () => {
+          iconWrap.classList.remove("armed");
+          raceArmed = false;
+          requestAnimationFrame(armHid);
+        });
+
+        hidInput.addEventListener("keydown", (e) => {
           if (e.key !== "Enter") return;
           e.preventDefault();
-          const val = input.value.trim();
+          const raw = hidInput.value.trim();
+          if (!raw || this.scanLock) return;
+          hidInput.value = "";
+          lastCodeEl.textContent = raw;
+          lastCodeEl.classList.add("visible");
+          this.onDetect(raw);
+        });
+
+        armHid();
+
+        const manualBtn = document.createElement("button");
+        manualBtn.type = "button";
+        manualBtn.className = "btn-manual-hid";
+        manualBtn.setAttribute("aria-label", "Escribir manualmente");
+        manualBtn.innerHTML = `<svg viewBox="0 -960 960 960" width="18" height="18" fill="currentColor"><path d="M480-40 320-200h320L480-40ZM160-280q-33 0-56.5-23.5T80-360v-400q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v400q0 33-23.5 56.5T800-280H160Zm0-80h640v-400H160v400Zm160-40h320v-80H320v80ZM200-520h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80ZM200-640h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80Zm120 0h80v-80h-80v80ZM160-360v-400 400Z"/></svg>`;
+        body.appendChild(manualBtn);
+
+        const modal = document.createElement("div");
+        modal.className = "hh-manual-modal";
+        modal.innerHTML = `
+          <div class="hh-manual-inner">
+            <p class="hh-manual-label">Driver ID, Device ID o QR</p>
+            <input type="text" class="hh-manual-input" placeholder="Escribe el código" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+            <div class="hh-manual-actions">
+              <button type="button" class="hh-manual-cancel">Cancelar</button>
+              <button type="button" class="hh-manual-confirm">Confirmar</button>
+            </div>
+          </div>
+        `;
+        body.appendChild(modal);
+
+        const modalInput = modal.querySelector(".hh-manual-input");
+        const openModal = () => {
+          modalOpen = true;
+          modal.classList.add("open");
+          setTimeout(() => modalInput.focus(), 60);
+        };
+        const closeModal = () => {
+          modalOpen = false;
+          modal.classList.remove("open");
+          setTimeout(armHid, 80);
+        };
+        const confirmModal = () => {
+          const val = modalInput.value.trim();
           if (!val) return;
-          input.value = "";
+          modalInput.value = "";
+          closeModal();
           this.onDetect(val);
-        });
+        };
 
-        input.addEventListener("blur", () => {
-          setTimeout(() => {
-            if (this.scanMode === "handheld" && document.body.contains(input)) input.focus();
-          }, 50);
+        manualBtn.addEventListener("click", openModal);
+        modal.querySelector(".hh-manual-cancel").addEventListener("click", closeModal);
+        modal.querySelector(".hh-manual-confirm").addEventListener("click", confirmModal);
+        modalInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); confirmModal(); }
         });
-
-        setTimeout(() => input.focus(), 60);
+        modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
       }
 
       async enterCameraState() {
@@ -1153,7 +1424,20 @@
           .toLowerCase();
       }
 
+      // Evita procesar un segundo escaneo mientras el primero sigue en
+      // vuelo (ej. dos ráfagas rápidas de la handheld mientras aún se
+      // espera la escritura en devices_master/scan_master).
       async onDetect(value) {
+        if (this.scanLock) return;
+        this.scanLock = true;
+        try {
+          await this._onDetectInner(value);
+        } finally {
+          this.scanLock = false;
+        }
+      }
+
+      async _onDetectInner(value) {
         DebugConsole.log(`Detectado: ${value}`, "info");
         this.scanner.stop();
 
@@ -1469,9 +1753,6 @@
         DebugConsole.log(`Abriendo foto: ${deviceId}`, "info");
       }
     }
-
-    // Constantes de logos
-    const NAVBAR_LOGO_DOC_ID = "01KYGCGRZHJT8JP7Q1WRZKRX6C";
 
     // Iniciar app
     const app = new ValidacionApp();
