@@ -779,6 +779,7 @@
         <span style="color: var(--text-mut);">hasta</span>
         <input type="date" id="date-to" style="padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);" />
         <button id="btn-clear-filters" class="btn-secondary" style="font-size: 0.85rem; padding: 6px 12px;">Limpiar</button>
+        <button id="btn-download-hv-shipments" style="display: none; font-size: 0.85rem; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #1A1A1A; font-weight: 600; cursor: pointer;">Descargar shipments (Template 15)</button>
       </div>
 
       <!-- Filtro por área (lugar) — solo Barredura. Misma razón: fuera de
@@ -1901,6 +1902,7 @@
     setupEventListeners() {
       document.getElementById('btn-refresh').addEventListener('click', () => this.refreshLogs());
       document.getElementById('btn-download-filtered').addEventListener('click', () => this.downloadFiltered());
+      document.getElementById('btn-download-hv-shipments').addEventListener('click', () => this.downloadHvShipmentsTemplate());
       document.getElementById('btn-upload-catalog').addEventListener('click', () => {
         document.getElementById('catalog-file-input').click();
       });
@@ -2177,6 +2179,11 @@
       const isBarredura = this.currentLog === 'barredura';
       document.getElementById('barredura-area-filter-wrap').style.display = isBarredura ? 'flex' : 'none';
       if (isBarredura) this.populateAreaFilter();
+
+      // Botón exclusivo de Auditoría HV — visible en esa auditoría sin
+      // importar si el filtro de fecha actual deja 0 registros o no.
+      document.getElementById('btn-download-hv-shipments').style.display =
+        this.currentLog === 'auditoria_hv' ? 'inline-block' : 'none';
 
       const allRecords = this.logs[this.currentLog];
 
@@ -3630,6 +3637,31 @@
         records
       );
       this.showNotification(`Exportado · ${records.length} registros`, 'success');
+    }
+
+    /**
+     * Exclusivo de Auditoría HV — CSV en el formato del Template 15 de
+     * "Entities and Configurations / Envíos - Cambios de estado": una sola
+     * columna "shipments", sin encabezado propio de la app ni columnas
+     * extra. Respeta el mismo rango de fecha y drill-down de gráfica que
+     * downloadFiltered.
+     */
+    downloadHvShipmentsTemplate() {
+      let records = this.getFilteredRecords();
+      if (this.chartFilter) records = records.filter(this.chartFilter.predicate);
+
+      const shipments = [...new Set(records.map(r => r.shipment_id).filter(Boolean).map(String))];
+      if (shipments.length === 0) {
+        this.showNotification('No hay shipments en el rango/filtro seleccionado', 'error');
+        return;
+      }
+
+      this.downloadCsv(
+        `auditoria_hv_shipments_${new Date().toISOString().split('T')[0]}.csv`,
+        [{ field: 'shipments', header: 'shipments' }],
+        shipments.map(s => ({ shipments: s }))
+      );
+      this.showNotification(`Exportado · ${shipments.length} shipments`, 'success');
     }
 
     // Descarga un CSV genérico (con BOM UTF-8) a partir de encabezados +
