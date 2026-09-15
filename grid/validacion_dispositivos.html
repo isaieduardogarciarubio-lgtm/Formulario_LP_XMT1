@@ -100,7 +100,6 @@
       flex-shrink: 0;
       object-fit: contain;
       border-radius: var(--r-sm);
-      color: var(--text);
     }
 
     .nav-actions {
@@ -807,7 +806,7 @@
   <section class="stage active" id="stage-scanner" data-state="valid">
     <nav class="nav">
       <div class="brand">
-        <svg id="navbar-logo-img" class="navbar-logo" viewBox="0 -960 960 960" fill="currentColor" aria-label="Devices"><path d="M480-540ZM80-160v-80h400v80H80Zm120-120q-33 0-56.5-23.5T120-360v-360q0-33 23.5-56.5T200-800h560q33 0 56.5 23.5T840-720H200v360h280v80H200Zm600 40v-320H640v320h160Zm-180 80q-25 0-42.5-17.5T560-220v-360q0-25 17.5-42.5T620-640h200q25 0 42.5 17.5T880-580v360q0 25-17.5 42.5T820-160H620Zm100-300q13 0 21.5-9t8.5-21q0-13-8.5-21.5T720-520q-12 0-21 8.5t-9 21.5q0 12 9 21t21 9Zm0 60Z"/></svg>
+        <img id="navbar-logo-img" class="navbar-logo" alt="Validate" />
       </div>
       <div class="mode-toggle">
         <button class="mode-btn active" id="btn-mode-entrada" data-mode="entrada">Entrada</button>
@@ -842,7 +841,7 @@
   <section class="stage" id="stage-valid" data-state="valid">
     <nav class="nav">
       <div class="brand">
-        <svg id="navbar-logo-img-2" class="navbar-logo" viewBox="0 -960 960 960" fill="currentColor" aria-label="Devices"><path d="M480-540ZM80-160v-80h400v80H80Zm120-120q-33 0-56.5-23.5T120-360v-360q0-33 23.5-56.5T200-800h560q33 0 56.5 23.5T840-720H200v360h280v80H200Zm600 40v-320H640v320h160Zm-180 80q-25 0-42.5-17.5T560-220v-360q0-25 17.5-42.5T620-640h200q25 0 42.5 17.5T880-580v360q0 25-17.5 42.5T820-160H620Zm100-300q13 0 21.5-9t8.5-21q0-13-8.5-21.5T720-520q-12 0-21 8.5t-9 21.5q0 12 9 21t21 9Zm0 60Z"/></svg>
+        <img id="navbar-logo-img-2" class="navbar-logo" alt="Validate" />
       </div>
       <div class="nav-actions">
         <button class="icon-btn" id="btn-debug-2" title="Depuración">
@@ -874,7 +873,7 @@
   <section class="stage" id="stage-denied" data-state="denied">
     <nav class="nav">
       <div class="brand">
-        <svg id="navbar-logo-img-3" class="navbar-logo" viewBox="0 -960 960 960" fill="currentColor" aria-label="Devices"><path d="M480-540ZM80-160v-80h400v80H80Zm120-120q-33 0-56.5-23.5T120-360v-360q0-33 23.5-56.5T200-800h560q33 0 56.5 23.5T840-720H200v360h280v80H200Zm600 40v-320H640v320h160Zm-180 80q-25 0-42.5-17.5T560-220v-360q0-25 17.5-42.5T620-640h200q25 0 42.5 17.5T880-580v360q0 25-17.5 42.5T820-160H620Zm100-300q13 0 21.5-9t8.5-21q0-13-8.5-21.5T720-520q-12 0-21 8.5t-9 21.5q0 12 9 21t21 9Zm0 60Z"/></svg>
+        <img id="navbar-logo-img-3" class="navbar-logo" alt="Validate" />
       </div>
       <div class="nav-actions">
         <button class="icon-btn" id="btn-debug-3" title="Depuración">
@@ -1158,10 +1157,22 @@
       }
 
       async init() {
+        this.loadLogo();
         await this.loadUser();
         await this.loadDevices();
         this.bindEvents();
         this.applyScanMode();
+      }
+
+      loadLogo() {
+        const url = "https://grid.adminml.com/d/" + NAVBAR_LOGO_DOC_ID + "?dl=1";
+        ["navbar-logo-img", "navbar-logo-img-2", "navbar-logo-img-3"].forEach((id) => {
+          const navImg = document.getElementById(id);
+          if (navImg) {
+            navImg.src = url;
+            navImg.style.display = "block";
+          }
+        });
       }
 
       async loadUser() {
@@ -1250,7 +1261,7 @@
         scanArea.className = "hh-scan-area";
         const iconWrap = document.createElement("div");
         iconWrap.className = "hh-icon idle";
-        iconWrap.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="10" x2="6" y2="10.01"/><line x1="10" y1="10" x2="10" y2="10.01"/><line x1="14" y1="10" x2="14" y2="10.01"/><line x1="18" y1="10" x2="18" y2="10.01"/><line x1="6" y1="14" x2="18" y2="14"/></svg>`;
+        iconWrap.innerHTML = `<svg viewBox="0 -960 960 960" fill="currentColor" aria-label="Devices"><path d="M480-540ZM80-160v-80h400v80H80Zm120-120q-33 0-56.5-23.5T120-360v-360q0-33 23.5-56.5T200-800h560q33 0 56.5 23.5T840-720H200v360h280v80H200Zm600 40v-320H640v320h160Zm-180 80q-25 0-42.5-17.5T560-220v-360q0-25 17.5-42.5T620-640h200q25 0 42.5 17.5T880-580v360q0 25-17.5 42.5T820-160H620Zm100-300q13 0 21.5-9t8.5-21q0-13-8.5-21.5T720-520q-12 0-21 8.5t-9 21.5q0 12 9 21t21 9Zm0 60Z"/></svg>`;
         scanArea.appendChild(iconWrap);
         const lastCodeEl = document.createElement("div");
         lastCodeEl.className = "hh-last-code";
@@ -1753,6 +1764,9 @@
         DebugConsole.log(`Abriendo foto: ${deviceId}`, "info");
       }
     }
+
+    // Constantes de logos
+    const NAVBAR_LOGO_DOC_ID = "01KYGCGRZHJT8JP7Q1WRZKRX6C";
 
     // Iniciar app
     const app = new ValidacionApp();
