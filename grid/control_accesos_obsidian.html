@@ -336,6 +336,14 @@ h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;font-weight:600;}
     <span class="pill" id="outbox-pill" style="display:none" title="Eventos aún no confirmados en Grid">
       <span class="dot"></span><b id="outbox-count">0</b>&nbsp;por sincronizar
     </span>
+    <button class="btn-refresh" id="btn-fullscreen" title="Pantalla completa" aria-label="Activar pantalla completa" aria-pressed="false">
+      <svg class="ico-expand" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
+      </svg>
+      <svg class="ico-collapse" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="display:none">
+        <path d="M9 3v4a1 1 0 0 1-1 1H4M20 9h-4a1 1 0 0 1-1-1V4M4 15h4a1 1 0 0 1 1 1v4M15 20v-4a1 1 0 0 1 1-1h4"/>
+      </svg>
+    </button>
     <button class="btn-refresh" id="btn-refresh-catalog" title="Actualizar catálogo ahora" aria-label="Actualizar catálogo ahora">
       <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -1794,6 +1802,39 @@ var App = (function(){
     armHid();
   }
 
+  /* ── Pantalla completa (Biblia §16.21) ────────────────────────────
+     Runtime confirmado dentro del viewer embebido de Grid: requestFullscreen()
+     disparado por un gesto explícito del usuario resuelve, dispara
+     fullscreenchange, y no requiere fallback distinto salvo el prefijo
+     webkit (Safari). No se entra en fullscreen automáticamente al cargar
+     — sólo por el botón, que es exactamente la regla de producción §16.21.5. */
+  function fullscreenSoportado(){
+    return !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+  }
+  function enFullscreen(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function entrarFullscreen(){
+    var el = document.documentElement;
+    var p = el.requestFullscreen ? el.requestFullscreen() : el.webkitRequestFullscreen();
+    if (p && p.catch) p.catch(function(){ toast("El navegador rechazó pantalla completa.", "err"); });
+  }
+  function salirFullscreen(){
+    if (!enFullscreen()) return;
+    var p = document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen();
+    if (p && p.catch) p.catch(function(){});
+  }
+  function sincronizarBotonFullscreen(){
+    var btn = ge("btn-fullscreen");
+    if (!btn) return;
+    var activo = enFullscreen();
+    btn.querySelector(".ico-expand").style.display = activo ? "none" : "";
+    btn.querySelector(".ico-collapse").style.display = activo ? "" : "none";
+    btn.title = activo ? "Salir de pantalla completa" : "Pantalla completa";
+    btn.setAttribute("aria-label", btn.title);
+    btn.setAttribute("aria-pressed", activo ? "true" : "false");
+  }
+
   /* ── Cableado de UI ────────────────────────────────────────────── */
   function wireUI(){
     ge("mode-handheld").addEventListener("click", function(){ setMode("handheld"); });
@@ -1831,6 +1872,20 @@ var App = (function(){
         "Grid rechazó el registro en el documento de eventos. Necesitas acceso de lectura sobre " + CFG.DOC_ACCESOS + " para poder escribir en él.",
         "Bucket: " + item.bucket);
     });
+
+    var fsBtn = ge("btn-fullscreen");
+    if (!fullscreenSoportado()) {
+      fsBtn.style.display = "none";   // §16.21.5 regla 5: no asumir disponibilidad, degradar sin ruido
+    } else {
+      fsBtn.addEventListener("click", function(){
+        if (enFullscreen()) salirFullscreen(); else entrarFullscreen();
+      });
+      document.addEventListener("fullscreenchange", sincronizarBotonFullscreen);
+      document.addEventListener("webkitfullscreenchange", sincronizarBotonFullscreen);
+      document.addEventListener("fullscreenerror", function(){ toast("El navegador rechazó pantalla completa.", "err"); });
+      document.addEventListener("webkitfullscreenerror", function(){ toast("El navegador rechazó pantalla completa.", "err"); });
+      sincronizarBotonFullscreen();
+    }
 
     var refreshBtn = ge("btn-refresh-catalog");
     var refrescandoManual = false;
