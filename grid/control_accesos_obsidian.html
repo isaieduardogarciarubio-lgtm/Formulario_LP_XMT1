@@ -1317,7 +1317,8 @@ var App = (function(){
     photoObjectUrl: null, // URL.createObjectURL() de la última foto — se revoca antes de crear la siguiente
     lastCode: "",
     lastAt: 0,
-    count: 0
+    count: 0,
+    veredictoSeq: 0    // token del veredicto en pantalla — descarta fotos que lleguen tarde de un escaneo anterior
   };
 
   /* ── Pantallas ─────────────────────────────────────────────────── */
@@ -1616,6 +1617,7 @@ var App = (function(){
   }
 
   async function mostrarVeredicto(evento, persona){
+    var seq = ++S.veredictoSeq;
     var v = ge("verdict");
     v.classList.remove("ok", "err", "warn");
 
@@ -1646,50 +1648,6 @@ var App = (function(){
       glyphEl.innerHTML = glyphOK;
       ge("v-title").textContent = "¡Adelante, " + (persona.pila || persona.nombre) + "! Acceso habilitado.";
       ge("v-why").textContent = persona.empresa ? persona.empresa : "";
-
-      var foto = Photos.lookup(evento.qr);
-      if (foto && foto.docId) {
-        if (S.photoObjectUrl) { URL.revokeObjectURL(S.photoObjectUrl); S.photoObjectUrl = null; }
-        var img = ge("v-photo");
-        try {
-          var objectUrl = await GridClient.downloadDocumentAsObjectUrl(foto.docId);
-          S.photoObjectUrl = objectUrl;
-          var cargo = await new Promise(function(resolve){
-            img.onload  = function(){ resolve(true); };
-            img.onerror = function(){ resolve(false); };
-            img.src = objectUrl;
-          });
-          if (cargo) {
-            photoWrap.style.display = ""; glyphEl.style.display = "none";
-            /* object-fit:contain garantiza que la foto se vea completa,
-               pero con una caja de alto fijo eso puede dejar franjas
-               vacías grandes si la foto es muy vertical u horizontal.
-               Se ajusta el alto de la caja al aspecto real de la foto,
-               con un rango razonable para no deformar el modal. */
-            if (img.naturalWidth && img.naturalHeight) {
-              /* No se puede medir photoWrap.clientWidth aquí: el modal
-                 todavía no tiene la clase "on", así que toda la cadena
-                 de ancestros está display:none y clientWidth daría 0.
-                 Se usa el mismo ancho que ya define el CSS del panel
-                 (max-width 460px, con 20px de padding del overlay a
-                 cada lado) en vez de medir un elemento invisible. */
-              var anchoCaja = Math.min(460, window.innerWidth - 40);
-              var altoIdeal = anchoCaja * (img.naturalHeight / img.naturalWidth);
-              var esMovil = window.matchMedia("(max-width:560px)").matches;
-              /* El tope por ancho (400/320px) asumía suficiente alto de
-                 pantalla; en una pantalla baja eso solo empujaba el botón
-                 fuera de la vista. Se limita también contra el alto real
-                 del viewport — el más chico de los dos gana. */
-              var maxAltoPorViewport = window.innerHeight * 0.35;
-              var maxAlto = Math.min(esMovil ? 320 : 400, maxAltoPorViewport);
-              var minAlto = Math.min(esMovil ? 160 : 200, maxAlto);
-              photoWrap.style.height = Math.max(minAlto, Math.min(altoIdeal, maxAlto)) + "px";
-            }
-          }
-        } catch (e) {
-        }
-      } else {
-      }
     } else if (evento.resultado === "bloqueado") {
       v.classList.add("err");
       ge("v-glyph").className = "glyph err";
@@ -1714,8 +1672,60 @@ var App = (function(){
     }
     ge("v-notice").innerHTML = notices;
 
+    /* El modal se abre YA: la decisión ya está tomada arriba contra el
+       catálogo en memoria y no depende de la foto. Esperar aquí a que
+       la foto viaje por red (metadata + blob firmado) es justo el hueco
+       silencioso que hacía parecer que el escaneo no hizo nada. */
     v.classList.add("on");
     setTimeout(function(){ ge("v-close").focus(); }, 60);
+
+    if (evento.resultado === "permitido") {
+      var foto = Photos.lookup(evento.qr);
+      if (foto && foto.docId) cargarFotoVeredicto(foto.docId, seq);
+    }
+  }
+
+  /* Carga progresiva de la foto: corre después de que el veredicto ya
+     está visible. `seq` es el token del veredicto que la disparó — si
+     para cuando la foto llega ya hay un veredicto más nuevo en pantalla
+     (el guardia cerró y escaneó otra credencial mientras esta viajaba),
+     se descarta en vez de pisar la foto/el glyph de otra persona. */
+  async function cargarFotoVeredicto(docId, seq){
+    var img = ge("v-photo");
+    var photoWrap = ge("v-photo-wrap");
+    var glyphEl = ge("v-glyph");
+    try {
+      var objectUrl = await GridClient.downloadDocumentAsObjectUrl(docId);
+      if (seq !== S.veredictoSeq) { URL.revokeObjectURL(objectUrl); return; }
+
+      if (S.photoObjectUrl) URL.revokeObjectURL(S.photoObjectUrl);
+      S.photoObjectUrl = objectUrl;
+
+      var cargo = await new Promise(function(resolve){
+        img.onload  = function(){ resolve(true); };
+        img.onerror = function(){ resolve(false); };
+        img.src = objectUrl;
+      });
+      if (seq !== S.veredictoSeq || !cargo) return;
+
+      photoWrap.style.display = ""; glyphEl.style.display = "none";
+      /* object-fit:contain garantiza que la foto se vea completa, pero
+         con una caja de alto fijo eso puede dejar franjas vacías grandes
+         si la foto es muy vertical u horizontal. Se ajusta el alto de
+         la caja al aspecto real de la foto, con un rango razonable para
+         no deformar el modal. */
+      if (img.naturalWidth && img.naturalHeight) {
+        var anchoCaja = Math.min(460, window.innerWidth - 40);
+        var altoIdeal = anchoCaja * (img.naturalHeight / img.naturalWidth);
+        var esMovil = window.matchMedia("(max-width:560px)").matches;
+        var maxAltoPorViewport = window.innerHeight * 0.35;
+        var maxAlto = Math.min(esMovil ? 320 : 400, maxAltoPorViewport);
+        var minAlto = Math.min(esMovil ? 160 : 200, maxAlto);
+        photoWrap.style.height = Math.max(minAlto, Math.min(altoIdeal, maxAlto)) + "px";
+      }
+    } catch (e) {
+      /* sin foto: se queda el glyph, no es un error visible para el guardia */
+    }
   }
 
   function cerrarVeredicto(){
