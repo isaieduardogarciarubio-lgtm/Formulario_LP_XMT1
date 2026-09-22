@@ -1688,11 +1688,38 @@ var App = (function(){
       if (foto && foto.docId) {
         closeBtn.disabled = true;
         closeBtn.textContent = "Verificando foto…";
-        cargarFotoVeredicto(foto.docId, seq);
+        cargarFotoVeredicto(foto.docId, evento.qr, seq);
         return;
+      }
+      /* Sin foto que esperar — pero hay que decir POR QUÉ, no sólo dejar
+         pasar en silencio: son dos causas de datos distintas y confundirlas
+         hace perder tiempo buscando en el lugar equivocado. */
+      if (foto && !foto.docId) {
+        console.warn("[foto] fila encontrada en Publicados para " + evento.qr + " pero sin Doc ID (columna vacía o ausente).");
+        ge("v-notice").innerHTML += '<div class="notice warn"><span>Este código tiene foto registrada (view_url) en "Publicados" pero sin Doc ID — no se puede descargar desde Grid. Revisa esa fila. Confirma la identidad manualmente.</span></div>';
+      } else if (!foto) {
+        console.warn("[foto] " + evento.qr + " no aparece en el índice de Photos (pestaña Publicados).");
+        ge("v-notice").innerHTML += '<div class="notice warn"><span>Este código no tiene ninguna fila en la pestaña "Publicados" — no hay foto que verificar. Confirma la identidad manualmente.</span></div>';
       }
     }
     setTimeout(function(){ closeBtn.focus(); }, 60);
+  }
+
+  /* Traduce el error crudo de la descarga a algo diagnosticable en pantalla.
+     GridClient.downloadDocumentAsObjectUrl() ya etiqueta sus errores con
+     .status y un .message tipo "download_meta_404" / "download_blob_403";
+     aquí sólo se decodifican para no obligar al guardia (o a quien revise
+     después) a adivinar qué falló. */
+  function describirErrorFoto(e){
+    var msg = (e && e.message) || String(e);
+    if (e && e.status === 403) return "Grid rechazó el acceso al documento de la foto (sin permiso de lectura sobre ese documento).";
+    if (e && e.status === 404) return "El documento de la foto no existe en Grid (Doc ID inválido o el archivo fue borrado/movido).";
+    if (e && e.status === 429) return "Grid está limitando las peticiones (HTTP 429); intenta de nuevo en unos segundos.";
+    if (/^download_meta_/.test(msg)) return "Grid respondió HTTP " + msg.replace("download_meta_", "") + " al pedir los datos de descarga del documento.";
+    if (/^download_blob_/.test(msg)) return "Grid respondió HTTP " + msg.replace("download_blob_", "") + " al descargar el archivo (la URL firmada pudo haber expirado).";
+    if (msg === "sin download_url en la respuesta") return "Grid no devolvió una URL de descarga para este documento.";
+    if (e && e.name === "TypeError") return "Fallo de red al descargar la foto (revisa conexión/VPN) — " + msg;
+    return "Error al descargar la foto: " + msg;
   }
 
   /* Carga de la foto de verificación: bloquea "Siguiente escaneo" mientras
@@ -1701,7 +1728,7 @@ var App = (function(){
      llega ya hay un veredicto más nuevo en pantalla (el guardia forzó otro
      camino o escaneó de nuevo), se descarta en vez de pisar el estado de
      otra persona. */
-  async function cargarFotoVeredicto(docId, seq){
+  async function cargarFotoVeredicto(docId, qr, seq){
     var img = ge("v-photo");
     var photoWrap = ge("v-photo-wrap");
     var glyphEl = ge("v-glyph");
@@ -1732,7 +1759,8 @@ var App = (function(){
       if (seq !== S.veredictoSeq) return;
 
       if (!cargo) {
-        liberarBoton("No se pudo mostrar la foto de verificación. Confirma la identidad manualmente.");
+        console.warn("[foto] blob descargado pero <img> no lo pudo decodificar. qr=" + qr + " docId=" + docId);
+        liberarBoton("La foto se descargó (Doc ID: " + docId + ") pero no se pudo mostrar — el archivo probablemente no es una imagen válida o está dañado. Confirma la identidad manualmente.");
         return;
       }
 
@@ -1754,7 +1782,8 @@ var App = (function(){
       liberarBoton(null);
 
     } catch (e) {
-      liberarBoton("No se pudo cargar la foto de verificación. Confirma la identidad manualmente.");
+      console.warn("[foto] fallo al descargar. qr=" + qr + " docId=" + docId, e);
+      liberarBoton("No se pudo cargar la foto (Doc ID: " + docId + "). " + describirErrorFoto(e) + " Confirma la identidad manualmente.");
     }
   }
 
