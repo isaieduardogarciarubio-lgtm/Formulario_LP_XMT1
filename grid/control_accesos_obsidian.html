@@ -736,6 +736,38 @@ var Identity = (function(){
   return { resolve: resolve };
 })();
 
+/* Resuelve {campo: índiceDeColumna} a partir de una fila de encabezados y
+   una lista [campo, [patrones...]] EN ORDEN DE PRIORIDAD DE CAMPO. Dentro
+   de un mismo campo, los patrones también tienen prioridad entre sí: se
+   agota el patrón más específico contra TODAS las columnas antes de
+   probar el siguiente, en vez de tomar la primera columna (de izquierda a
+   derecha) que matchee CUALQUIER patrón del campo.
+
+   Sin esto, una columna ajena que matchea un patrón genérico del campo
+   (p.ej. "credencial" o "codigo") puede robarle el campo a la columna
+   correcta si aparece antes en la hoja, aunque exista otra columna que
+   matchee el patrón específico (p.ej. "\bqr\b" sobre "Nuevo_QR") — eso
+   deja el índice construido con los valores de la columna equivocada, y
+   cada búsqueda por el código real falla en silencio como "no existe".
+   Usada por Catalog y Photos, que comparten exactamente este problema. */
+function resolveColumnsByPriority(headerRow, fieldPatterns){
+  var used = {};
+  var map = {};
+  var headers = headerRow.map(function(h){ return norm(h).replace(/_/g, " "); });
+  fieldPatterns.forEach(function(entry){
+    var field = entry[0], patterns = entry[1];
+    for (var p = 0; p < patterns.length; p++) {
+      var encontrada = -1;
+      for (var j = 0; j < headers.length; j++) {
+        if (used[j] || !headers[j]) continue;
+        if (patterns[p].test(headers[j])) { encontrada = j; break; }
+      }
+      if (encontrada !== -1) { map[field] = encontrada; used[encontrada] = true; break; }
+    }
+  });
+  return map;
+}
+
 /* ══════════════════════════════════════════════════════════════════
    MÓDULO 2 · Catálogo vía Sheets proxy
    Snapshot único por sesión, indexado en memoria (§16.10).
@@ -768,25 +800,12 @@ var Catalog = (function(){
   ];
   var REQUIRED = ["qr", "sitio", "vence", "estatus"];
 
-  /* Resuelve {campo: índiceDeColumna} a partir de la fila de encabezados.
-     Cada columna sólo puede reclamarse una vez, en orden de prioridad.
-     El guión bajo cuenta como carácter de palabra para \b, así que
+  /* El guión bajo cuenta como carácter de palabra para \b, así que
      "Nuevo_QR" se leería como un solo token indivisible y \bqr\b jamás
-     haría match — se reemplaza por espacio antes de comparar. */
+     haría match — resolveColumnsByPriority ya reemplaza "_" por espacio
+     antes de comparar. */
   function resolveColumns(headerRow){
-    var used = {};
-    var map = {};
-    FIELD_PATTERNS.forEach(function(entry){
-      var field = entry[0], patterns = entry[1];
-      for (var j = 0; j < headerRow.length; j++) {
-        if (used[j]) continue;
-        var h = norm(headerRow[j]).replace(/_/g, " ");
-        if (!h) continue;
-        var hit = patterns.some(function(re){ return re.test(h); });
-        if (hit) { map[field] = j; used[j] = true; break; }
-      }
-    });
-    return map;
+    return resolveColumnsByPriority(headerRow, FIELD_PATTERNS);
   }
 
   async function load(){
@@ -794,6 +813,9 @@ var Catalog = (function(){
     if (!rows.length) { index = {}; count = 0; colMap = null; return 0; }
 
     var newColMap = resolveColumns(rows[0]);
+    console.info("[Catalog] columnas resueltas: " + Object.keys(newColMap).map(function(f){
+      return f + "='" + rows[0][newColMap[f]] + "'";
+    }).join(", "));
     var faltantes = REQUIRED.filter(function(f){ return newColMap[f] === undefined; });
     if (faltantes.length) {
       var e = new Error("catalog_headers");
@@ -875,32 +897,26 @@ var Photos = (function(){
   var REQUIRED = ["qr", "view_url"];
 
   function resolveColumns(headerRow){
-    var used = {};
-    var map = {};
-    FIELD_PATTERNS.forEach(function(entry){
-      var field = entry[0], patterns = entry[1];
-      for (var j = 0; j < headerRow.length; j++) {
-        if (used[j]) continue;
-        var h = norm(headerRow[j]).replace(/_/g, " ");
-        if (!h) continue;
-        var hit = patterns.some(function(re){ return re.test(h); });
-        if (hit) { map[field] = j; used[j] = true; break; }
-      }
-    });
-    return map;
+    return resolveColumnsByPriority(headerRow, FIELD_PATTERNS);
   }
 
   async function load(){
     try {
       var rows = await GridClient.readSheet(CFG.SHEET_ID, CFG.DOC_ADMIN, CFG.SHEET_RANGE_FOTOS);
       if (!rows.length) {
+        console.warn("[Photos] la pestaña \"" + CFG.SHEET_RANGE_FOTOS + "\" no devolvió filas.");
         index = {}; count = 0;
         return 0;
       }
 
       var colMap = resolveColumns(rows[0]);
+      console.info("[Photos] columnas resueltas: " + Object.keys(colMap).map(function(f){
+        return f + "='" + rows[0][colMap[f]] + "'";
+      }).join(", ") || "(ninguna)");
       var faltantes = REQUIRED.filter(function(f){ return colMap[f] === undefined; });
       if (faltantes.length) {
+        console.warn("[Photos] no se reconocen las columnas: falta(n) " + faltantes.join(", ") + ". Encabezados: " +
+          rows[0].map(function(h, i){ return "[" + i + "] " + h; }).join("  ·  "));
         index = {}; count = 0;
         return 0;
       }
@@ -922,9 +938,11 @@ var Photos = (function(){
       }
       index = newIndex;
       count = newCount;
+      console.info("[Photos] " + newCount + " fotos indexadas (" + sinQr + " filas sin QR, " + sinUrl + " filas sin view_url, de " + (rows.length - 1) + " filas totales).");
       return count;
 
     } catch (e) {
+      console.warn("[Photos] fallo al cargar la pestaña \"" + CFG.SHEET_RANGE_FOTOS + "\":", e);
       if (index === null) { index = {}; count = 0; }
       return count;
     }
