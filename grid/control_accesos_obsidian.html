@@ -1,0 +1,1804 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Control de Accesos · Obsidian</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════════
+   OBSIDIAN v2026.1 — tokens
+   ═══════════════════════════════════════════════════════════════════ */
+:root{
+  --obsidian-canvas:#0E0E12;
+  --surface-low:#14151B;
+  --surface-mid:#1B1D25;
+  --surface-high:#252834;
+
+  --kinetic-gold:#FFD100;
+  --kinetic-glow:rgba(255,209,0,.18);
+  --border-active:rgba(255,209,0,.45);
+  --text-on-accent:#0E0E12;          /* REGLA CRÍTICA: único color sobre amarillo */
+
+  --border-specular:rgba(255,255,255,.08);
+  --border-specular-strong:rgba(255,255,255,.16);
+
+  --text-primary:#F4F5F8;
+  --text-muted:#8E95A5;
+
+  --ok:#00D689;
+  --err:#FF5C6C;
+  --warn:#FF9E45;
+
+  --radius-sm:8px; --radius-md:14px; --radius-lg:20px; --radius-pill:999px;
+  --shadow-elevation:0 12px 32px -4px rgba(0,0,0,.7);
+
+  --font-display:'Space Grotesk','Geist Sans','Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-ui:'Geist Sans','Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --font-mono:'Geist Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{
+  background:var(--obsidian-canvas);
+  background-image:
+    radial-gradient(1100px 700px at 100% -10%, rgba(255,209,0,.055), transparent 58%),
+    radial-gradient(820px 560px at -14% 110%, rgba(255,209,0,.028), transparent 62%);
+  background-attachment:fixed;
+  color:var(--text-primary);
+  font-family:var(--font-ui);
+  font-size:15px;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:var(--font-display);letter-spacing:-.02em;font-weight:600;}
+.mono{font-family:var(--font-mono);font-variant-ligatures:none;}
+
+:focus-visible{outline:2px solid var(--kinetic-gold);outline-offset:3px;border-radius:4px;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+
+/* ── Layout raíz ───────────────────────────────────────────────── */
+.screen{display:none;position:fixed;inset:0;flex-direction:column;overflow-y:auto;}
+.screen.on{display:flex;}
+
+.topbar{
+  display:flex;align-items:center;gap:14px;
+  padding:16px 20px;
+  padding-top:calc(16px + env(safe-area-inset-top));
+}
+.brand{display:flex;align-items:center;gap:11px;flex:1;min-width:0;}
+.brand-txt h1{font-size:16px;line-height:1.2;}
+.brand-txt p{font-size:12px;color:var(--text-muted);letter-spacing:.01em;}
+
+.pill{
+  display:inline-flex;align-items:center;gap:7px;
+  background:var(--surface-mid);border:1px solid var(--border-specular);
+  border-radius:var(--radius-pill);padding:7px 13px;
+  font-family:var(--font-ui);font-size:13px;font-weight:500;letter-spacing:.01em;color:var(--text-muted);
+  white-space:nowrap;
+}
+.pill b{color:var(--text-primary);font-weight:600;}
+.pill .dot{width:6px;height:6px;border-radius:50%;background:var(--kinetic-gold);flex:none;}
+
+.btn-refresh{
+  width:38px;height:38px;flex:none;border-radius:50%;
+  background:var(--surface-mid);border:1px solid var(--border-specular);color:var(--text-muted);
+  display:grid;place-items:center;cursor:pointer;transition:all .15s;
+}
+.btn-refresh:hover{color:var(--text-primary);border-color:var(--border-active);}
+.btn-refresh:disabled{opacity:.5;cursor:not-allowed;}
+.btn-refresh.spinning svg{animation:btn-refresh-spin .7s linear infinite;}
+@keyframes btn-refresh-spin{to{transform:rotate(360deg);}}
+
+.toast{
+  position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));
+  transform:translateX(-50%) translateY(12px);
+  background:var(--surface-high);border:1px solid var(--border-specular);
+  border-radius:var(--radius-md);padding:11px 18px;
+  font-family:var(--font-ui);font-size:13px;font-weight:500;color:var(--text-primary);
+  box-shadow:var(--shadow-elevation);z-index:200;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;
+  max-width:88vw;text-align:center;
+}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.err{border-color:rgba(255,92,108,.35);color:#FFB3BB;}
+.toast.ok{border-color:rgba(0,214,137,.32);color:#7FE9C2;}
+
+.body{flex:1;display:flex;flex-direction:column;padding:8px 20px 24px;}
+.wrap{width:100%;max-width:560px;margin:0 auto;}
+
+/* ── Centrado a pantalla completa ─────────────────────────────── */
+.center{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;}
+.center .wrap{text-align:center;}
+
+.spinner{
+  width:34px;height:34px;margin:0 auto 20px;
+  border:2.5px solid var(--border-specular);border-top-color:var(--kinetic-gold);
+  border-radius:50%;animation:spin .75s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.glyph{
+  width:60px;height:60px;margin:0 auto 20px;
+  border-radius:var(--radius-md);display:grid;place-items:center;
+  border:1px solid var(--border-specular);background:var(--surface-mid);
+}
+.glyph.ok{color:var(--ok);border-color:rgba(0,214,137,.32);background:rgba(0,214,137,.08);}
+.glyph.err{color:var(--err);border-color:rgba(255,92,108,.32);background:rgba(255,92,108,.08);}
+.glyph.warn{color:var(--warn);border-color:rgba(255,158,69,.32);background:rgba(255,158,69,.08);}
+
+.v-photo-wrap{position:relative;width:100%;height:260px;background:var(--surface-mid);overflow:hidden;}
+.v-photo{width:100%;height:100%;object-fit:contain;object-position:center;display:block;}
+.v-photo-wrap::after{
+  content:"";position:absolute;left:0;right:0;bottom:0;height:64px;
+  background:linear-gradient(to top, var(--surface-low), transparent);
+  pointer-events:none;
+}
+.v-photo-badge{
+  position:absolute;right:14px;bottom:14px;width:42px;height:42px;border-radius:50%;
+  background:var(--kinetic-gold);color:var(--text-on-accent);
+  display:grid;place-items:center;border:3px solid var(--surface-low);
+  box-shadow:0 6px 16px -4px rgba(0,0,0,.5);
+}
+
+/* ── Botones ───────────────────────────────────────────────────── */
+.btn{
+  font-family:inherit;font-size:14px;font-weight:600;
+  border-radius:var(--radius-pill);padding:12px 22px;
+  border:1px solid transparent;cursor:pointer;transition:all .15s;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-primary{background:var(--kinetic-gold);color:var(--text-on-accent);}
+.btn-primary:hover{filter:brightness(1.07);}
+.btn-primary svg{stroke:var(--text-on-accent);}
+.btn-ghost{background:var(--surface-mid);border-color:var(--border-specular);color:var(--text-primary);}
+.btn-ghost:hover{border-color:var(--border-specular-strong);}
+.btn-quiet{background:transparent;color:var(--text-muted);}
+.btn-quiet:hover{color:var(--text-primary);background:var(--surface-mid);}
+.btn:disabled{opacity:.4;cursor:not-allowed;filter:none;}
+.btn-block{width:100%;}
+
+/* ── Escáner ───────────────────────────────────────────────────── */
+.modebar{
+  display:inline-flex;gap:4px;padding:4px;
+  background:var(--surface-mid);border:1px solid var(--border-specular);
+  border-radius:var(--radius-pill);margin-bottom:18px;
+}
+.modebar button{
+  font-family:var(--font-ui);font-size:13px;font-weight:500;letter-spacing:.01em;
+  padding:8px 18px;border-radius:var(--radius-pill);
+  border:none;background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;
+}
+.modebar button.active{background:var(--kinetic-gold);color:var(--text-on-accent);font-weight:600;}
+.modebar button:disabled{opacity:.35;cursor:not-allowed;}
+
+/* ── Superficie de escaneo sin teclado visible ──────────────────
+   El input HID real vive fuera de la vista (1x1px, opacity 0) para
+   que el lector físico tenga un campo genuinamente editable y
+   enfocado sin disparar el teclado en pantalla — ver armHid() en JS:
+   el truco es cambiar inputmode DESPUÉS del focus, no en el focus. */
+.hh-hid-input{
+  position:fixed;top:0;left:0;width:1px;height:1px;
+  opacity:0;pointer-events:none;border:0;padding:0;margin:0;font-size:16px;
+}
+.hh-scan-area{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:44px 20px 8px;cursor:default;user-select:none;
+  transition:background .2s;border-radius:var(--radius-lg);
+}
+.hh-scan-area.error{background:rgba(255,92,108,.06);}
+.hh-scan-area.shake{animation:shake .2s ease;}
+@keyframes shake{
+  0%,100%{transform:translateX(0);} 20%{transform:translateX(-5px);}
+  40%{transform:translateX(5px);} 60%{transform:translateX(-5px);} 80%{transform:translateX(5px);}
+}
+.hh-mark{width:128px;height:128px;margin-bottom:22px;transition:filter .3s,opacity .3s;opacity:.68;}
+.hh-mark.armed{opacity:1;filter:drop-shadow(0 0 20px var(--kinetic-glow));}
+.hh-mark.idle{animation:hh-float 4s ease-in-out infinite;}
+@keyframes hh-float{0%,100%{transform:translateY(0);}50%{transform:translateY(-8px);}}
+.hh-instruction{font-family:var(--font-display);font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--text-primary);}
+
+.cam-stage{
+  position:relative;width:100%;aspect-ratio:4/3;max-height:52dvh;
+  background:#000;border:1px solid var(--border-specular);border-radius:var(--radius-md);
+  overflow:hidden;
+}
+.cam-stage video{width:100%;height:100%;object-fit:cover;display:block;}
+.reticle{
+  position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;
+}
+.reticle i{
+  width:54%;aspect-ratio:1;border-radius:14px;
+  box-shadow:0 0 0 100vmax rgba(14,14,18,.55);
+  border:2px solid var(--kinetic-gold);
+}
+
+.hint{font-family:var(--font-ui);font-size:13px;font-weight:500;letter-spacing:.01em;color:var(--text-muted);text-align:center;margin-top:14px;}
+
+.statline{
+  text-align:center;margin-top:28px;
+  font-family:var(--font-ui);font-size:11px;font-weight:600;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);opacity:.6;
+}
+
+/* ── Veredicto ─────────────────────────────────────────────────── */
+.verdict{
+  position:fixed;inset:0;z-index:70;
+  display:none;align-items:center;justify-content:center;padding:24px;
+  background:rgba(14,14,18,.93);backdrop-filter:blur(8px);
+}
+.verdict.on{display:flex;}
+.verdict .panel{
+  width:100%;max-width:460px;max-height:calc(100dvh - 48px);
+  background:var(--surface-low);border:1px solid var(--border-specular);
+  border-radius:var(--radius-lg);overflow-x:hidden;overflow-y:auto;text-align:center;
+}
+.panel-body{padding:28px 26px 32px;}
+.verdict.ok .panel{border-color:rgba(0,214,137,.3);}
+.verdict.err .panel{border-color:rgba(255,92,108,.3);}
+.verdict.warn .panel{border-color:rgba(255,158,69,.3);}
+.verdict h2{font-size:22px;line-height:1.25;letter-spacing:-.01em;margin-bottom:10px;}
+.verdict .why{font-size:14px;color:var(--text-muted);margin-bottom:22px;}
+
+.notice{
+  display:flex;gap:11px;padding:13px 15px;border-radius:var(--radius-sm);
+  font-size:13px;text-align:left;margin-bottom:18px;border:1px solid;
+}
+.notice.warn{border-color:rgba(255,158,69,.32);background:rgba(255,158,69,.08);color:#FFCF9E;}
+.notice.err{border-color:rgba(255,92,108,.32);background:rgba(255,92,108,.08);color:#FFB3BB;}
+.notice svg{flex:none;margin-top:1px;}
+
+@media(max-width:560px){
+  .card{padding:20px 18px;}
+  .panel-body{padding:22px 20px 26px;}
+  .v-photo-wrap{height:200px;}
+  .verdict h2{font-size:19px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ Isotipo: «El Portal Tezcatl Bisecado» — Obsidian v2026.1 §2 ═══
+     Fuente SVG original de la marca. Hemisferio occidental (espejo
+     especular, #F4F5F8) y hemisferio oriental (núcleo basáltico,
+     #252834) en asimetría deliberada — mitad reflejo, mitad piedra.
+     Haz umbral bisector: rect x=250 width=12 height=360 rx=6 en
+     #FFD100, centrado real en X=256, sobre lienzo maestro 512×512
+     con esquinas rx=112 en --obsidian-canvas. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="tezcatl" viewBox="0 0 512 512">
+      <rect width="512" height="512" rx="112" fill="#0E0E12" stroke="rgba(255,255,255,.08)" stroke-width="2"/>
+
+      <!-- Hemisferio occidental: espejo especular exterior -->
+      <path d="M 242 96
+               C 146 96 96 146 96 256
+               C 96 366 146 416 242 416
+               L 242 344
+               C 182 344 166 316 166 256
+               C 166 196 182 168 242 168
+               Z" fill="#F4F5F8" stroke="rgba(14,14,18,.35)" stroke-width="1.5"/>
+
+      <!-- Hemisferio oriental: núcleo basáltico protegido -->
+      <path d="M 270 96
+               C 366 96 416 146 416 256
+               C 416 366 366 416 270 416
+               L 270 344
+               C 330 344 346 316 346 256
+               C 346 196 330 168 270 168
+               Z" fill="#252834" stroke="rgba(255,255,255,.24)" stroke-width="3"/>
+
+      <!-- Haz umbral bisector: fisura continua de autorización activa -->
+      <rect x="250" y="76" width="12" height="360" rx="6" fill="#FFD100"/>
+    </symbol>
+  </defs>
+</svg>
+
+<!-- ═══ 1 · Arranque ═══════════════════════════════════════════════ -->
+<div class="screen on" id="scr-boot">
+  <div class="center">
+    <div class="wrap">
+      <div class="spinner"></div>
+      <h2 style="font-family:var(--font-ui);font-size:18px;font-weight:600">Comprobando acceso…</h2>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 2 · Bloqueo ════════════════════════════════════════════════ -->
+<div class="screen" id="scr-blocked">
+  <div class="center">
+    <div class="wrap">
+      <div class="glyph err">
+        <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/></svg>
+      </div>
+      <h2 style="font-size:20px" id="blocked-title">Acceso denegado</h2>
+      <p style="color:var(--text-muted);font-size:14px;margin-top:8px;max-width:400px;margin-left:auto;margin-right:auto" id="blocked-msg"></p>
+      <p class="mono" style="color:var(--text-muted);font-size:12px;margin-top:16px" id="blocked-detail"></p>
+      <button class="btn btn-ghost" style="margin-top:22px" onclick="location.reload()">Reintentar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ 3 · Escáner ════════════════════════════════════════════════ -->
+<div class="screen" id="scr-scan">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-txt">
+        <h1 id="scan-sitio">—</h1>
+        <p id="scan-user">—</p>
+      </div>
+    </div>
+    <span class="pill" id="outbox-pill" style="display:none" title="Eventos aún no confirmados en Grid">
+      <span class="dot"></span><b id="outbox-count">0</b>&nbsp;por sincronizar
+    </span>
+    <button class="btn-refresh" id="btn-refresh-catalog" title="Actualizar catálogo ahora" aria-label="Actualizar catálogo ahora">
+      <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+    </button>
+  </div>
+  <div class="body">
+    <div class="wrap">
+      <div style="text-align:center">
+        <div class="modebar">
+          <button id="mode-handheld" class="active">Lector</button>
+          <button id="mode-camera">Cámara</button>
+        </div>
+      </div>
+
+      <div id="stage-handheld">
+        <div class="hh-scan-area" id="hh-scan-area">
+          <svg class="hh-mark idle" id="hh-mark" viewBox="0 0 512 512"><use href="#tezcatl"/></svg>
+          <div class="hh-instruction">Escanea el QR</div>
+        </div>
+        <!-- Input HID real (el lector necesita un campo genuinamente
+             editable y enfocado); se mantiene 1x1px e invisible, y se
+             evita el teclado en pantalla alternando inputmode después
+             del focus, no en el focus mismo — ver armHid() en JS. -->
+        <input class="hh-hid-input" id="scan-field" type="text"
+               autocomplete="off" autocorrect="off" autocapitalize="off"
+               spellcheck="false" tabindex="0" />
+      </div>
+
+      <div id="stage-camera" style="display:none">
+        <div class="cam-stage">
+          <video id="cam-video" playsinline muted></video>
+          <div class="reticle"><i></i></div>
+        </div>
+        <p class="hint" id="cam-hint">Encuadra el QR dentro del marco.</p>
+      </div>
+
+      <div class="statline"><span>Loss Prevention</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Veredicto ═════════════════════════════════════════════════ -->
+<div class="verdict" id="verdict">
+  <div class="panel">
+    <div class="v-photo-wrap" id="v-photo-wrap" style="display:none">
+      <img class="v-photo" id="v-photo" alt="" />
+      <div class="v-photo-badge">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="glyph" id="v-glyph"></div>
+      <h2 id="v-title"></h2>
+      <p class="why" id="v-why"></p>
+      <div id="v-notice"></div>
+      <button class="btn btn-primary btn-block" id="v-close">Siguiente escaneo</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════════
+   CONFIGURACIÓN — Ecosistema Grid
+   ══════════════════════════════════════════════════════════════════ */
+var CFG = {
+  DOC_ADMIN:      "01KWWVPQ6S6RDW2213S9911CDS",           // app_config + guardias_registry
+  DOC_ACCESOS:    "01KVX6DQMZJRFQMNJ15HKBT4ZP",           // eventos de ingreso
+  SHEET_ID:       "1YpDd-1ketJfGu3gyoQ-qU85F3972CyK_tAy9gHoutXA",
+  SHEET_RANGE:    "Respuestas de formulario 1",
+  SHEET_RANGE_FOTOS: "Publicados",   // Nuevo_QR -> view_url (mismo libro, otra pestaña)
+  TZ:             "America/Mexico_City",
+  BUCKET_GUARDIAS:"guardias_registry",   // alta de guardias: sitio asignado desde el admin panel
+
+  STABILITY_MS:   500,   // espera de la segunda lectura de durabilidad (§15.18)
+  MAX_ATTEMPTS:   6,     // reintentos del ciclo optimista
+  SUPPRESS_MS:    3000,  // ventana anti-rebote del mismo código
+  ESTATUS_OK:     "aceptado",
+  GUARDIA_OK:     "aceptado",
+
+  /* ⚠️ TEMPORAL — arranque abierto sin gate de guardias_registry.
+     La app queda disponible para cualquier persona con acceso al
+     documento, con el sitio fijo de abajo. El código de validación
+     contra guardias_registry (Identity → registro → estatus → sitio)
+     sigue completo más abajo en init(), simplemente no se ejecuta
+     mientras esta bandera sea true. Para reactivar el gate real:
+     1) MODO_ABIERTO: false
+     2) dar de alta guardias desde la pestaña "Guardias" del admin panel
+        con sitio = SITIO_FIJO (o el que corresponda a cada quien). */
+  MODO_ABIERTO: true,
+  SITIO_FIJO:   "XMT2/SMT3",
+
+  /* Relectura periódica y silenciosa del catálogo en segundo plano —
+     el guardia no hace nada, no se interrumpe el escaneo en curso.
+     No hay endpoint de "sólo esta fila" en Grid (§7/§16.10: el proxy de
+     Sheets sólo lee por rango posicional), así que "refrescar" siempre
+     implica releer la hoja completa; 5 min es muy conservador frente al
+     único dato de carga que tenemos (ráfaga de 20 lecturas a ~2/seg sin
+     fallo, §16.9) — esto es ~600x más lento que eso. */
+  CATALOG_REFRESH_MS: 5 * 60 * 1000
+};
+
+function fnv1a(str){
+  var h = 0x811c9dc5;
+  for (var i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return ("00000000" + h.toString(16)).slice(-8);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   Utilidades
+   ══════════════════════════════════════════════════════════════════ */
+function ge(id){ return document.getElementById(id); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+/* Confirmación breve en pantalla, sin bloquear nada — para acciones
+   puntuales como el refresco manual del catálogo. */
+var toastTimer = null;
+function toast(msg, type){
+  var el = document.getElementById("toast");
+  if (!el) return;
+  clearTimeout(toastTimer);
+  el.textContent = msg;
+  el.className = "toast on" + (type ? " " + type : "");
+  toastTimer = setTimeout(function(){ el.classList.remove("on"); }, 3200);
+}
+function jitter(base){ return base + Math.floor(Math.random() * base); }
+
+function uuid(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  var b = new Uint8Array(16);
+  (window.crypto || {}).getRandomValues ? crypto.getRandomValues(b)
+    : (function(){ for (var i=0;i<16;i++) b[i] = Math.floor(Math.random()*256); })();
+  b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80;
+  var h = []; for (var i=0;i<16;i++) h.push(("0"+b[i].toString(16)).slice(-2));
+  return h.slice(0,4).join("")+"-"+h.slice(4,6).join("")+"-"+h.slice(6,8).join("")+"-"+
+         h.slice(8,10).join("")+"-"+h.slice(10,16).join("");
+}
+
+async function sha256Hex(str){
+  if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+    var buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(function(b){
+      return ("0" + b.toString(16)).slice(-2);
+    }).join("");
+  }
+  return "nc_" + fnv1a(str) + fnv1a(str.split("").reverse().join(""));
+}
+
+/* ── Fecha en zona del sitio ──────────────────────────────────────
+   Toda comparación de vencimiento ocurre en America/Mexico_City,
+   no en la zona del dispositivo, que puede estar mal configurada. */
+function partsInTz(date){
+  var fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: CFG.TZ, year: "numeric", month: "2-digit", day: "2-digit"
+  });
+  var p = {};
+  fmt.formatToParts(date).forEach(function(x){ if (x.type !== "literal") p[x.type] = x.value; });
+  return { y: +p.year, m: +p.month, d: +p.day };
+}
+function todayOrdinal(){
+  var p = partsInTz(new Date());
+  return p.y * 10000 + p.m * 100 + p.d;
+}
+
+/* ── Semana ISO-8601 con week-year ────────────────────────────────
+   El week-year importa: entre el 29-dic y el 3-ene la semana ISO
+   pertenece al año vecino. Usar getFullYear() ahí mezcla buckets. */
+function isoWeekParts(date){
+  var p = partsInTz(date);
+  var t = new Date(Date.UTC(p.y, p.m - 1, p.d));
+  var day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  var yStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  var week = Math.ceil((((t - yStart) / 86400000) + 1) / 7);
+  return { year: t.getUTCFullYear(), week: week };
+}
+function bucketName(sitio, date){
+  var w = isoWeekParts(date || new Date());
+  var slug = String(sitio).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return "ingresos_" + slug + "_" + w.year + "_w" + ("0" + w.week).slice(-2);
+}
+
+/* ── Normalización ───────────────────────────────────────────────── */
+function norm(s){
+  return String(s == null ? "" : s).trim().toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/* Payload del QR: puede llegar desnudo, envuelto en URL o en JSON. */
+function normalizeQR(raw){
+  var s = String(raw == null ? "" : raw).trim();
+  if (!s) return "";
+  if (s.charAt(0) === "{") {
+    try {
+      var o = JSON.parse(s);
+      var keys = ["qr","id","codigo","code","credencial","uuid"];
+      for (var i = 0; i < keys.length; i++) {
+        if (o[keys[i]] != null && String(o[keys[i]]).trim()) return String(o[keys[i]]).trim().toUpperCase();
+      }
+    } catch (e) { /* no era JSON, sigue como texto */ }
+  }
+  if (/^https?:\/\//i.test(s)) {
+    var clean = s.split(/[?#]/)[0].replace(/\/+$/, "");
+    var seg = clean.split("/").pop();
+    if (seg) s = seg;
+  }
+  return s.toUpperCase();
+}
+
+/* Fecha de vencimiento: DD/MM/AAAA, AAAA-MM-DD o serial de Google. */
+function parseVencimiento(v){
+  var s = String(v == null ? "" : v).trim();
+  if (!s) return null;
+
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return { ord: +m[1]*10000 + +m[2]*100 + +m[3], label: m[3].padStart(2,"0")+"/"+m[2].padStart(2,"0")+"/"+m[1] };
+
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/);
+  if (m) {
+    var d = +m[1], mo = +m[2];
+    if (d > 12 && mo <= 12) { /* inequívoco DD/MM */ }
+    else if (mo > 12) { var t = d; d = mo; mo = t; }   /* venía MM/DD */
+    return { ord: +m[3]*10000 + mo*100 + d, label: ("0"+d).slice(-2)+"/"+("0"+mo).slice(-2)+"/"+m[3] };
+  }
+
+  if (/^\d+(\.\d+)?$/.test(s)) {                        /* serial de Sheets */
+    var serial = Math.floor(parseFloat(s));
+    if (serial > 20000 && serial < 80000) {
+      var dt = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+      var y = dt.getUTCFullYear(), mm = dt.getUTCMonth()+1, dd = dt.getUTCDate();
+      return { ord: y*10000 + mm*100 + dd, label: ("0"+dd).slice(-2)+"/"+("0"+mm).slice(-2)+"/"+y };
+    }
+  }
+  var p = Date.parse(s);
+  if (!isNaN(p)) {
+    var q = partsInTz(new Date(p));
+    return { ord: q.y*10000 + q.m*100 + q.d, label: ("0"+q.d).slice(-2)+"/"+("0"+q.m).slice(-2)+"/"+q.y };
+  }
+  return null;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   GridClient — transporte + gate global de 429
+   ══════════════════════════════════════════════════════════════════ */
+var GridClient = (function(){
+  var gateUntil = 0;   // gate global por Retry-After (§15.17 regla 8)
+
+  async function waitGate(){
+    var now = Date.now();
+    if (gateUntil > now) {
+      var ms = gateUntil - now;
+      await sleep(ms);
+    }
+  }
+
+  function openGate(res){
+    var ra = parseInt(res.headers.get("Retry-After") || "", 10);
+    var ms = isNaN(ra) ? 2000 : Math.min(ra * 1000, 30000);
+    gateUntil = Math.max(gateUntil, Date.now() + ms);
+    return ms;
+  }
+
+  async function call(path, opts){
+    await waitGate();
+    var res = await fetch(path, Object.assign({ credentials: "include" }, opts || {}));
+    if (res.status === 429) {
+      var ms = openGate(res);
+      var err = new Error("rate_limited"); err.status = 429; err.waitMs = ms;
+      throw err;
+    }
+    return res;
+  }
+
+  /* Grid ha devuelto el contenido bajo data | state | value según ruta. */
+  function unwrap(body){
+    if (!body || typeof body !== "object") return { data: {}, updated_at: null };
+    if (body.data  !== undefined) return { data: body.data  || {}, updated_at: body.updated_at || null };
+    if (body.state !== undefined) return { data: body.state || {}, updated_at: body.updated_at || null };
+    if (body.value !== undefined) return { data: body.value || {}, updated_at: body.updated_at || null };
+    return { data: body, updated_at: body.updated_at || null };
+  }
+
+  async function readState(docId, name){
+    var res = await call("/api/v1/documents/" + docId + "/states/" + encodeURIComponent(name));
+    if (res.status === 404) return { data: {}, updated_at: null, missing: true };
+    if (res.status === 403) { var e = new Error("permission_denied"); e.status = 403; e.docId = docId; throw e; }
+    if (!res.ok) { var e2 = new Error("state_read_" + res.status); e2.status = res.status; throw e2; }
+    return unwrap(await res.json());
+  }
+
+  async function patchState(docId, name, patch, ifUpdatedAt){
+    var res = await call("/api/v1/documents/" + docId + "/states/" + encodeURIComponent(name), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ patch: patch, if_updated_at: ifUpdatedAt || "" })
+    });
+    return res;
+  }
+
+  async function readSheet(sheetId, docId, range){
+    var url = "/api/v1/sheets/" + encodeURIComponent(sheetId) +
+              "?doc_id=" + encodeURIComponent(docId) +
+              "&range=" + encodeURIComponent(range);
+    var res = await call(url);
+    if (res.status === 403) { var e = new Error("permission_denied"); e.status = 403; e.docId = docId; throw e; }
+    if (!res.ok) {
+      var e2 = new Error("sheet_read_" + res.status);
+      e2.status = res.status;
+      try { var body = await res.json(); e2.detail = body && (body.detail || body.error); } catch (ignore) {}
+      throw e2;
+    }
+    var body = await res.json();
+    var rows = body.values || (body.data && body.data.values) || body.rows ||
+               (Array.isArray(body) ? body : []);
+    return Array.isArray(rows) ? rows : [];
+  }
+
+  async function me(){
+    var res = await call("/api/v1/me");
+    if (!res.ok) { var e = new Error("me_" + res.status); e.status = res.status; throw e; }
+    return await res.json();
+  }
+
+  /* El método real para bajar el archivo: GET /documents/{id}/download
+     NO sirve el binario directo — devuelve metadata JSON con
+     download_url (o agent_download_url), que hay que volver a
+     fetchear para obtener el blob real. Confirmado por una app
+     hermana en el mismo Grid que ya lo usa para su logo de header;
+     no es una suposición nuestra. El segundo fetch es a una URL
+     firmada aparte, por eso no pasa por call() ni por el gate 429
+     — es tráfico distinto al de la API de Grid. */
+  async function downloadDocumentAsObjectUrl(docId){
+    var metaRes = await call("/api/v1/documents/" + encodeURIComponent(docId) + "/download");
+    if (!metaRes.ok) { var e = new Error("download_meta_" + metaRes.status); e.status = metaRes.status; throw e; }
+    var meta = await metaRes.json();
+    var url = meta.download_url || meta.agent_download_url;
+    if (!url) { throw new Error("sin download_url en la respuesta"); }
+
+    var blobRes = await fetch(url, { credentials: "include" });
+    if (!blobRes.ok) { var e2 = new Error("download_blob_" + blobRes.status); e2.status = blobRes.status; throw e2; }
+    var blob = await blobRes.blob();
+    return URL.createObjectURL(blob);
+  }
+  return {
+    readState: readState, patchState: patchState, readSheet: readSheet, me: me,
+    downloadDocumentAsObjectUrl: downloadDocumentAsObjectUrl
+  };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   MÓDULO 1 · Identidad
+   Se conserva el LDAP sólo en memoria y sólo para resolver el
+   registry. Lo único que se escribe en el evento es el hash.
+   ══════════════════════════════════════════════════════════════════ */
+var Identity = (function(){
+  var ORDER = ["id", "user_id", "userId", "username", "nickname", "login", "email"];
+
+  async function resolve(){
+    var me = await GridClient.me();
+
+    var sourceField = null, material = null;
+    for (var i = 0; i < ORDER.length; i++) {
+      var v = me[ORDER[i]];
+      if (v != null && String(v).trim() !== "") { sourceField = ORDER[i]; material = String(v); break; }
+    }
+    if (material === null) { sourceField = "stable_object_fallback"; material = JSON.stringify(me); }
+
+    var hash = await sha256Hex(material);
+
+    /* LDAP: llave de guardias_registry. Vive en memoria durante la sesión
+       y jamás se escribe en un evento ni se emite a consola. */
+    var ldap = me.ldap || (me.email ? String(me.email).split("@")[0] : "") || "";
+
+    me = null;   // el JSON original se descarta de inmediato
+
+    return {
+      hash: hash,
+      source_field: sourceField,
+      ldap: ldap,
+      short: hash.slice(0, 10)
+    };
+  }
+  return { resolve: resolve };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   MÓDULO 2 · Catálogo vía Sheets proxy
+   Snapshot único por sesión, indexado en memoria (§16.10).
+
+   La pestaña real es una respuesta de Google Form ("Respuestas de
+   formulario 1"): el orden de columnas lo define el orden en que se
+   crearon las preguntas, no un contrato fijo. Por eso las columnas se
+   resuelven por NOMBRE de encabezado (con coincidencia flexible por
+   palabra clave), nunca por posición fija — así un reordenamiento o
+   una pregunta nueva en el Form no rompe el mapeo silenciosamente.
+   ══════════════════════════════════════════════════════════════════ */
+var Catalog = (function(){
+  var index = null, count = 0, loadedAt = null, colMap = null;
+
+  /* Orden de prioridad: los patrones más específicos van primero para
+     que "apellido paterno" no se lo robe el patrón genérico de nombre.
+     "estatus" busca específicamente "Aceptado o rechazado" — la hoja
+     real también tiene una columna "Estado" (otra cosa, no el gate de
+     acceso) y una "Rechazo" (motivo en texto libre); no se usan patrones
+     genéricos ahí para no atarse a la columna equivocada por accidente. */
+  var FIELD_PATTERNS = [
+    ["qr",         [/\bqr\b/, /c[oó]digo/, /credencial/, /\bid\b/]],
+    ["apellidoP",  [/apellido patern/, /primer apellido/, /apellido.*p\b/]],
+    ["apellidoM",  [/apellido matern/, /segundo apellido/, /apellido.*m\b/]],
+    ["nombre",     [/^nombre completo$/, /^nombre$/, /\bnombre\b/]],
+    ["empresa",    [/empresa/, /compan/, /contratista/, /raz[oó]n social/]],
+    ["sitio",      [/\bsitio\b/, /ubicaci[oó]n/, /\bplanta\b/, /almac[eé]n/, /\bcentro\b/]],
+    ["vence",      [/venc/, /caduc/, /expira/, /validez/, /valid/]],
+    ["estatus",    [/aceptado.*rechazado/, /aceptad.*o.*rechazad/]]
+  ];
+  var REQUIRED = ["qr", "sitio", "vence", "estatus"];
+
+  /* Resuelve {campo: índiceDeColumna} a partir de la fila de encabezados.
+     Cada columna sólo puede reclamarse una vez, en orden de prioridad.
+     El guión bajo cuenta como carácter de palabra para \b, así que
+     "Nuevo_QR" se leería como un solo token indivisible y \bqr\b jamás
+     haría match — se reemplaza por espacio antes de comparar. */
+  function resolveColumns(headerRow){
+    var used = {};
+    var map = {};
+    FIELD_PATTERNS.forEach(function(entry){
+      var field = entry[0], patterns = entry[1];
+      for (var j = 0; j < headerRow.length; j++) {
+        if (used[j]) continue;
+        var h = norm(headerRow[j]).replace(/_/g, " ");
+        if (!h) continue;
+        var hit = patterns.some(function(re){ return re.test(h); });
+        if (hit) { map[field] = j; used[j] = true; break; }
+      }
+    });
+    return map;
+  }
+
+  async function load(){
+    var rows = await GridClient.readSheet(CFG.SHEET_ID, CFG.DOC_ADMIN, CFG.SHEET_RANGE);
+    if (!rows.length) { index = {}; count = 0; colMap = null; return 0; }
+
+    var newColMap = resolveColumns(rows[0]);
+    var faltantes = REQUIRED.filter(function(f){ return newColMap[f] === undefined; });
+    if (faltantes.length) {
+      var e = new Error("catalog_headers");
+      e.faltantes = faltantes;
+      e.encabezados = rows[0];
+      throw e;
+    }
+
+    /* Se construye en una variable local y sólo se publica al final:
+       así un refresco en curso nunca deja el índice a medias mientras
+       un escaneo hace lookup() en paralelo. */
+    var newIndex = Object.create(null);
+    var newCount = 0;
+
+    for (var i = 1; i < rows.length; i++) {
+      var r = rows[i] || [];
+      if (!r.length) continue;
+
+      var qr = normalizeQR(r[newColMap.qr]);
+      if (!qr) continue;
+
+      var pila     = newColMap.nombre    !== undefined ? String(r[newColMap.nombre]    == null ? "" : r[newColMap.nombre]).trim()    : "";
+      var apP      = newColMap.apellidoP !== undefined ? String(r[newColMap.apellidoP] == null ? "" : r[newColMap.apellidoP]).trim() : "";
+      var apM      = newColMap.apellidoM !== undefined ? String(r[newColMap.apellidoM] == null ? "" : r[newColMap.apellidoM]).trim() : "";
+      var empresa  = newColMap.empresa   !== undefined ? String(r[newColMap.empresa]   == null ? "" : r[newColMap.empresa]).trim()   : "";
+      var sitioRaw = String(r[newColMap.sitio]   == null ? "" : r[newColMap.sitio]).trim();
+      var venceRaw = String(r[newColMap.vence]   == null ? "" : r[newColMap.vence]).trim();
+      var estatus  = String(r[newColMap.estatus] == null ? "" : r[newColMap.estatus]).trim();
+
+      newIndex[qr] = {
+        qr:       qr,
+        nombre:   [pila, apP, apM].filter(Boolean).join(" "),
+        pila:     pila,
+        empresa:  empresa,
+        sitios:   sitioRaw.split(/[,;|]/).map(function(x){ return norm(x); }).filter(Boolean),
+        sitiosRaw:sitioRaw,
+        vence:    parseVencimiento(venceRaw),
+        venceRaw: venceRaw,
+        estatus:  estatus
+      };
+      newCount++;
+    }
+
+    colMap = newColMap;
+    index = newIndex;
+    count = newCount;
+    loadedAt = new Date();
+    return count;
+  }
+
+  function lookup(qr){ return index ? (index[qr] || null) : null; }
+
+  return {
+    load: load, lookup: lookup,
+    size: function(){ return count; },
+    loadedAt: function(){ return loadedAt; }
+  };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   MÓDULO 2B · Fotos ("Publicados", mismo libro, otra pestaña)
+   Nuevo_QR -> view_url. Igual que el catálogo: no existe un filtro
+   server-side en Grid (§4.8/§16.10), así que se carga la pestaña
+   completa una vez y se indexa en memoria — a 8,000+ filas sigue
+   siendo un fetch de ~1-1.5MB, trivial para un navegador.
+
+   A diferencia del catálogo, un fallo aquí NO bloquea el arranque:
+   la foto es una ayuda visual para el veredicto positivo, no parte
+   de la decisión de acceso. Si algo sale mal, se registra y la app
+   sigue funcionando sin fotos hasta el siguiente refresco. */
+var Photos = (function(){
+  var index = null, count = 0;
+
+  var FIELD_PATTERNS = [
+    ["qr",       [/\bqr\b/, /c[oó]digo/, /credencial/]],
+    ["view_url", [/view.?url/, /^url$/, /\burl\b/]],
+    ["doc_id",   [/doc.?id/]]
+  ];
+  var REQUIRED = ["qr", "view_url"];
+
+  function resolveColumns(headerRow){
+    var used = {};
+    var map = {};
+    FIELD_PATTERNS.forEach(function(entry){
+      var field = entry[0], patterns = entry[1];
+      for (var j = 0; j < headerRow.length; j++) {
+        if (used[j]) continue;
+        var h = norm(headerRow[j]).replace(/_/g, " ");
+        if (!h) continue;
+        var hit = patterns.some(function(re){ return re.test(h); });
+        if (hit) { map[field] = j; used[j] = true; break; }
+      }
+    });
+    return map;
+  }
+
+  async function load(){
+    try {
+      var rows = await GridClient.readSheet(CFG.SHEET_ID, CFG.DOC_ADMIN, CFG.SHEET_RANGE_FOTOS);
+      if (!rows.length) {
+        index = {}; count = 0;
+        return 0;
+      }
+
+      var colMap = resolveColumns(rows[0]);
+      var faltantes = REQUIRED.filter(function(f){ return colMap[f] === undefined; });
+      if (faltantes.length) {
+        index = {}; count = 0;
+        return 0;
+      }
+
+      var newIndex = Object.create(null);
+      var newCount = 0, sinQr = 0, sinUrl = 0;
+      for (var i = 1; i < rows.length; i++) {
+        var r = rows[i] || [];
+        if (!r.length) continue;
+        var qr = normalizeQR(r[colMap.qr]);
+        if (!qr) { sinQr++; continue; }
+        var viewUrl = String(r[colMap.view_url] == null ? "" : r[colMap.view_url]).trim();
+        if (!viewUrl) { sinUrl++; continue; }
+        newIndex[qr] = {
+          viewUrl: viewUrl,
+          docId: colMap.doc_id !== undefined ? String(r[colMap.doc_id] == null ? "" : r[colMap.doc_id]).trim() : ""
+        };
+        newCount++;
+      }
+      index = newIndex;
+      count = newCount;
+      return count;
+
+    } catch (e) {
+      if (index === null) { index = {}; count = 0; }
+      return count;
+    }
+  }
+
+  function lookup(qr){ return index ? (index[qr] || null) : null; }
+
+  return { load: load, lookup: lookup, size: function(){ return count; } };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   MÓDULO 3 · Validación
+   ══════════════════════════════════════════════════════════════════ */
+function validar(persona, sitio){
+  if (norm(persona.estatus) !== CFG.ESTATUS_OK) {
+    return { ok: false, razon: persona.estatus ? "estatus " + persona.estatus.toLowerCase() : "sin estatus asignado" };
+  }
+  if (!persona.vence) {
+    return { ok: false, razon: "fecha de vencimiento ilegible (" + (persona.venceRaw || "vacía") + ")" };
+  }
+  if (persona.vence.ord < todayOrdinal()) {
+    return { ok: false, razon: "credencial vencida el " + persona.vence.label };
+  }
+  if (persona.sitios.indexOf(norm(sitio)) === -1) {
+    return { ok: false, razon: persona.sitiosRaw
+      ? "autorizado para " + persona.sitiosRaw + ", no para " + sitio
+      : "sin sitio autorizado" };
+  }
+  return { ok: true, razon: null };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MÓDULO 4 · Protocolo de escritura V20.2
+   Cola optimista con una sola escritura lógica en vuelo, más la
+   doble lectura de durabilidad. HTTP 200 no es prueba de durabilidad.
+   ══════════════════════════════════════════════════════════════════ */
+var WriteQueue = (function(){
+  var chain = Promise.resolve();
+
+  function enqueue(task){
+    var run = chain.then(task, task);
+    chain = run.catch(function(){});
+    return run;
+  }
+
+  async function commit(bucket, evento, key, writeId, onStep){
+    evento._write_id = writeId;
+
+    var step = onStep || function(){};
+    var attempt = 0;
+
+    while (attempt < CFG.MAX_ATTEMPTS) {
+      attempt++;
+      try {
+        /* 1 · baseline */
+        step("baseline", "now");
+        var cur = await GridClient.readState(CFG.DOC_ACCESOS, bucket);
+        step("baseline", "done");
+
+        /* 2 · PATCH con clave única + if_updated_at */
+        step("patch", "now");
+        var patch = {}; patch[key] = evento;
+        var res = await GridClient.patchState(CFG.DOC_ACCESOS, bucket, patch, cur.updated_at || "");
+
+        if (res.status === 409) {
+          step("patch", "fail");
+          var d = jitter(120 * attempt);
+          await sleep(d);
+          continue;                                   // rebase sobre baseline nuevo
+        }
+
+        if (res.status === 503 || res.status === 502 || res.status === 504) {
+          /* Commit ambiguo: releer y buscar el mismo _write_id. */
+          step("patch", "fail");
+          await sleep(jitter(200));
+          if (await contains(bucket, key, writeId)) {
+            step("patch", "done"); step("verify", "done"); step("stable", "done");
+            return { ok: true, key: key, writeId: writeId, recovered: true, attempts: attempt };
+          }
+          continue;
+        }
+
+        if (!res.ok) {
+          step("patch", "fail");
+          throw new Error("patch_" + res.status);
+        }
+        step("patch", "done");
+
+        /* 3 · verificación inmediata */
+        step("verify", "now");
+        if (!(await contains(bucket, key, writeId))) {
+          step("verify", "fail");
+          await sleep(jitter(180));
+          continue;
+        }
+        step("verify", "done");
+
+        /* 4 · verificación de estabilidad */
+        step("stable", "now");
+        await sleep(CFG.STABILITY_MS);
+        if (!(await contains(bucket, key, writeId))) {
+          step("stable", "fail");
+          await sleep(jitter(220));
+          continue;
+        }
+        step("stable", "done");
+
+        return { ok: true, key: key, writeId: writeId, attempts: attempt };
+
+      } catch (e) {
+        if (e.status === 403) throw e;                 // ACL: no tiene sentido reintentar
+        if (e.status === 429) { continue; }
+
+        /* Red caída: el commit es ambiguo, no un fallo limpio. */
+        await sleep(jitter(250 * attempt));
+        try {
+          if (await contains(bucket, key, writeId)) {
+            step("verify", "done"); step("stable", "done");
+            return { ok: true, key: key, writeId: writeId, recovered: true, attempts: attempt };
+          }
+        } catch (e2) { /* sigue sin red */ }
+      }
+    }
+    return { ok: false, key: key, writeId: writeId, attempts: attempt };
+  }
+
+  async function contains(bucket, key, writeId){
+    var s = await GridClient.readState(CFG.DOC_ACCESOS, bucket);
+    var v = s.data && s.data[key];
+    return !!(v && v._write_id === writeId);
+  }
+
+  return {
+    write: function(bucket, evento, key, writeId, onStep){
+      return enqueue(function(){ return commit(bucket, evento, key, writeId, onStep); });
+    }
+  };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   LocalDB — única conexión IndexedDB de la app (accesos-obsidian).
+   Prefs y Outbox comparten la misma base de datos: dos módulos
+   abriendo la misma DB con versiones distintas se pisarían el
+   upgrade entre sí, así que open() y el control de versión viven
+   aquí una sola vez.
+   ══════════════════════════════════════════════════════════════════ */
+var LocalDB = (function(){
+  var NAME = "accesos-obsidian", VERSION = 2;
+  var dbPromise = null;
+
+  function open(){
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise(function(res, rej){
+      var rq = indexedDB.open(NAME, VERSION);
+      rq.onupgradeneeded = function(e){
+        var db = e.target.result;
+        if (!db.objectStoreNames.contains("prefs")) db.createObjectStore("prefs");
+        if (!db.objectStoreNames.contains("outbox")) {
+          var os = db.createObjectStore("outbox", { keyPath: "id" });
+          os.createIndex("createdAt", "createdAt");
+        }
+      };
+      rq.onsuccess = function(e){ res(e.target.result); };
+      rq.onerror   = function(e){ dbPromise = null; rej(e.target.error); };
+    });
+    return dbPromise;
+  }
+
+  return { open: open };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   Preferencia de modo de escaneo. IndexedDB a propósito: el Upload
+   Scanner de Grid bloquea el almacenamiento web síncrono desde 3.6.2.
+   ══════════════════════════════════════════════════════════════════ */
+var Prefs = (function(){
+  var STORE = "prefs";
+  return {
+    get: async function(key, dflt){
+      try {
+        var db = await LocalDB.open();
+        return await new Promise(function(res){
+          var rq = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+          rq.onsuccess = function(){ res(rq.result === undefined ? dflt : rq.result); };
+          rq.onerror   = function(){ res(dflt); };
+        });
+      } catch (e) { return dflt; }
+    },
+    set: async function(key, val){
+      try {
+        var db = await LocalDB.open();
+        db.transaction(STORE, "readwrite").objectStore(STORE).put(val, key);
+      } catch (e) { /* silencioso: es una preferencia, no datos */ }
+    }
+  };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   Outbox — cola local-first para el registro de eventos (V21 #2).
+   procesar() valida contra el catálogo en memoria y despliega el
+   veredicto al instante; el registro durable en Grid pasa por aquí
+   en segundo plano, aplicando el protocolo V20.2 de WriteQueue con
+   una sola escritura lógica en vuelo (WriteQueue ya lo serializa
+   internamente vía su `chain`; el candado `draining` de aquí es
+   una segunda capa por si acaso, no la única).
+
+   La clave (`id`/`key`) y el `writeId` se generan al ENCOLAR, no al
+   escribir: así, si la página se recarga a medio drenado, el
+   siguiente intento reutiliza la misma clave y WriteQueue detecta
+   un commit ya durable en vez de duplicar el evento.
+
+   Una vez confirmado el commit se borra el registro local — no se
+   deja marcado con synced:1 indefinidamente, porque eso haría crecer
+   IndexedDB sin límite en jornadas largas sin aportar nada una vez
+   que Grid ya tiene el evento.
+   ══════════════════════════════════════════════════════════════════ */
+var Outbox = (function(){
+  var STORE = "outbox";
+  var draining = false;
+  var retryTimer = null;
+  var permissionDeniedHandler = null;
+  var queueChangeHandler = null;
+
+  function store(mode){
+    return LocalDB.open().then(function(db){ return db.transaction(STORE, mode).objectStore(STORE); });
+  }
+
+  function put(entry){
+    return store("readwrite").then(function(os){
+      return new Promise(function(res, rej){
+        var rq = os.put(entry);
+        rq.onsuccess = function(){ res(); };
+        rq.onerror   = function(){ rej(rq.error); };
+      });
+    });
+  }
+
+  function remove(id){
+    return store("readwrite").then(function(os){
+      return new Promise(function(res){
+        var rq = os["delete"](id);
+        rq.onsuccess = function(){ res(); };
+        rq.onerror   = function(){ res(); };
+      });
+    });
+  }
+
+  /* Vía el índice createdAt: los ids son UUID, no son ordenables, y
+     el orden de drenado debe respetar el orden real de los escaneos. */
+  function orderedPending(){
+    return store("readonly").then(function(os){
+      return new Promise(function(res){
+        var out = [];
+        var rq = os.index("createdAt").openCursor();
+        rq.onsuccess = function(e){
+          var cur = e.target.result;
+          if (!cur) { res(out); return; }
+          out.push(cur.value);
+          cur.continue();
+        };
+        rq.onerror = function(){ res(out); };
+      });
+    });
+  }
+
+  function notify(){
+    if (!queueChangeHandler) return;
+    orderedPending().then(function(items){ queueChangeHandler(items.length); }).catch(function(){});
+  }
+
+  async function enqueue(bucket, evento){
+    var entry = {
+      id: "evt_" + uuid(),
+      writeId: uuid(),
+      bucket: bucket,
+      evento: evento,
+      attempts: 0,
+      createdAt: Date.now()
+    };
+    await put(entry);
+    notify();
+    kick();
+    return entry;
+  }
+
+  function kick(){
+    if (draining) return;
+    draining = true;
+    drainLoop();
+  }
+
+  async function drainLoop(){
+    var stopRetrying = false;
+    try {
+      while (true) {
+        var items = await orderedPending();
+        if (!items.length) return;
+        var item = items[0];
+        var res;
+        try {
+          res = await WriteQueue.write(item.bucket, item.evento, item.id, item.writeId);
+        } catch (e) {
+          if (e.status === 403) {
+            stopRetrying = true;
+            if (permissionDeniedHandler) permissionDeniedHandler(e, item);
+            return;
+          }
+          res = { ok: false };
+        }
+        if (res.ok) {
+          await remove(item.id);
+          notify();
+          continue;
+        }
+        item.attempts = (item.attempts || 0) + 1;
+        await put(item);
+        return;   // esta falló: se pausa el drenado hasta el próximo reintento programado
+      }
+    } finally {
+      draining = false;
+      if (!stopRetrying) scheduleRetry();
+    }
+  }
+
+  function scheduleRetry(){
+    if (retryTimer) return;
+    retryTimer = setTimeout(function(){
+      retryTimer = null;
+      orderedPending().then(function(items){ if (items.length) kick(); });
+    }, jitter(4000));
+  }
+
+  return {
+    enqueue: enqueue,
+    resume: kick,   // drenar lo que quedó pendiente de una sesión anterior
+    onPermissionDenied: function(fn){ permissionDeniedHandler = fn; },
+    onQueueChange: function(fn){ queueChangeHandler = fn; }
+  };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   ScannerEngine — handheld HID + cámara (BarcodeDetector nativo)
+   ══════════════════════════════════════════════════════════════════ */
+var Scanner = (function(){
+  var stream = null, detector = null, running = false, raf = null;
+
+  async function cameraSupported(){
+    if (!("BarcodeDetector" in window)) return false;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+    try {
+      var formats = await window.BarcodeDetector.getSupportedFormats();
+      return formats.indexOf("qr_code") !== -1;
+    } catch (e) { return true; }   // el detector existe aunque no liste formatos
+  }
+
+  async function start(videoEl, onDetect){
+    if (running) return;
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" } }, audio: false
+    });
+    videoEl.srcObject = stream;
+    await new Promise(function(r){ videoEl.onloadedmetadata = r; });
+    await videoEl.play();
+    detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+    running = true;
+
+    var loop = async function(){
+      if (!running) return;
+      try {
+        var found = await detector.detect(videoEl);
+        if (found && found.length) onDetect(found[0].rawValue);
+      } catch (e) { /* frame ilegible: el siguiente sirve */ }
+      raf = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+
+  function stop(){
+    running = false;
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    if (stream) { stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+    detector = null;
+  }
+
+  return { start: start, stop: stop, supported: cameraSupported, isRunning: function(){ return running; } };
+})();
+
+/* ══════════════════════════════════════════════════════════════════
+   APP
+   ══════════════════════════════════════════════════════════════════ */
+var App = (function(){
+  var S = {
+    id: null,          // { hash, source_field, ldap, short }
+    perfil: null,      // entrada de guardias_registry: { ldap, nombre, sitio, estatus }
+    sitio: null,       // asignado desde el admin panel — el guardia no lo elige
+    scanMode: "handheld",
+    busy: false,       // candado: una validación en vuelo
+    photoObjectUrl: null, // URL.createObjectURL() de la última foto — se revoca antes de crear la siguiente
+    lastCode: "",
+    lastAt: 0,
+    count: 0
+  };
+
+  /* ── Pantallas ─────────────────────────────────────────────────── */
+  function show(id){
+    ["scr-boot","scr-blocked","scr-scan"].forEach(function(s){
+      ge(s).classList.toggle("on", s === id);
+    });
+  }
+  function blocked(title, msg, detail){
+    ge("blocked-title").textContent = title;
+    ge("blocked-msg").textContent = msg;
+    ge("blocked-detail").textContent = detail || "";
+    show("scr-blocked");
+  }
+
+  /* ── Arranque ──────────────────────────────────────────────────── */
+  async function init(){
+    wireUI();
+    var intento = 0;
+    var MAX_BOOT_RETRIES = 4;
+
+    while (true) {
+    try {
+      S.id = await Identity.resolve();
+
+      if (CFG.MODO_ABIERTO) {
+        /* ⚠️ TEMPORAL: sin gate. Cualquier persona con acceso al documento
+           entra, con el sitio fijo de CFG.SITIO_FIJO. S.perfil se rellena
+           con lo mínimo que el resto de la app espera (nombre para el
+           encabezado y el veredicto). */
+        S.perfil = { nombre: S.id.ldap || "Invitado", estatus: CFG.GUARDIA_OK, sitio: CFG.SITIO_FIJO };
+        S.sitio = CFG.SITIO_FIJO;
+
+      } else {
+        /* ── Gate real contra guardias_registry (admin panel → pestaña
+           Guardias). Reactivar poniendo CFG.MODO_ABIERTO en false. ── */
+        var reg = await GridClient.readState(CFG.DOC_ADMIN, CFG.BUCKET_GUARDIAS);
+        var perfil = findInRegistry(reg.data || {}, S.id.ldap);
+
+        if (!perfil) {
+          return blocked("Sin registro",
+            "Tu cuenta no está dada de alta como guardia en el sistema de accesos. Pide a un administrador que te registre y te asigne un sitio.",
+            S.id.ldap ? "Usuario: " + S.id.ldap : "");
+        }
+        if (norm(perfil.estatus) !== CFG.GUARDIA_OK) {
+          return blocked("Solicitud pendiente",
+            "Tu alta existe pero todavía no está aceptada. Un administrador debe aprobarla antes de que puedas operar.",
+            "Estatus actual: " + (perfil.estatus || "—"));
+        }
+        if (!perfil.sitio) {
+          return blocked("Sin sitio asignado",
+            "Tu usuario de guardia no tiene un sitio asignado todavía. Pide a un administrador que te asigne uno desde el panel.",
+            "");
+        }
+        S.perfil = perfil;
+
+        /* El sitio lo fija el admin panel; aquí sólo se verifica que el sitio
+           asignado siga existiendo en la configuración vigente. */
+        var cfg = await GridClient.readState(CFG.DOC_ADMIN, "app_config");
+        var vigentes = Array.isArray((cfg.data || {}).sitios) ? cfg.data.sitios : [];
+        if (vigentes.length && vigentes.indexOf(perfil.sitio) === -1) {
+          return blocked("Sitio asignado ya no existe",
+            "Tu sitio asignado (\"" + perfil.sitio + "\") ya no está en la configuración vigente. Pide a un administrador que te reasigne.",
+            "");
+        }
+        S.sitio = perfil.sitio;
+      }
+
+      /* Secuencial, no Promise.all: dos lecturas simultáneas justo
+         después de /me es exactamente el tipo de ráfaga que un
+         limitador por concurrencia castiga primero. */
+      await Catalog.load();
+      await Photos.load();
+      iniciarTurno();
+      return;
+
+    } catch (e) {
+      /* Grid limitando la tasa de peticiones — no es VPN ni permisos,
+         es tráfico. Backoff exponencial: si sigue limitando después
+         de esperar lo que pidió, esperar el mismo tiempo otra vez
+         suele chocar con la misma ventana. Se dobla cada intento
+         (tope 20s) en vez de reintentar siempre al mismo ritmo. */
+      if (e.status === 429 && intento < MAX_BOOT_RETRIES) {
+        intento++;
+        var base = e.waitMs || 2000;
+        var espera = Math.min(base * Math.pow(2, intento - 1), 20000);
+        await sleep(espera);
+        continue;
+      }
+      if (e.status === 429) {
+        return blocked("Grid está limitando las solicitudes",
+          "Se recibieron demasiadas peticiones en poco tiempo (HTTP 429) y se reintentó " + intento + " veces sin éxito, con espera creciente entre cada una. Esto no es un problema de VPN — si persiste, probablemente haya otra sesión, pestaña o app golpeando el mismo documento al mismo tiempo.",
+          "Detalle: rate_limited" + (e.waitMs ? " · Retry-After sugerido: " + e.waitMs + "ms" : ""));
+      }
+      if (e.status === 403) {
+        return blocked("Falta permiso en Grid",
+          "Grid rechazó la lectura del documento " + (e.docId || "—") + ". El ACL se evalúa sobre ese documento antes de resolver el OAuth, así que necesitas acceso de lectura explícito sobre él.",
+          "Pide acceso de lectura al documento y vuelve a entrar.");
+      }
+      if (/^sheet_read_4/.test(e.message || "")) {
+        return blocked("El catálogo no se pudo leer",
+          "Grid rechazó la lectura de la hoja (" + e.message.replace("sheet_read_", "HTTP ") + "). Casi siempre es que la pestaña \"" + CFG.SHEET_RANGE + "\" no existe con ese nombre exacto en la hoja, o que el SHEET_ID está mal. Verifica el nombre de la pestaña (con o sin acento) y el ID configurado en CFG.",
+          e.detail ? "Detalle de Grid: " + (typeof e.detail === "string" ? e.detail : JSON.stringify(e.detail)) : "Sheet ID: " + CFG.SHEET_ID);
+      }
+      if (e.message === "catalog_headers") {
+        return blocked("No se reconocen las columnas del catálogo",
+          "No encontré encabezados para: " + e.faltantes.join(", ") + ". La pestaña es una respuesta de Google Form, así que el orden de columnas lo define el orden de las preguntas, no una posición fija — el emparejamiento es por texto del encabezado.",
+          "Encabezados leídos: " + (e.encabezados || []).map(function(h, i){ return "[" + i + "] " + h; }).join("  ·  "));
+      }
+      return blocked("No se pudo iniciar",
+        "No fue posible establecer sesión con Grid. Verifica tu conexión a la VPN y vuelve a intentar.",
+        e.message ? "Detalle: " + e.message : "");
+    }
+    }
+  }
+
+  function findInRegistry(reg, ldap){
+    if (!ldap) return null;
+    if (reg[ldap]) return reg[ldap];
+    var keys = Object.keys(reg);
+    for (var i = 0; i < keys.length; i++) {
+      var u = reg[keys[i]];
+      if (u && (u.ldap === ldap || (u.email && String(u.email).split("@")[0] === ldap))) return u;
+    }
+    return null;
+  }
+
+  /* ── Arranque directo a escaneo (sitio ya fijo, sin elección) ──── */
+  async function iniciarTurno(){
+    ge("scan-sitio").textContent = S.sitio;
+    ge("scan-user").textContent  = S.perfil.nombre || S.id.ldap;
+
+    S.scanMode = await Prefs.get("scanMode", "handheld");
+    var camOk = await Scanner.supported();
+    ge("mode-camera").disabled = !camOk;
+    if (!camOk) {
+      S.scanMode = "handheld";
+      ge("cam-hint").textContent = "Este navegador no expone un detector de QR nativo.";
+    }
+    show("scr-scan");
+    setMode(S.scanMode, camOk);
+    iniciarRefrescoCatalogo();
+    Outbox.resume();   // drena lo que quedó pendiente de una sesión anterior
+  }
+
+  /* Relectura periódica y silenciosa del catálogo (CFG.CATALOG_REFRESH_MS).
+     No hay forma de pedirle a Grid "sólo esta fila" (§7/§16.10), así que
+     refrescar siempre implica releer la hoja completa. Si falla, se
+     registra y se reintenta en el siguiente ciclo — nunca interrumpe al
+     guardia ni el escaneo en curso: la app sigue con el último catálogo
+     bueno conocido hasta que un refresco funcione. */
+  var refrescoIniciado = false;
+  var refrescoTimer = null;
+
+  function dispararRefrescoCatalogo(){
+    Catalog.load().then(function(){
+      return Photos.load();
+    }).catch(function(){});
+  }
+
+  function iniciarRefrescoCatalogo(){
+    if (refrescoIniciado) return;
+    refrescoIniciado = true;
+    if (!document.hidden) refrescoTimer = setInterval(dispararRefrescoCatalogo, CFG.CATALOG_REFRESH_MS);
+  }
+
+  /* La pestaña puede pasar horas en segundo plano (el guardia cambia de
+     app o se bloquea la pantalla): sin esto, cada ciclo de 5 min seguía
+     descargando la hoja completa y reconstruyendo el índice sin que
+     nadie estuviera mirando. Se pausa el timer entero, no sólo el
+     trabajo dentro de él, y al recuperar el foco se refresca una vez
+     de inmediato en vez de esperar al siguiente múltiplo de 5 min. */
+  function pausarRefrescoCatalogo(){
+    if (refrescoTimer) { clearInterval(refrescoTimer); refrescoTimer = null; }
+  }
+  function reanudarRefrescoCatalogo(){
+    if (!refrescoIniciado || refrescoTimer) return;
+    dispararRefrescoCatalogo();
+    refrescoTimer = setInterval(dispararRefrescoCatalogo, CFG.CATALOG_REFRESH_MS);
+  }
+
+  /* ── Modos de escaneo ──────────────────────────────────────────── */
+  async function setMode(mode, camOk){
+    if (mode === "camera" && camOk === false) return;
+    S.scanMode = mode;
+    Prefs.set("scanMode", mode);
+
+    ge("mode-handheld").classList.toggle("active", mode === "handheld");
+    ge("mode-camera").classList.toggle("active", mode === "camera");
+    ge("stage-handheld").style.display = mode === "handheld" ? "" : "none";
+    ge("stage-camera").style.display   = mode === "camera" ? "" : "none";
+
+    if (mode === "handheld") {
+      Scanner.stop();
+      armHid();
+    } else {
+      try {
+        await Scanner.start(ge("cam-video"), onScan);
+        ge("cam-hint").textContent = "Encuadra el QR dentro del marco.";
+      } catch (e) {
+        ge("cam-hint").textContent = "No se pudo abrir la cámara. Revisa el permiso del navegador.";
+        setMode("handheld", camOk);
+      }
+    }
+  }
+
+  /* ── HID sin teclado en pantalla ──────────────────────────────────
+     Técnica: enfocar con inputmode="none" (no dispara el teclado del
+     sistema), y ~50ms después, ya enfocado, cambiar a inputmode="text"
+     sin volver a disparar el teclado (los navegadores sólo lo muestran
+     en el evento de foco, no al cambiar el atributo después). Con eso
+     el lector físico conserva un canal de entrada real y editable sin
+     que aparezca el teclado. */
+  var raceArmed = false;
+
+  function hidActive(){
+    return S.scanMode === "handheld" && !S.busy;
+  }
+
+  function armHid(){
+    var f = ge("scan-field");
+    if (!f || !hidActive()) return;
+    if (raceArmed && document.activeElement === f && f.getAttribute("inputmode") === "text") return;
+    raceArmed = false;
+    f.setAttribute("inputmode", "none");
+    f.focus({ preventScroll: true });
+    setTimeout(function(){
+      if (!hidActive() || document.activeElement !== f) return;
+      f.setAttribute("inputmode", "text");
+      raceArmed = true;
+    }, 50);
+  }
+
+  /* ── Entrada de escaneo ────────────────────────────────────────── */
+  function onScan(raw){
+    /* Candado: la cámara dispara ~60 veces por segundo mientras el QR
+       siga encuadrado, y el ciclo de durabilidad dura más de un segundo. */
+    if (S.busy) return;
+    var qr = normalizeQR(raw);
+    if (!qr) return;
+
+    var now = Date.now();
+    if (qr === S.lastCode && (now - S.lastAt) < CFG.SUPPRESS_MS) return;
+    S.lastCode = qr; S.lastAt = now;
+
+    procesar(qr);
+  }
+
+  async function procesar(qr){
+    S.busy = true;
+
+    var persona = Catalog.lookup(qr);
+    var resultado, razon, nombre, empresa;
+
+    if (!persona) {
+      resultado = "desconocido";
+      razon = "el código no aparece en el catálogo";
+      nombre = ""; empresa = "";
+    } else {
+      var v = validar(persona, S.sitio);
+      resultado = v.ok ? "permitido" : "bloqueado";
+      razon = v.razon;
+      nombre = persona.nombre;
+      empresa = persona.empresa;
+    }
+
+    var evento = {
+      qr: qr,
+      nombre: nombre || null,
+      empresa: empresa || null,
+      sitio: S.sitio,
+      resultado: resultado,
+      razon: razon,
+      guardia_hash: S.id.hash,
+      guardia_source_field: S.id.source_field,
+      ts: new Date().toISOString(),
+      tz: CFG.TZ,
+      app: "accesos-obsidian/1.0"
+    };
+
+    /* Local-first (V21 #2): el veredicto ya está decidido arriba contra
+       el catálogo en memoria, así que no depende de Grid en absoluto.
+       Encolar en IndexedDB toma <10ms; el registro durable en Grid lo
+       termina Outbox en segundo plano sin frenar la fila de acceso. */
+    var bucket = bucketName(evento.sitio, new Date(evento.ts));
+    try {
+      await Outbox.enqueue(bucket, evento);
+    } catch (e) {
+      /* IndexedDB no disponible (navegación privada, cuota, etc.):
+         último recurso, escritura directa en vez de perder el evento. */
+      try { await WriteQueue.write(bucket, evento, "evt_" + uuid(), uuid()); } catch (e2) { /* se pierde el registro, no el acceso */ }
+    }
+    S.count++;
+
+    await mostrarVeredicto(evento, persona);
+  }
+
+  async function mostrarVeredicto(evento, persona){
+    var v = ge("verdict");
+    v.classList.remove("ok", "err", "warn");
+
+    /* Por defecto: sin foto, glyph visible. Sólo el branch "permitido"
+       de abajo la activa, y únicamente si Photos tiene una URL Y la
+       imagen carga de verdad — si falla, se cae al glyph sin ruido. */
+    var photoWrap = ge("v-photo-wrap");
+    var glyphEl = ge("v-glyph");
+    photoWrap.style.display = "none";
+    photoWrap.style.height = "";
+    glyphEl.style.display = "";
+
+    if (evento.resultado !== "permitido" && S.scanMode === "handheld") {
+      var area = ge("hh-scan-area");
+      if (area) {
+        area.classList.add("shake");
+        setTimeout(function(){ area.classList.remove("shake"); }, 220);
+      }
+    }
+
+    var glyphOK   = '<svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+    var glyphERR  = '<svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    var glyphWARN = '<svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+    if (evento.resultado === "permitido") {
+      v.classList.add("ok");
+      glyphEl.className = "glyph ok";
+      glyphEl.innerHTML = glyphOK;
+      ge("v-title").textContent = "¡Adelante, " + (persona.pila || persona.nombre) + "! Acceso habilitado.";
+      ge("v-why").textContent = persona.empresa ? persona.empresa : "";
+
+      var foto = Photos.lookup(evento.qr);
+      if (foto && foto.docId) {
+        if (S.photoObjectUrl) { URL.revokeObjectURL(S.photoObjectUrl); S.photoObjectUrl = null; }
+        var img = ge("v-photo");
+        try {
+          var objectUrl = await GridClient.downloadDocumentAsObjectUrl(foto.docId);
+          S.photoObjectUrl = objectUrl;
+          var cargo = await new Promise(function(resolve){
+            img.onload  = function(){ resolve(true); };
+            img.onerror = function(){ resolve(false); };
+            img.src = objectUrl;
+          });
+          if (cargo) {
+            photoWrap.style.display = ""; glyphEl.style.display = "none";
+            /* object-fit:contain garantiza que la foto se vea completa,
+               pero con una caja de alto fijo eso puede dejar franjas
+               vacías grandes si la foto es muy vertical u horizontal.
+               Se ajusta el alto de la caja al aspecto real de la foto,
+               con un rango razonable para no deformar el modal. */
+            if (img.naturalWidth && img.naturalHeight) {
+              /* No se puede medir photoWrap.clientWidth aquí: el modal
+                 todavía no tiene la clase "on", así que toda la cadena
+                 de ancestros está display:none y clientWidth daría 0.
+                 Se usa el mismo ancho que ya define el CSS del panel
+                 (max-width 460px, con 20px de padding del overlay a
+                 cada lado) en vez de medir un elemento invisible. */
+              var anchoCaja = Math.min(460, window.innerWidth - 40);
+              var altoIdeal = anchoCaja * (img.naturalHeight / img.naturalWidth);
+              var esMovil = window.matchMedia("(max-width:560px)").matches;
+              /* El tope por ancho (400/320px) asumía suficiente alto de
+                 pantalla; en una pantalla baja eso solo empujaba el botón
+                 fuera de la vista. Se limita también contra el alto real
+                 del viewport — el más chico de los dos gana. */
+              var maxAltoPorViewport = window.innerHeight * 0.35;
+              var maxAlto = Math.min(esMovil ? 320 : 400, maxAltoPorViewport);
+              var minAlto = Math.min(esMovil ? 160 : 200, maxAlto);
+              photoWrap.style.height = Math.max(minAlto, Math.min(altoIdeal, maxAlto)) + "px";
+            }
+          }
+        } catch (e) {
+        }
+      } else {
+      }
+    } else if (evento.resultado === "bloqueado") {
+      v.classList.add("err");
+      ge("v-glyph").className = "glyph err";
+      ge("v-glyph").innerHTML = glyphERR;
+      ge("v-title").textContent = "Acceso bloqueado: " + evento.razon + ".";
+      ge("v-why").textContent = "Pide al usuario revisar su credencial.";
+    } else {
+      v.classList.add("warn");
+      ge("v-glyph").className = "glyph warn";
+      ge("v-glyph").innerHTML = glyphWARN;
+      ge("v-title").textContent = "Acceso no existe: " + evento.razon + ".";
+      ge("v-why").textContent = "Pide al usuario revisar su credencial.";
+    }
+
+    /* Staleness explícito: la app puede llevar horas abierta sin recargar.
+       Al guardia no le hablamos de "catálogo" ni "snapshot" — sólo se le
+       pide recargar si no la ha estado usando hace rato. */
+    var notices = "";
+    if (evento.resultado === "desconocido") {
+      notices += '<div class="notice warn">' + glyphWARN.replace(/width="26" height="26"/, 'width="16" height="16"') +
+        '<span>Si no has usado la app hace rato, recarga la página e inténtalo de nuevo antes de decidir.</span></div>';
+    }
+    ge("v-notice").innerHTML = notices;
+
+    v.classList.add("on");
+    setTimeout(function(){ ge("v-close").focus(); }, 60);
+  }
+
+  function cerrarVeredicto(){
+    ge("verdict").classList.remove("on");
+    if (S.photoObjectUrl) { URL.revokeObjectURL(S.photoObjectUrl); S.photoObjectUrl = null; }
+    S.busy = false;
+    armHid();
+  }
+
+  /* ── Cableado de UI ────────────────────────────────────────────── */
+  function wireUI(){
+    ge("mode-handheld").addEventListener("click", function(){ setMode("handheld"); });
+    ge("mode-camera").addEventListener("click", function(){ setMode("camera", true); });
+
+    var f = ge("scan-field");
+    f.addEventListener("keydown", function(e){
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      var val = f.value;
+      f.value = "";
+      onScan(val);
+    });
+    f.addEventListener("focus", function(){ ge("hh-mark").classList.add("armed"); });
+    f.addEventListener("blur",  function(){
+      ge("hh-mark").classList.remove("armed");
+      raceArmed = false;
+      requestAnimationFrame(armHid);
+    });
+
+    ge("hh-scan-area").addEventListener("click", function(){
+      if (hidActive()) f.focus({ preventScroll: true });
+    });
+
+    ge("v-close").addEventListener("click", cerrarVeredicto);
+
+    Outbox.onQueueChange(function(n){
+      var pill = ge("outbox-pill");
+      if (!pill) return;
+      pill.style.display = n > 0 ? "" : "none";
+      ge("outbox-count").textContent = n;
+    });
+    Outbox.onPermissionDenied(function(e, item){
+      blocked("Falta permiso de escritura",
+        "Grid rechazó el registro en el documento de eventos. Necesitas acceso de lectura sobre " + CFG.DOC_ACCESOS + " para poder escribir en él.",
+        "Bucket: " + item.bucket);
+    });
+
+    var refreshBtn = ge("btn-refresh-catalog");
+    var refrescandoManual = false;
+    refreshBtn.addEventListener("click", function(){
+      if (refrescandoManual) return;
+      refrescandoManual = true;
+      refreshBtn.disabled = true;
+      refreshBtn.classList.add("spinning");
+      var nCatalogo;
+      Catalog.load().then(function(n){
+        nCatalogo = n;
+        return Photos.load();
+      }).then(function(){
+        toast("Catálogo actualizado — " + nCatalogo + " credenciales.", "ok");
+      }).catch(function(e){
+        toast("No se pudo actualizar. Se mantiene el catálogo anterior.", "err");
+      }).finally(function(){
+        refrescandoManual = false;
+        refreshBtn.disabled = false;
+        refreshBtn.classList.remove("spinning");
+      });
+    });
+
+    document.addEventListener("visibilitychange", function(){
+      if (document.hidden) {
+        if (Scanner.isRunning()) Scanner.stop();
+        pausarRefrescoCatalogo();
+      } else {
+        reanudarRefrescoCatalogo();
+      }
+    });
+  }
+
+  return { init: init };
+})();
+
+App.init();
+</script>
+</body>
+</html>
