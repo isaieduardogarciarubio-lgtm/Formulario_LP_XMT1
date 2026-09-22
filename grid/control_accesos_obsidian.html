@@ -1626,9 +1626,12 @@ var App = (function(){
        imagen carga de verdad — si falla, se cae al glyph sin ruido. */
     var photoWrap = ge("v-photo-wrap");
     var glyphEl = ge("v-glyph");
+    var closeBtn = ge("v-close");
     photoWrap.style.display = "none";
     photoWrap.style.height = "";
     glyphEl.style.display = "";
+    closeBtn.disabled = false;
+    closeBtn.textContent = "Siguiente escaneo";
 
     if (evento.resultado !== "permitido" && S.scanMode === "handheld") {
       var area = ge("hh-scan-area");
@@ -1672,28 +1675,48 @@ var App = (function(){
     }
     ge("v-notice").innerHTML = notices;
 
-    /* El modal se abre YA: la decisión ya está tomada arriba contra el
-       catálogo en memoria y no depende de la foto. Esperar aquí a que
-       la foto viaje por red (metadata + blob firmado) es justo el hueco
-       silencioso que hacía parecer que el escaneo no hizo nada. */
+    /* El modal se abre YA con el veredicto (permitido/bloqueado/desconocido):
+       esa decisión ya está tomada arriba contra el catálogo en memoria y no
+       depende de la foto. Pero cuando SÍ hay foto que verificar, el guardia
+       la necesita para comparar cara contra credencial antes de dejar pasar
+       — así que aquí el botón para continuar se bloquea hasta que la foto
+       cargue (o falle de forma explícita), en vez de dejar avanzar sin ella. */
     v.classList.add("on");
-    setTimeout(function(){ ge("v-close").focus(); }, 60);
 
     if (evento.resultado === "permitido") {
       var foto = Photos.lookup(evento.qr);
-      if (foto && foto.docId) cargarFotoVeredicto(foto.docId, seq);
+      if (foto && foto.docId) {
+        closeBtn.disabled = true;
+        closeBtn.textContent = "Verificando foto…";
+        cargarFotoVeredicto(foto.docId, seq);
+        return;
+      }
     }
+    setTimeout(function(){ closeBtn.focus(); }, 60);
   }
 
-  /* Carga progresiva de la foto: corre después de que el veredicto ya
-     está visible. `seq` es el token del veredicto que la disparó — si
-     para cuando la foto llega ya hay un veredicto más nuevo en pantalla
-     (el guardia cerró y escaneó otra credencial mientras esta viajaba),
-     se descarta en vez de pisar la foto/el glyph de otra persona. */
+  /* Carga de la foto de verificación: bloquea "Siguiente escaneo" mientras
+     dura (el guardia debe comparar cara contra foto antes de dejar pasar).
+     `seq` es el token del veredicto que la disparó — si para cuando la foto
+     llega ya hay un veredicto más nuevo en pantalla (el guardia forzó otro
+     camino o escaneó de nuevo), se descarta en vez de pisar el estado de
+     otra persona. */
   async function cargarFotoVeredicto(docId, seq){
     var img = ge("v-photo");
     var photoWrap = ge("v-photo-wrap");
     var glyphEl = ge("v-glyph");
+    var closeBtn = ge("v-close");
+
+    function liberarBoton(notaError){
+      if (seq !== S.veredictoSeq) return;
+      closeBtn.disabled = false;
+      closeBtn.textContent = "Siguiente escaneo";
+      if (notaError) {
+        ge("v-notice").innerHTML += '<div class="notice warn"><span>' + notaError + '</span></div>';
+      }
+      closeBtn.focus();
+    }
+
     try {
       var objectUrl = await GridClient.downloadDocumentAsObjectUrl(docId);
       if (seq !== S.veredictoSeq) { URL.revokeObjectURL(objectUrl); return; }
@@ -1706,7 +1729,12 @@ var App = (function(){
         img.onerror = function(){ resolve(false); };
         img.src = objectUrl;
       });
-      if (seq !== S.veredictoSeq || !cargo) return;
+      if (seq !== S.veredictoSeq) return;
+
+      if (!cargo) {
+        liberarBoton("No se pudo mostrar la foto de verificación. Confirma la identidad manualmente.");
+        return;
+      }
 
       photoWrap.style.display = ""; glyphEl.style.display = "none";
       /* object-fit:contain garantiza que la foto se vea completa, pero
@@ -1723,8 +1751,10 @@ var App = (function(){
         var minAlto = Math.min(esMovil ? 160 : 200, maxAlto);
         photoWrap.style.height = Math.max(minAlto, Math.min(altoIdeal, maxAlto)) + "px";
       }
+      liberarBoton(null);
+
     } catch (e) {
-      /* sin foto: se queda el glyph, no es un error visible para el guardia */
+      liberarBoton("No se pudo cargar la foto de verificación. Confirma la identidad manualmente.");
     }
   }
 
