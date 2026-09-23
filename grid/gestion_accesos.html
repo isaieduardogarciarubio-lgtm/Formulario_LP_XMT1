@@ -892,6 +892,16 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
       <button onclick="setExpire(90)">90 días</button>
       <button onclick="setExpire(365)">1 año</button>
     </div>
+    <!-- Nudge no-bloqueante: mismo CURP+sitio ya tuvo un acceso, pero está
+         vencido — no impide aceptar este, sólo sugiere revisar el otro
+         en vez de dejarlo "aceptado" pero muerto y crear uno redundante. -->
+    <div class="alert-inline" id="expiredConflictNote" style="display:none;border-color:var(--warning-bd);background:var(--warning-bg);color:var(--warning)">
+      <svg class="icon icon-sm" style="margin-top:1px" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M109-120q-11 0-20-5.5T75-140q-5-9-5.5-19.5T75-180l370-640q6-10 15.5-15t19.5-5q10 0 19.5 5t15.5 15l370 640q6 10 5.5 20.5T885-140q-5 9-14 14.5t-20 5.5H109Zm69-80h604L480-720 178-200Zm330.5-51.5Q520-263 520-280t-11.5-28.5Q497-320 480-320t-28.5 11.5Q440-297 440-280t11.5 28.5Q463-240 480-240t28.5-11.5Zm0-120Q520-383 520-400v-120q0-17-11.5-28.5T480-560q-17 0-28.5 11.5T440-520v120q0 17 11.5 28.5T480-360q17 0 28.5-11.5ZM480-460Z"/></svg>
+      <div>
+        Ya existe un acceso <strong>vencido</strong> de <strong id="expiredConflictName">—</strong> para este sitio (venció el <span id="expiredConflictDate">—</span>).
+        <button type="button" onclick="viewExpiredConflict()" style="background:none;border:none;padding:0;margin-top:4px;display:block;color:inherit;font-weight:700;text-decoration:underline;cursor:pointer;font-size:inherit">¿Reactivarlo en vez de crear uno nuevo?</button>
+      </div>
+    </div>
     <div class="alert-inline">
       <svg class="icon icon-sm" style="color:var(--primary);margin-top:1px" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M508.5-291.5Q520-303 520-320v-160q0-17-11.5-28.5T480-520q-17 0-28.5 11.5T440-480v160q0 17 11.5 28.5T480-280q17 0 28.5-11.5Zm0-320Q520-623 520-640t-11.5-28.5Q497-680 480-680t-28.5 11.5Q440-657 440-640t11.5 28.5Q463-600 480-600t28.5-11.5ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z"/></svg>
       <div>Se generará un código QR de acceso al confirmar.</div>
@@ -902,6 +912,28 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
         <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="m382-354 339-339q12-12 28-12t28 12q12 12 12 28.5T777-636L410-268q-12 12-28 12t-28-12L182-440q-12-12-11.5-28.5T183-497q12-12 28.5-12t28.5 12l142 143Z"/></svg>
         Aceptar
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Modal: Conflicto de acceso duplicado (CURP+sitio) — bloquea el
+     accept, no es una advertencia con opción de forzar. ===== -->
+<div class="overlay" id="acceptConflictModal">
+  <div class="modal">
+    <h3>Ya existe un acceso vigente</h3>
+    <p class="sub">Mismo CURP y mismo sitio — no se puede aceptar este mientras el otro siga activo.</p>
+    <div class="modal-div"></div>
+    <div class="alert-inline" style="border-color:var(--error-bd);background:var(--error-bg);color:var(--error)">
+      <svg class="icon icon-sm" style="margin-top:1px" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="m109-120q-11 0-20-5.5T75-140q-5-9-5.5-19.5T75-180l370-640q6-10 15.5-15t19.5-5q10 0 19.5 5t15.5 15l370 640q6 10 5.5 20.5T885-140q-5 9-14 14.5t-20 5.5H109Zm69-80h604L480-720 178-200Zm330.5-51.5Q520-263 520-280t-11.5-28.5Q497-320 480-320t-28.5 11.5Q440-297 440-280t11.5 28.5Q463-240 480-240t28.5-11.5Zm0-120Q520-383 520-400v-120q0-17-11.5-28.5T480-560q-17 0-28.5 11.5T440-520v120q0 17 11.5 28.5T480-360q17 0 28.5-11.5ZM480-460Z"/></svg>
+      <div>
+        <strong id="acceptConflictName">—</strong><br>
+        <span id="acceptConflictMeta">—</span>
+      </div>
+    </div>
+    <p class="hint">Resuelve esa solicitud primero — recházala, revíertela a pendiente, o espera a que venza.</p>
+    <div class="modal-actions">
+      <button class="btn btn-block btn-ghost" style="flex:none;padding:13px 20px" onclick="closeModal('acceptConflictModal')">Cerrar</button>
+      <button class="btn btn-block btn-primary" onclick="viewAcceptConflict()">Ver esa solicitud</button>
     </div>
   </div>
 </div>
@@ -2551,6 +2583,33 @@ var BADGE_CONTENT={
   rechazado:function(){return ic.xCirc+' Rechazado';}
 };
 
+function normCurp(c){ return String(c||'').trim().toUpperCase(); }
+/* "Candado" de duplicados: mismo CURP + mismo sitio no debería tener dos
+   accesos aceptados a la vez. Busca en TODO el dataset ya cargado (no
+   hay forma de imponer esto del lado del Sheet) y separa:
+   - active: aceptado y vigente/por vencer — bloquea el nuevo accept.
+   - expired: aceptado pero vencido — no bloquea, sólo se sugiere
+     reactivarlo en vez de crear un acceso redundante.
+   Sólo cuenta el primero de cada tipo que encuentra; si hay varios
+   duplicados vencidos/activos ya hay un problema de datos previo que
+   esto no intenta resolver, sólo evita sumar uno más. */
+function findAccesoConflict(curp, sitio, excludeId){
+  var curpN=normCurp(curp);
+  var out={active:null, expired:null};
+  if(!curpN || !sitio) return out;
+  for(var i=0;i<solicitudes.length;i++){
+    var s=solicitudes[i];
+    if(s.id===excludeId) continue;
+    if(s.estatus!=='aceptado') continue;
+    if(s.sitio!==sitio) continue;
+    if(normCurp(s.curp)!==curpN) continue;
+    var v=vigencia(s.fechaVencimiento);
+    if(v && v.cls==='vencido'){ if(!out.expired) out.expired=s; }
+    else { if(!out.active) out.active=s; }
+  }
+  return out;
+}
+
 /* ===== Render ===== */
 function setTab(t){
   currentTab=t;
@@ -3088,7 +3147,11 @@ function bulkProcess(ids, mutateFn, successMsgFn, failVerb, tabAfter){
     var id=ids[i];
     var s=getById(id);
     if(!s){ fail++; errLines.push(id+': ya no existe'); next(i+1); return; }
-    mutateFn(s);
+    // mutateFn puede devolver un motivo (string) en vez de mutar, para
+    // saltarse esta solicitud sin escribir nada — ej. conflicto de
+    // duplicado CURP+sitio detectado justo al procesar el lote.
+    var skipReason=mutateFn(s);
+    if(skipReason){ fail++; errLines.push(fullName(s)+': '+skipReason); next(i+1); return; }
     persistAcceso(s).then(function(res){
       if(res && res.ok===false) fail++; else ok++;
       next(i+1);
@@ -3098,18 +3161,51 @@ function bulkProcess(ids, mutateFn, successMsgFn, failVerb, tabAfter){
 }
 
 /* ===== Accept modal ===== */
+var _acceptExpiredConflictId=null; // solicitud vencida sugerida para "reactivar" en vez de esta
+var _acceptBlockConflictId=null;   // solicitud activa que bloquea el accept actual
+function showAcceptConflict(conflict){
+  _acceptBlockConflictId=conflict.id;
+  document.getElementById('acceptConflictName').textContent=fullName(conflict);
+  document.getElementById('acceptConflictMeta').textContent=(conflict.sitio||'—')+' · vence '+fmtDate(conflict.fechaVencimiento);
+  openModal('acceptConflictModal');
+}
+function viewAcceptConflict(){
+  var id=_acceptBlockConflictId; if(!id) return;
+  closeModal('acceptConflictModal');
+  openDetail(id);
+}
+function viewExpiredConflict(){
+  var id=_acceptExpiredConflictId; if(!id) return;
+  closeModal('acceptModal');
+  openDetail(id);
+}
 function openAccept(id){
   _bulkIds=null;
+  var s=getById(id);
+  var conflict=findAccesoConflict(s&&s.curp, s&&s.sitio, id);
+  if(conflict.active){ showAcceptConflict(conflict.active); return; }
   pendingAction=id;
-  document.getElementById('acceptName').textContent=fullName(getById(id));
+  document.getElementById('acceptName').textContent=fullName(s);
   document.getElementById('expireDate').value='';
   document.getElementById('expireErr').classList.remove('show');
+  var note=document.getElementById('expiredConflictNote');
+  if(conflict.expired){
+    _acceptExpiredConflictId=conflict.expired.id;
+    document.getElementById('expiredConflictName').textContent=fullName(conflict.expired);
+    document.getElementById('expiredConflictDate').textContent=fmtDate(conflict.expired.fechaVencimiento);
+    note.style.display='';
+  } else {
+    _acceptExpiredConflictId=null;
+    note.style.display='none';
+  }
   openModal('acceptModal');
 }
 function openBulkAccept(){
   var ids=Object.keys(selectedIds).filter(function(id){ var s=getById(id); return s&&s.estatus==='pendiente'; });
   if(!ids.length){ showToast('No hay solicitudes pendientes en la selección','warning'); return; }
   _bulkIds=ids;
+  _acceptExpiredConflictId=null;
+  document.getElementById('expiredConflictNote').style.display='none';
   document.getElementById('acceptName').textContent=ids.length+' solicitud'+(ids.length===1?'':'es')+' pendiente'+(ids.length===1?'':'s')+' seleccionada'+(ids.length===1?'':'s');
   document.getElementById('expireDate').value='';
   document.getElementById('expireErr').classList.remove('show');
@@ -3127,12 +3223,21 @@ function confirmAccept(){
     var ids=_bulkIds; _bulkIds=null;
     closeModal('acceptModal');
     bulkProcess(ids, function(s){
+      // Re-chequeo al procesar (no al abrir el modal): el dataset pudo
+      // cambiar entre que se seleccionó el lote y que se confirmó.
+      var conflict=findAccesoConflict(s.curp, s.sitio, s.id).active;
+      if(conflict) return 'ya existe un acceso vigente de '+fullName(conflict)+' en '+s.sitio;
       s.estatus='aceptado'; s.fechaVencimiento=val; s.motivoRechazo=null;
       if(!s.qr) devLog('⚠ bulkAccept: '+s.id+' sin Nuevo_QR en el Sheet','warn');
     }, function(n){ return n+' solicitud'+(n===1?'':'es')+' aceptada'+(n===1?'':'s'); }, 'aceptadas', 'aceptado');
     return;
   }
   var s=getById(pendingAction);
+  // Mismo re-chequeo defensivo que en el lote — openAccept() ya filtró
+  // esto al abrir el modal, pero la solicitud pudo cambiar mientras
+  // estaba abierto.
+  var conflict=findAccesoConflict(s.curp, s.sitio, s.id).active;
+  if(conflict){ closeModal('acceptModal'); showAcceptConflict(conflict); return; }
   s.estatus='aceptado'; s.fechaVencimiento=val; s.motivoRechazo=null;
   // s.qr viene de "Nuevo_QR" en el Sheet (ya poblado desde el envío del Form) —
   // esta app sólo lo lee, nunca lo inventa ni lo escribe.
