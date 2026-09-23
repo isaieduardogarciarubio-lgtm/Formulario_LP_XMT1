@@ -1127,6 +1127,26 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
   </div>
 </div>
 
+<!-- ===== Modal: Revertir a pendiente ===== -->
+<div class="overlay" id="revertModal">
+  <div class="modal">
+    <h3>Revertir a pendiente</h3>
+    <p class="sub" id="revertName">—</p>
+    <div class="modal-div"></div>
+    <div class="alert-inline" style="border-color:var(--warning-bd);background:var(--warning-bg);color:var(--warning)">
+      <svg class="icon icon-sm" style="margin-top:1px" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M109-120q-11 0-20-5.5T75-140q-5-9-5.5-19.5T75-180l370-640q6-10 15.5-15t19.5-5q10 0 19.5 5t15.5 15l370 640q6 10 5.5 20.5T885-140q-5 9-14 14.5t-20 5.5H109Zm69-80h604L480-720 178-200Zm330.5-51.5Q520-263 520-280t-11.5-28.5Q497-320 480-320t-28.5 11.5Q440-297 440-280t11.5 28.5Q463-240 480-240t28.5-11.5Zm0-120Q520-383 520-400v-120q0-17-11.5-28.5T480-560q-17 0-28.5 11.5T440-520v120q0 17 11.5 28.5T480-360q17 0 28.5-11.5ZM480-460Z"/></svg>
+      <div>El scanner de guardias deja de reconocer este acceso de inmediato — vuelve a quedar pendiente de revisión, con el vencimiento y el motivo de rechazo en blanco.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-block btn-ghost" style="flex:none;padding:13px 20px" onclick="closeModal('revertModal')">Cancelar</button>
+      <button class="btn btn-block btn-warning" onclick="confirmRevert()">
+        <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M320-200q-17 0-28.5-11.5T280-240q0-17 11.5-28.5T320-280h244q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l76 76q11 11 11 28t-11 28q-11 11-28 11t-28-11L188-572q-6-6-8.5-13t-2.5-15q0-8 2.5-15t8.5-13l144-144q11-11 28-11t28 11q11 11 11 28t-11 28l-76 76h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H320Z"/></svg>
+        Revertir a pendiente
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="toastArea"></div>
 <div id="devConsole"></div>
 
@@ -3054,10 +3074,23 @@ function buildActions(s){
            '<button class="btn btn-block btn-primary" onclick="openAccept(\''+s.id+'\')">'+ic.check+' Aceptar</button>'+
            deleteBtnPend;
   }
-  var revertBtn = '<button class="btn btn-block btn-ghost" style="flex:none;padding:13px 14px" onclick="revert(\''+s.id+'\')" title="Revertir a pendiente">'+ic.undo+'</button>';
+  var revertBtn = '<button class="btn btn-block btn-ghost" style="flex:none;padding:13px 14px" onclick="openRevert(\''+s.id+'\')" title="Revertir a pendiente">'+ic.undo+'</button>';
   var editBtn   = '<button class="btn btn-block btn-secondary" style="flex:1" onclick="openEditExpiry(\''+s.id+'\')">'+ic.editCal+' Editar vencimiento</button>';
   var deleteBtn = '<button class="btn btn-block btn-danger-outline" style="flex:none;padding:13px 14px" onclick="openDeleteAcceso(\''+s.id+'\')" title="Eliminar solicitud">'+ic.trash+'</button>';
   return revertBtn + editBtn + deleteBtn;
+}
+var _pendingRevertId=null;
+function openRevert(id){
+  var s=getById(id); if(!s) return;
+  _pendingRevertId=id;
+  document.getElementById('revertName').textContent=fullName(s);
+  openModal('revertModal');
+}
+function confirmRevert(){
+  var id=_pendingRevertId; if(!id) return;
+  _pendingRevertId=null;
+  closeModal('revertModal');
+  revert(id);
 }
 function revert(id){
   var s=getById(id); if(!s) return;
