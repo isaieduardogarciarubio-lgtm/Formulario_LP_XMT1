@@ -1026,6 +1026,26 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
   </div>
 </div>
 
+<!-- ===== Modal: Eliminar solicitud ===== -->
+<div class="overlay" id="deleteAccesoModal">
+  <div class="modal">
+    <h3>Eliminar solicitud</h3>
+    <p class="sub" id="deleteAccesoName">—</p>
+    <div class="modal-div"></div>
+    <div class="alert-inline" style="border-color:var(--error-bd);background:var(--error-bg);color:var(--error)">
+      <svg class="icon icon-sm" style="margin-top:1px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <div>Se borran los datos de esta fila en el Sheet (la fila queda vacía, no se elimina — nada se recorre debajo). El scanner de guardias deja de reconocer este código de inmediato. No se puede deshacer desde esta app.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-block btn-ghost" style="flex:none;padding:13px 20px" onclick="closeModal('deleteAccesoModal')">Cancelar</button>
+      <button class="btn btn-block btn-danger" id="btnConfirmDeleteAcceso" onclick="confirmDeleteAcceso()">
+        <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+        Eliminar definitivamente
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="toastArea"></div>
 <div id="devConsole"></div>
 <button id="devToggle" onclick="toggleDev()">DEV</button>
@@ -1063,6 +1083,7 @@ var ic = (function(){
     moon:      mk('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
     editCal:   mk('<rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/>'),
     search:    mk('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
+    trash:     mk('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>'),
     qrScan:    mk('<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>'),
     /* Large icons for empty states */
     lgInbox:   mkLg('<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
@@ -1211,6 +1232,7 @@ var SHEET_FIELD_PATTERNS = [
 /* Índices de columna resueltos en loadSolicitudes() — se reutilizan al
    escribir de vuelta en persistAcceso()/writeAccesoToSheet(). */
 var SHEET_COLMAP = {};
+var SHEET_TOTAL_COLS = 0; // número real de columnas del encabezado — usado por clearAccesoRowInSheet()
 
 /* Payload de QR: puede llegar envuelto en URL o JSON (igual normalización
    que normalizeQR() del scanner) — aquí sobre todo evita mismatches de
@@ -1353,6 +1375,7 @@ function loadSolicitudes(onDone) {
   .then(function(results){
     var rawRows=results[0];
     var headerRow=rawRows[0]||[];
+    SHEET_TOTAL_COLS=headerRow.length; // usado por clearAccesoRowInSheet() para el rango A:última columna
     // qr/estatus/vence resueltos por NOMBRE de encabezado, no por letra fija
     // — el orden real de columnas en el Form no rompe el mapeo.
     SHEET_COLMAP=resolveColumnsByPriority(headerRow, SHEET_FIELD_PATTERNS);
@@ -1395,6 +1418,10 @@ function loadSolicitudes(onDone) {
       merged['__qrRaw']=qrHeaderName ? row[qrHeaderName] : '';
       return rowToSolicitud(merged,idx);
     });
+    // Una fila "eliminada" (ver clearAccesoRowInSheet) queda vacía en el
+    // Sheet, no desaparece — sin esto reaparecería como una solicitud
+    // "pendiente" fantasma con todo en blanco en el próximo refresco.
+    solicitudes=solicitudes.filter(function(s){ return s.nombre || s.correo || s.qr; });
     devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' | col uniqueid nativa, qr(Nuevo_QR)="'+qrHeaderName+'" estatus="'+estatusHeaderName+'" vence="'+venceHeaderName+'")','info');
     if(sheetRows.length>0){
       var r0=sheetRows[0];
@@ -1796,6 +1823,41 @@ function writeAccesoToSheet(acceso){
       throw new Error('no se reconoce la columna de vencimiento en el Sheet');
     }
     return Promise.all(writes);
+  });
+}
+
+/* Limpia (clear) un rango del Sheet — spreadsheets.values.clear equivalente:
+   vacía los valores, NO borra filas ni recorre nada de abajo. Éxito real es
+   202 (encolado, ver Biblia §7); Response.ok ya cubre 200-299 así que no
+   hace falta chequear 202 aparte. */
+function clearSheetRange(range){
+  return GridClient.call('/api/v1/sheets/'+encodeURIComponent(CFG.SHEET_ID)+'/values?doc_id='+encodeURIComponent(DOC_IDS.usuarios)+'&range='+encodeURIComponent(range),{
+    method:'DELETE'
+  }).then(function(res){
+    if(!res.ok){
+      return res.text().then(function(bodyText){
+        var detail=bodyText;
+        try{ var j=JSON.parse(bodyText); detail=j.detail||j.error||bodyText; }catch(ignore){}
+        var e=new Error('sheet_clear_'+range+'_'+res.status+(detail?(': '+detail):''));
+        e.status=res.status; throw e;
+      }, function(){
+        var e=new Error('sheet_clear_'+range+'_'+res.status); e.status=res.status; throw e;
+      });
+    }
+    return res.json().catch(function(){ return {ok:true}; });
+  });
+}
+
+/* "Eliminar" una solicitud = vaciar TODA su fila en el Sheet (columna A a
+   la última columna real del encabezado) — los datos desaparecen, la fila
+   en sí sigue ahí (vacía), nada se recorre debajo. Relocaliza la fila
+   fresca antes de limpiar, mismo patrón defensivo que writeAccesoToSheet(). */
+function clearAccesoRowInSheet(uid){
+  return resolveSheetRowForUid(uid).then(function(row){
+    if(!row) throw new Error('la fila de '+uid+' ya no existe en el Sheet — nada que eliminar');
+    var lastCol=colIndexToLetter(Math.max(SHEET_TOTAL_COLS-1,0));
+    var range=CFG.SHEET_RANGE+'!A'+row+':'+lastCol+row;
+    return clearSheetRange(range);
   });
 }
 
@@ -2810,14 +2872,51 @@ function buildActions(s){
     return '<button class="btn btn-block btn-danger-outline" onclick="openReject(\''+s.id+'\')">'+ic.x+' Rechazar</button>'+
            '<button class="btn btn-block btn-primary" onclick="openAccept(\''+s.id+'\')">'+ic.check+' Aceptar</button>';
   }
-  var editBtn = '<button class="btn btn-block btn-secondary" style="flex:none;padding:13px 14px" onclick="openEditExpiry(\''+s.id+'\')" title="Editar vencimiento">'+ic.editCal+'</button>';
-  return editBtn + '<button class="btn btn-block btn-ghost" style="flex:1" onclick="revert(\''+s.id+'\')">'+ic.undo+' Revertir a pendiente</button>';
+  var revertBtn = '<button class="btn btn-block btn-ghost" style="flex:none;padding:13px 14px" onclick="revert(\''+s.id+'\')" title="Revertir a pendiente">'+ic.undo+'</button>';
+  var editBtn   = '<button class="btn btn-block btn-secondary" style="flex:1" onclick="openEditExpiry(\''+s.id+'\')">'+ic.editCal+' Editar vencimiento</button>';
+  var deleteBtn = '<button class="btn btn-block btn-danger-outline" style="flex:none;padding:13px 14px" onclick="openDeleteAcceso(\''+s.id+'\')" title="Eliminar solicitud">'+ic.trash+'</button>';
+  return revertBtn + editBtn + deleteBtn;
 }
 function revert(id){
   var s=getById(id); if(!s) return;
   s.estatus='pendiente'; s.motivoRechazo=null; s.fechaVencimiento=null;
   persistAcceso(s);
   closeDetail(); setTab('pendiente'); showToast('Solicitud revertida a pendiente','info');
+}
+
+/* ===== Eliminar solicitud (vacía la fila del Sheet, ver clearAccesoRowInSheet) ===== */
+function openDeleteAcceso(id){
+  var s=getById(id); if(!s) return;
+  pendingAction=id;
+  document.getElementById('deleteAccesoName').textContent=fullName(s);
+  openModal('deleteAccesoModal');
+}
+function confirmDeleteAcceso(){
+  var id=pendingAction;
+  var s=getById(id); if(!s) return;
+  var btn=document.getElementById('btnConfirmDeleteAcceso');
+  var originalHtml=btn?btn.innerHTML:'';
+  if(btn){ btn.disabled=true; btn.textContent='Eliminando…'; }
+  clearAccesoRowInSheet(id).then(function(){
+    devLog('✓ solicitud eliminada (Sheet, fila vaciada): '+id,'info');
+    // Metadata complementaria en accesos_state — best-effort, un null borra
+    // la clave (Biblia §5.2), no pasa por commitUniqueField porque ese
+    // siempre reescribe con _write_id (nunca deja la clave en null).
+    var patch={}; patch[id]=null;
+    return patchStateBucket(DOC_IDS.accesos,'accesos_state',patch,'').catch(function(){});
+  }).then(function(){
+    solicitudes=solicitudes.filter(function(x){ return x.id!==id; });
+    searchResults=searchResults.filter(function(x){ return x.id!==id; });
+    closeModal('deleteAccesoModal');
+    closeDetail();
+    render();
+    showToast('Solicitud eliminada del Sheet','success');
+    if(btn){ btn.disabled=false; btn.innerHTML=originalHtml; }
+  }).catch(function(err){
+    devLog('✗ confirmDeleteAcceso FAIL: '+err,'error');
+    showToast('Error al eliminar: '+(err&&err.message||err),'error_');
+    if(btn){ btn.disabled=false; btn.innerHTML=originalHtml; }
+  });
 }
 
 /* ===== Accept modal ===== */
