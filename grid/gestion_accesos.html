@@ -1178,22 +1178,23 @@ function resolveColumnsByPriority(headerRow, fieldPatterns){
    que justifique el ingreso, Nacionalidad, Pasaporte, ¿Eres driver?,
    Aceptado o rechazado, Rechazo, Fecha de vencimiento, Estado, Nuevo_QR,
    Imagen, IDOF. "uniqueid" es literal — se usa directo, no por patrón (ver
-   loadSolicitudes). "Estado" e "Imagen"/"IDOF" son otra cosa (no el gate de
-   acceso, no la foto publicada) y esta app no los toca.
+   loadSolicitudes). "Estado" e "Imagen" son otra cosa (no el gate de acceso,
+   no la foto publicada); "IDOF" está en vías de deprecarse. Ninguna de las
+   tres se toca. "Rechazo" es un dropdown de motivos fijos (no texto libre)
+   — por ahora NO se lee ni se escribe ahí; motivoRechazo sigue viviendo
+   sólo en accesos_state hasta que se decida mapear los valores del dropdown.
    Mismos campos y patrones que usa Catalog en el scanner de guardias sobre
-   esta misma hoja — la fuente de verdad de estatus/vencimiento/rechazo es
-   el Sheet, no un bucket aparte: el scanner ya lee estatus/vencimiento de
-   ahí, así que si esta app los escribiera sólo en Grid State el guardia
-   nunca los vería. qr: "Nuevo_QR" — ya viene poblado desde el envío del
-   Form para TODA solicitud (confirmado), es la credencial física que
-   escanea el guardia; no se genera ni se escribe desde aquí, sólo se lee.
-   estatus/rechazo/vence: patrones que no se atan por accidente a una
-   columna parecida ("Estado" no es "Aceptado o rechazado"; "rechazo" se
-   resuelve DESPUÉS de "estatus" para no robarle la columna). */
+   esta misma hoja — la fuente de verdad de estatus/vencimiento es el Sheet,
+   no un bucket aparte: el scanner ya los lee de ahí, así que si esta app
+   los escribiera sólo en Grid State el guardia nunca los vería. qr:
+   "Nuevo_QR" — ya viene poblado desde el envío del Form para TODA
+   solicitud (confirmado), es la credencial física que escanea el guardia;
+   no se genera ni se escribe desde aquí, sólo se lee. estatus/vence:
+   patrones que no se atan por accidente a una columna parecida ("Estado"
+   no es "Aceptado o rechazado"). */
 var SHEET_FIELD_PATTERNS = [
   ['qr',      [/\bqr\b/, /c[oó]digo/, /credencial/, /\bid\b/]],
   ['estatus', [/aceptado.*rechazado/, /aceptad.*o.*rechazad/]],
-  ['rechazo', [/^rechazo$/, /motivo/]],
   ['vence',   [/venc/, /caduc/, /expira/, /validez/, /valid/]]
 ];
 /* Índices de columna resueltos en loadSolicitudes() — se reutilizan al
@@ -1344,10 +1345,14 @@ function loadSolicitudes(onDone) {
     // qr/estatus/vence resueltos por NOMBRE de encabezado, no por letra fija
     // — el orden real de columnas en el Form no rompe el mapeo.
     SHEET_COLMAP=resolveColumnsByPriority(headerRow, SHEET_FIELD_PATTERNS);
+    // "uniqueid" es literal, no por patrón — se resuelve aparte y se
+    // reutiliza en resolveSheetRowForUid() para relocalizar la fila justo
+    // antes de escribir (nunca confiar en el número de fila cacheado).
+    var uidIdx=headerRow.indexOf('uniqueid');
+    SHEET_COLMAP.uniqueid = uidIdx!==-1 ? uidIdx : undefined;
     var qrHeaderName=SHEET_COLMAP.qr!==undefined ? headerRow[SHEET_COLMAP.qr] : null;
     var estatusHeaderName=SHEET_COLMAP.estatus!==undefined ? headerRow[SHEET_COLMAP.estatus] : null;
     var venceHeaderName=SHEET_COLMAP.vence!==undefined ? headerRow[SHEET_COLMAP.vence] : null;
-    var rechazoHeaderName=SHEET_COLMAP.rechazo!==undefined ? headerRow[SHEET_COLMAP.rechazo] : null;
     if(!qrHeaderName){
       devLog('✗ No se reconoce ninguna columna de QR/credencial en "'+CFG.SHEET_RANGE+'" — encabezados: '+headerRow.join(' | '),'error');
     }
@@ -1376,7 +1381,6 @@ function loadSolicitudes(onDone) {
       merged['__row']=idx+2; // fila real del Sheet (1 = encabezado, 2 = primera fila de datos)
       merged['__estatusRaw']=estatusHeaderName ? row[estatusHeaderName] : '';
       merged['__venceRaw']=venceHeaderName ? row[venceHeaderName] : '';
-      merged['__rechazoRaw']=rechazoHeaderName ? row[rechazoHeaderName] : '';
       merged['__qrRaw']=qrHeaderName ? row[qrHeaderName] : '';
       return rowToSolicitud(merged,idx);
     });
@@ -1713,43 +1717,68 @@ function writeSheetCell(colIndex,row,value){
   });
 }
 
-/* Escribe estatus + vencimiento + motivo de rechazo DIRECTO en el Sheet —
-   es la fuente que lee el scanner de guardias, no accesos_state. Sin
-   if_updated_at (el proxy de Sheets no lo soporta, a diferencia de State):
-   dos escrituras casi simultáneas sobre la MISMA fila no tienen
-   protección de conflicto. En uso normal (un gestor resolviendo una
-   solicitud a la vez) el riesgo es bajo; no hay forma de detectarlo si
-   ocurre. estatus/vencimiento son obligatorias (sin ellas el guardia no
-   puede validar); "Rechazo" es best-effort — si no se reconoce la
-   columna, el motivo igual queda guardado en accesos_state.*/
+/* Vuelve a localizar la fila real de una solicitud JUSTO ANTES de escribir
+   — nunca confía en el número de fila cacheado desde la última carga
+   completa (loadSolicitudes), que queda obsoleto si alguien borra o
+   inserta una fila arriba de la nuestra entre la carga y el guardado (la
+   posición de todo lo de abajo se recorre). Sólo relee la columna
+   uniqueid completa (una sola columna, no la hoja entera) y busca el
+   valor exacto — el mismo patrón defensivo que "reread inmediato" usa
+   para State, aplicado aquí porque Sheets no tiene equivalente a
+   if_updated_at. */
+function resolveSheetRowForUid(uid){
+  if(SHEET_COLMAP.uniqueid===undefined){
+    return Promise.reject(new Error('no se reconoce la columna uniqueid en el Sheet'));
+  }
+  var letter=colIndexToLetter(SHEET_COLMAP.uniqueid);
+  var range=CFG.SHEET_RANGE+'!'+letter+':'+letter;
+  return GridClient.readSheet(CFG.SHEET_ID, DOC_IDS.usuarios, range).then(function(rows){
+    for(var i=1;i<rows.length;i++){ // i=0 es el encabezado (fila 1)
+      if(String((rows[i]&&rows[i][0])||'').trim()===uid) return i+1; // fila real, 1-based
+    }
+    return null;
+  });
+}
+
+/* Escribe estatus + vencimiento DIRECTO en el Sheet — es la fuente que lee
+   el scanner de guardias, no accesos_state. Primero relocaliza la fila
+   (resolveSheetRowForUid) para no escribir sobre la fila equivocada si
+   algo se borró/movió; si la fila ya no existe, falla con un mensaje claro
+   en vez de adivinar. Sin if_updated_at (el proxy de Sheets no lo
+   soporta, a diferencia de State): dos escrituras casi simultáneas sobre
+   la MISMA fila siguen sin protección de conflicto — esto sólo cubre el
+   caso de fila movida/borrada, no la concurrencia fila-a-fila. En uso
+   normal (un gestor resolviendo una solicitud a la vez) el riesgo
+   restante es bajo. */
 function writeAccesoToSheet(acceso){
-  if(!acceso._sheetRow){
-    return Promise.reject(new Error('sin fila de Sheet para '+acceso.id+' — no se puede escribir'));
-  }
-  var writes=[];
-  if(SHEET_COLMAP.estatus!==undefined){
-    var estatusValor = acceso.estatus==='aceptado' ? 'Aceptado' : acceso.estatus==='rechazado' ? 'Rechazado' : '';
-    writes.push(writeSheetCell(SHEET_COLMAP.estatus, acceso._sheetRow, estatusValor));
-  } else {
-    return Promise.reject(new Error('no se reconoce la columna de estatus en el Sheet'));
-  }
-  if(SHEET_COLMAP.vence!==undefined){
-    writes.push(writeSheetCell(SHEET_COLMAP.vence, acceso._sheetRow, acceso.fechaVencimiento||''));
-  } else {
-    return Promise.reject(new Error('no se reconoce la columna de vencimiento en el Sheet'));
-  }
-  if(SHEET_COLMAP.rechazo!==undefined){
-    writes.push(writeSheetCell(SHEET_COLMAP.rechazo, acceso._sheetRow, acceso.motivoRechazo||''));
-  }
-  return Promise.all(writes);
+  return resolveSheetRowForUid(acceso.id).then(function(row){
+    if(!row){
+      throw new Error('la fila de '+acceso.id+' ya no existe en el Sheet (¿se borró o cambió el uniqueid?) — no se guardó nada');
+    }
+    acceso._sheetRow=row; // refresca el cache en memoria para futuras ediciones de esta sesión
+    var writes=[];
+    if(SHEET_COLMAP.estatus!==undefined){
+      var estatusValor = acceso.estatus==='aceptado' ? 'Aceptado' : acceso.estatus==='rechazado' ? 'Rechazado' : '';
+      writes.push(writeSheetCell(SHEET_COLMAP.estatus, row, estatusValor));
+    } else {
+      throw new Error('no se reconoce la columna de estatus en el Sheet');
+    }
+    if(SHEET_COLMAP.vence!==undefined){
+      writes.push(writeSheetCell(SHEET_COLMAP.vence, row, acceso.fechaVencimiento||''));
+    } else {
+      throw new Error('no se reconoce la columna de vencimiento en el Sheet');
+    }
+    return Promise.all(writes);
+  });
 }
 
 /* Persiste un cambio de estatus/vencimiento — DIRECTO en el Sheet (fila
    real de la solicitud), que es lo que el scanner de guardias valida.
-   accesos_state sólo guarda la metadata que el Sheet no tiene columna
-   para (motivo de rechazo estructurado, quién/cuándo resolvió, qr
-   impreso, ymsQr) — si esa parte falla no se revierte la decisión, que
-   ya quedó escrita en el Sheet. */
+   accesos_state guarda el resto (motivo de rechazo en texto libre — la
+   columna "Rechazo" del Sheet es un dropdown de valores fijos que no se
+   toca por ahora —, quién/cuándo resolvió, qr impreso, ymsQr) — si esa
+   parte falla no se revierte la decisión, que ya quedó escrita en el
+   Sheet. */
 function persistAcceso(acceso){
   var now=new Date().toISOString().slice(0,10);
   var ldap=(SESSION.user&&SESSION.user.ldap)||'';
@@ -2973,7 +3002,9 @@ function rowToSolicitud(r, idx){
     pasaporte:        !!(r['Pasaporte'] && String(r['Pasaporte']).trim() !== ''),
     pasaporteUrl:     r['Pasaporte']      || null,
     estatus:          estatus,
-    motivoRechazo:    r['__rechazoRaw'] || r['motivoRechazo'] || r['motivo_rechazo'] || null,
+    // "Rechazo" en el Sheet es un dropdown de valores fijos — no se lee ni
+    // se escribe ahí por ahora; motivoRechazo vive sólo en accesos_state.
+    motivoRechazo:    r['motivoRechazo'] || r['motivo_rechazo'] || null,
     fechaVencimiento: r['__venceRaw'] || null,
     fechaResolucion:  r['fechaResolucion']  || r['fecha_resolucion']  || null,
     resueltosPor:     r['resueltosPor']     || r['resuelto_por']      || null,
