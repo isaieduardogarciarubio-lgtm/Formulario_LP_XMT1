@@ -1827,6 +1827,17 @@ function buildDriverExportHTML(s){
   );
 }
 
+/* <foreignObject> exige XHTML bien formado (es XML, no HTML): un elemento
+   vacío como <img ...> SIN la barra de autocierre rompe el parseo del SVG
+   completo (falla en silencio como error de decodificación de imagen).
+   clone.outerHTML / Element.innerHTML de un <img> real JAMÁS incluyen esa
+   barra (es la serialización HTML normal del navegador) — hay que
+   agregarla a mano antes de incrustar el string en el SVG. */
+function xhtmlSelfClose(html){
+  return html.replace(/<(img|br|hr|input|source|area|col|embed|track|wbr)((?:[^>"']|"[^"]*"|'[^']*')*?)\/?>/gi,
+    function(m, tag, attrs){ return '<'+tag+attrs+'/>'; });
+}
+
 /* Mide el documento fuera de pantalla (ya con dimensiones fijas por CSS,
    no depende de esperar imágenes), lo serializa dentro de un SVG con
    <foreignObject>, lo carga como imagen y lo dibuja en un <canvas> a
@@ -1843,13 +1854,14 @@ function rasterizeHtmlToPngDataUrl(innerHtml, extraCss){
     document.body.removeChild(probe);
     if(!W||!H){ reject(new Error('no se pudo medir el documento a exportar')); return; }
 
+    var xhtml=xhtmlSelfClose(innerHtml);
     var SCALE=3;
     var svg=
       '<svg xmlns="http://www.w3.org/2000/svg" width="'+(W*SCALE)+'" height="'+(H*SCALE)+'" viewBox="0 0 '+W+' '+H+'">'+
         '<foreignObject width="100%" height="100%">'+
           '<div xmlns="http://www.w3.org/1999/xhtml" style="width:'+W+'px;height:'+H+'px;">'+
             (extraCss?('<style>'+extraCss+'</style>'):'')+
-            innerHtml+
+            xhtml+
           '</div>'+
         '</foreignObject>'+
       '</svg>';
