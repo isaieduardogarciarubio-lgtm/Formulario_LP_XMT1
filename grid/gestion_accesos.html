@@ -795,10 +795,13 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
       <button id="devToggle" class="btn btn-sm" onclick="toggleDev()" style="flex:none;display:none" title="Consola de diagnóstico">DEV</button>
     </div>
     <!-- Barra de selección masiva — visible sólo si selectMode está activo -->
-    <div id="bulkBar" style="display:none;align-items:center;gap:10px;margin-bottom:6px;padding:10px 12px;border-radius:var(--r-md);background:var(--primary-bg);border:1px solid var(--primary-light);">
-      <span id="bulkCount" style="flex:1;font-size:13px;font-weight:600;color:var(--primary)">0 seleccionadas</span>
+    <div id="bulkBar" style="display:none;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px;padding:10px 12px;border-radius:var(--r-md);background:var(--primary-bg);border:1px solid var(--primary-light);">
+      <span id="bulkCount" style="flex:1;min-width:120px;font-size:13px;font-weight:600;color:var(--primary)">0 seleccionadas</span>
       <button onclick="selectAllVisible()" style="padding:8px 12px;border-radius:8px;background:transparent;color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Seleccionar visibles</button>
-      <button onclick="openBulkDeleteAcceso()" style="padding:8px 12px;border-radius:8px;background:var(--error);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Eliminar</button>
+      <button onclick="openBulkAccept()" style="padding:8px 12px;border-radius:8px;background:var(--success);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Aceptar</button>
+      <button onclick="openBulkReject()" style="padding:8px 12px;border-radius:8px;background:var(--error);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Rechazar</button>
+      <button onclick="openBulkEditExpiry()" style="padding:8px 12px;border-radius:8px;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Cambiar vencimiento</button>
+      <button onclick="openBulkDeleteAcceso()" style="padding:8px 12px;border-radius:8px;background:transparent;color:var(--error);border:1px solid var(--error-bd);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Eliminar</button>
       <button onclick="toggleSelectMode()" style="padding:8px 12px;border-radius:8px;background:transparent;color:var(--text-2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Cancelar</button>
     </div>
     <!-- Panel de búsqueda a demanda (visible solo en tab Buscar) — un solo
@@ -1348,6 +1351,10 @@ var searchResults = [];   // resultados del tab Buscar
    ejemplo, rechazados viejos + aceptados vencidos antes de un solo borrado. */
 var selectMode = false;
 var selectedIds = {};
+/* Cuando un modal de aceptar/rechazar/vencimiento se abre desde la barra
+   de selección masiva (openBulk*), _bulkIds trae el lote de ids a
+   procesar; null = modal abierto para una sola solicitud (pendingAction). */
+var _bulkIds = null;
 
 /* Vista de lista de solicitudes en desktop: grid (varias columnas, default)
    vs. lista (una columna ancha, como antes). Solo aplica >=768px — en
@@ -3064,10 +3071,49 @@ function confirmDeleteAcceso(){
   next(0);
 }
 
+/* Procesa un lote de ids secuencialmente (una a la vez, mismo motivo que
+   el borrado masivo: no saturar el proxy de Sheets con ráfagas en
+   paralelo). mutateFn muta la solicitud en memoria antes de persistAcceso;
+   successMsgFn(ok) arma el toast de éxito; failVerb se usa en el toast de
+   error parcial. tabAfter, si viene, cambia de pestaña al terminar. */
+function bulkProcess(ids, mutateFn, successMsgFn, failVerb, tabAfter){
+  var ok=0, fail=0, errLines=[];
+  function next(i){
+    if(i>=ids.length){
+      ids.forEach(function(id){ delete selectedIds[id]; });
+      if(!Object.keys(selectedIds).length) selectMode=false;
+      closeDetail();
+      if(tabAfter) setTab(tabAfter); else render();
+      if(fail===0) showToast(successMsgFn(ok),'success');
+      else showToast(ok+' '+failVerb+', '+fail+' con error.','warning',errLines.join('\n'));
+      return;
+    }
+    var id=ids[i];
+    var s=getById(id);
+    if(!s){ fail++; errLines.push(id+': ya no existe'); next(i+1); return; }
+    mutateFn(s);
+    persistAcceso(s).then(function(res){
+      if(res && res.ok===false) fail++; else ok++;
+      next(i+1);
+    });
+  }
+  next(0);
+}
+
 /* ===== Accept modal ===== */
 function openAccept(id){
+  _bulkIds=null;
   pendingAction=id;
   document.getElementById('acceptName').textContent=fullName(getById(id));
+  document.getElementById('expireDate').value='';
+  document.getElementById('expireErr').classList.remove('show');
+  openModal('acceptModal');
+}
+function openBulkAccept(){
+  var ids=Object.keys(selectedIds).filter(function(id){ var s=getById(id); return s&&s.estatus==='pendiente'; });
+  if(!ids.length){ showToast('No hay solicitudes pendientes en la selección','warning'); return; }
+  _bulkIds=ids;
+  document.getElementById('acceptName').textContent=ids.length+' solicitud'+(ids.length===1?'':'es')+' pendiente'+(ids.length===1?'':'s')+' seleccionada'+(ids.length===1?'':'s');
   document.getElementById('expireDate').value='';
   document.getElementById('expireErr').classList.remove('show');
   openModal('acceptModal');
@@ -3080,6 +3126,15 @@ function confirmAccept(){
   var val=document.getElementById('expireDate').value;
   var today=todayLocalISO();
   if(!val||val<today){document.getElementById('expireErr').classList.add('show');return;}
+  if(_bulkIds){
+    var ids=_bulkIds; _bulkIds=null;
+    closeModal('acceptModal');
+    bulkProcess(ids, function(s){
+      s.estatus='aceptado'; s.fechaVencimiento=val; s.motivoRechazo=null;
+      if(!s.qr) devLog('⚠ bulkAccept: '+s.id+' sin Nuevo_QR en el Sheet','warn');
+    }, function(n){ return n+' solicitud'+(n===1?'':'es')+' aceptada'+(n===1?'':'s'); }, 'aceptadas', 'aceptado');
+    return;
+  }
   var s=getById(pendingAction);
   s.estatus='aceptado'; s.fechaVencimiento=val; s.motivoRechazo=null;
   // s.qr viene de "Nuevo_QR" en el Sheet (ya poblado desde el envío del Form) —
@@ -3092,8 +3147,19 @@ function confirmAccept(){
 
 /* ===== Reject modal ===== */
 function openReject(id){
+  _bulkIds=null;
   pendingAction=id;
   document.getElementById('rejectName').textContent=fullName(getById(id));
+  document.getElementById('rejectReason').value='';
+  document.getElementById('rejectComment').value='';
+  document.getElementById('rejectErr').classList.remove('show');
+  openModal('rejectModal');
+}
+function openBulkReject(){
+  var ids=Object.keys(selectedIds).filter(function(id){ var s=getById(id); return s&&s.estatus==='pendiente'; });
+  if(!ids.length){ showToast('No hay solicitudes pendientes en la selección','warning'); return; }
+  _bulkIds=ids;
+  document.getElementById('rejectName').textContent=ids.length+' solicitud'+(ids.length===1?'':'es')+' pendiente'+(ids.length===1?'':'s')+' seleccionada'+(ids.length===1?'':'s');
   document.getElementById('rejectReason').value='';
   document.getElementById('rejectComment').value='';
   document.getElementById('rejectErr').classList.remove('show');
@@ -3103,6 +3169,14 @@ function confirmReject(){
   var reason=document.getElementById('rejectReason').value;
   if(!reason){document.getElementById('rejectErr').classList.add('show');return;}
   var comment=document.getElementById('rejectComment').value.trim();
+  if(_bulkIds){
+    var ids=_bulkIds; _bulkIds=null;
+    closeModal('rejectModal');
+    bulkProcess(ids, function(s){
+      s.estatus='rechazado'; s.motivoRechazo=reason+(comment?' — '+comment:''); s.fechaVencimiento=null;
+    }, function(n){ return n+' solicitud'+(n===1?'':'es')+' rechazada'+(n===1?'':'s'); }, 'rechazadas', 'rechazado');
+    return;
+  }
   var s=getById(pendingAction);
   s.estatus='rechazado';s.motivoRechazo=reason+(comment?' — '+comment:'');s.fechaVencimiento=null;
   persistAcceso(s); // <<< BACKEND: actualiza fila en accesos.csv
@@ -3403,10 +3477,20 @@ function buscarAccesos(){
 function openEditExpiry(id){
   var s = getById(id) || searchResults.filter(function(x){return x.id===id;})[0];
   if(!s) return;
+  _bulkIds=null;
   pendingAction = id;
   document.getElementById('editExpiryName').textContent = fullName(s);
   var cur = s.fechaVencimiento || '';
   document.getElementById('editExpiryDate').value = cur.length>=10 ? cur.slice(0,10) : '';
+  document.getElementById('editExpiryErr').classList.remove('show');
+  openModal('editExpiryModal');
+}
+function openBulkEditExpiry(){
+  var ids=Object.keys(selectedIds).filter(function(id){ var s=getById(id); return s&&s.estatus==='aceptado'; });
+  if(!ids.length){ showToast('No hay solicitudes aceptadas en la selección','warning'); return; }
+  _bulkIds=ids;
+  document.getElementById('editExpiryName').textContent=ids.length+' solicitud'+(ids.length===1?'':'es')+' aceptada'+(ids.length===1?'':'s')+' seleccionada'+(ids.length===1?'':'s');
+  document.getElementById('editExpiryDate').value='';
   document.getElementById('editExpiryErr').classList.remove('show');
   openModal('editExpiryModal');
 }
@@ -3418,6 +3502,14 @@ function confirmEditExpiry(){
   var val = document.getElementById('editExpiryDate').value;
   var today = todayLocalISO();
   if(!val||val<today){ document.getElementById('editExpiryErr').classList.add('show'); return; }
+  if(_bulkIds){
+    var ids=_bulkIds; _bulkIds=null;
+    closeModal('editExpiryModal');
+    bulkProcess(ids, function(s){ s.fechaVencimiento=val; },
+      function(n){ return n+' solicitud'+(n===1?'':'es')+' con vencimiento actualizado a '+fmtDate(val); },
+      'actualizadas', null);
+    return;
+  }
   // Buscar en solicitudes y en searchResults
   var s = getById(pendingAction) || searchResults.filter(function(x){return x.id===pendingAction;})[0];
   if(!s){ closeModal('editExpiryModal'); return; }
