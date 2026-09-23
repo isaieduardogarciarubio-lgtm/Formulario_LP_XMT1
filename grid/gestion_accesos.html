@@ -1172,11 +1172,22 @@ function resolveColumnsByPriority(headerRow, fieldPatterns){
   return map;
 }
 
-/* Mismo campo "qr" que usa Catalog en el scanner de guardias sobre esta misma
-   hoja ("Respuestas de formulario 1"): la columna real es "Nuevo_QR" (u otro
-   nombre similar), presente desde el envío del Form — es el identificador
-   estable de cada solicitud, no un "uniqueid" inventado. */
-var QR_FIELD_PATTERNS = [['qr', [/\bqr\b/, /c[oó]digo/, /credencial/, /\bid\b/]]];
+/* Mismos campos que usa Catalog en el scanner de guardias sobre esta misma
+   hoja ("Respuestas de formulario 1") — la fuente de verdad de estatus y
+   vencimiento es el Sheet, no un bucket aparte: el scanner ya los lee de
+   ahí, así que si esta app los escribiera sólo en Grid State el guardia
+   nunca los vería. qr: columna tipo "Nuevo_QR" (identificador estable,
+   NO un "uniqueid" inventado). estatus/vence: mismos patrones exactos que
+   Catalog usa, para no atarse por accidente a una columna parecida
+   ("Estado" o "Rechazo" también existen en la hoja real). */
+var SHEET_FIELD_PATTERNS = [
+  ['qr',      [/\bqr\b/, /c[oó]digo/, /credencial/, /\bid\b/]],
+  ['estatus', [/aceptado.*rechazado/, /aceptad.*o.*rechazad/]],
+  ['vence',   [/venc/, /caduc/, /expira/, /validez/, /valid/]]
+];
+/* Índices de columna resueltos en loadSolicitudes() — se reutilizan al
+   escribir de vuelta en persistAcceso()/writeAccesoToSheet(). */
+var SHEET_COLMAP = {};
 
 /* Payload de QR: puede llegar envuelto en URL o JSON (igual normalización
    que normalizeQR() del scanner) — aquí sobre todo evita mismatches de
@@ -1243,7 +1254,8 @@ var searchResults = [];   // resultados del tab Buscar
 
 /* solicitudes[] se llena en loadSolicitudes() al entrar a la app. */
 var solicitudes = [];
-/* accesosMap = { uniqueid → estado en accesos_state } — se llena junto con solicitudes para JOIN en búsqueda */
+/* accesosMap = { uniqueid → metadata en accesos_state (motivoRechazo, quién/cuándo
+   resolvió, qr impreso, ymsQr) } — estatus/vencimiento NO viven aquí, viven en el Sheet. */
 var accesosMap = {};
 
 /* ===== Fotos — pestaña "Publicados" del mismo Sheet, MISMA pestaña y MISMA
@@ -1318,28 +1330,41 @@ function loadSolicitudes(onDone) {
   .then(function(results){
     var rawRows=results[0];
     var headerRow=rawRows[0]||[];
-    // Misma columna "qr" que usa Catalog en el scanner de guardias sobre esta
-    // misma hoja — es "Nuevo_QR" (u otro nombre similar), NO un "uniqueid"
-    // inventado. Resuelta por NOMBRE de encabezado, no por letra fija.
-    var qrColMap=resolveColumnsByPriority(headerRow, QR_FIELD_PATTERNS);
-    var qrHeaderName=qrColMap.qr!==undefined ? headerRow[qrColMap.qr] : null;
+    // qr/estatus/vence resueltos por NOMBRE de encabezado, no por letra fija
+    // — el orden real de columnas en el Form no rompe el mapeo.
+    SHEET_COLMAP=resolveColumnsByPriority(headerRow, SHEET_FIELD_PATTERNS);
+    var qrHeaderName=SHEET_COLMAP.qr!==undefined ? headerRow[SHEET_COLMAP.qr] : null;
+    var estatusHeaderName=SHEET_COLMAP.estatus!==undefined ? headerRow[SHEET_COLMAP.estatus] : null;
+    var venceHeaderName=SHEET_COLMAP.vence!==undefined ? headerRow[SHEET_COLMAP.vence] : null;
     if(!qrHeaderName){
       devLog('✗ No se reconoce ninguna columna de QR/credencial en "'+CFG.SHEET_RANGE+'" — encabezados: '+headerRow.join(' | '),'error');
     }
+    if(!estatusHeaderName||!venceHeaderName){
+      devLog('⚠ No se reconoce la columna de '+(!estatusHeaderName?'estatus (Aceptado o rechazado)':'vencimiento')+' en "'+CFG.SHEET_RANGE+'" — aceptar/rechazar no podrá escribir en el Sheet. Encabezados: '+headerRow.join(' | '),'error');
+    }
     var sheetRows=sheetRowsToObjects(rawRows);
-    accesosMap=results[1].data||{}; // State Bucket → {uid: {estatus,fechaVencimiento,...}}
+    accesosMap=results[1].data||{}; // State Bucket → {uid: {motivoRechazo,fechaResolucion,resueltosPor,qr,ymsQr}}
     solicitudes=sheetRows.map(function(row,idx){
       var rawUid=qrHeaderName ? row[qrHeaderName] : '';
       var uid=normalizeQR(rawUid) || ('AC-'+String(idx+1).padStart(4,'0'));
       var csvRow=accesosMap[uid]||{};
-      // Merge: campos del Sheet + override con campos de accesos_state (estatus, vencimiento, qr, etc.)
+      // Merge: campos del Sheet + override con metadata de accesos_state
+      // (motivoRechazo, quién/cuándo resolvió, qr impreso, ymsQr) — estatus
+      // y vencimiento SIEMPRE vienen del Sheet, nunca de accesos_state
+      // (es la fuente que también lee el scanner de guardias).
       var merged={};
       Object.keys(row).forEach(function(k){merged[k]=row[k];});
-      Object.keys(csvRow).forEach(function(k){if(csvRow[k]!=='') merged[k]=csvRow[k];});
+      Object.keys(csvRow).forEach(function(k){
+        if(k==='estatus'||k==='fechaVencimiento') return;
+        if(csvRow[k]!=='') merged[k]=csvRow[k];
+      });
       merged['__uid']=uid;
+      merged['__row']=idx+2; // fila real del Sheet (1 = encabezado, 2 = primera fila de datos)
+      merged['__estatusRaw']=estatusHeaderName ? row[estatusHeaderName] : '';
+      merged['__venceRaw']=venceHeaderName ? row[venceHeaderName] : '';
       return rowToSolicitud(merged,idx);
     });
-    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' estados | col qr="'+qrHeaderName+'")','info');
+    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' | col qr="'+qrHeaderName+'" estatus="'+estatusHeaderName+'" vence="'+venceHeaderName+'")','info');
     if(sheetRows.length>0){
       var r0=sheetRows[0];
       devLog('cols disponibles: '+Object.keys(r0).join(' | '),'info');
@@ -1648,26 +1673,81 @@ function fetchAccesos(sitio){
   return Promise.resolve(solicitudes.filter(function(s){return !sitio||s.sitio===sitio;}));
 }
 
-// Persiste un cambio de estatus/vencimiento en el State Bucket accesos_state.
-// PATCH de la clave única `acceso.id` + verificación post-escritura (V20.2) —
-// escritura directa a Grid, sin Verdi intermedio.
+/* Convierte índice de columna (0-based) a letra de columna A1 (0->A, 25->Z, 26->AA...). */
+function colIndexToLetter(idx){
+  var n=idx+1, letter='';
+  while(n>0){ var rem=(n-1)%26; letter=String.fromCharCode(65+rem)+letter; n=Math.floor((n-1)/26); }
+  return letter;
+}
+
+/* Escribe una sola celda del Sheet (PUT /api/v1/sheets/{id}?range=Tab!C{row}).
+   Un solo valor, en un rango de una celda — nunca se toca ninguna otra
+   columna de esa fila, así el riesgo de pisar algo que alguien más esté
+   editando en la hoja (sin protección de concurrencia, ver nota abajo)
+   queda acotado a esa única celda. */
+function writeSheetCell(colIndex,row,value){
+  var range=CFG.SHEET_RANGE+'!'+colIndexToLetter(colIndex)+row;
+  return GridClient.call('/api/v1/sheets/'+encodeURIComponent(CFG.SHEET_ID)+'?doc_id='+encodeURIComponent(DOC_IDS.usuarios)+'&range='+encodeURIComponent(range),{
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({values:[[value]]})
+  }).then(function(res){
+    if(!res.ok){ var e=new Error('sheet_write_'+range+'_'+res.status); e.status=res.status; throw e; }
+    return res.json().catch(function(){ return {ok:true}; });
+  });
+}
+
+/* Escribe estatus + vencimiento DIRECTO en el Sheet — es la fuente que lee
+   el scanner de guardias, no accesos_state. Sin if_updated_at (el proxy de
+   Sheets no lo soporta, a diferencia de State): dos escrituras casi
+   simultáneas sobre la MISMA fila no tienen protección de conflicto. En
+   uso normal (un gestor resolviendo una solicitud a la vez) el riesgo es
+   bajo; no hay forma de detectarlo si ocurre. */
+function writeAccesoToSheet(acceso){
+  if(!acceso._sheetRow){
+    return Promise.reject(new Error('sin fila de Sheet para '+acceso.id+' — no se puede escribir'));
+  }
+  var writes=[];
+  if(SHEET_COLMAP.estatus!==undefined){
+    var estatusValor = acceso.estatus==='aceptado' ? 'Aceptado' : acceso.estatus==='rechazado' ? 'Rechazado' : '';
+    writes.push(writeSheetCell(SHEET_COLMAP.estatus, acceso._sheetRow, estatusValor));
+  } else {
+    return Promise.reject(new Error('no se reconoce la columna de estatus en el Sheet'));
+  }
+  if(SHEET_COLMAP.vence!==undefined){
+    writes.push(writeSheetCell(SHEET_COLMAP.vence, acceso._sheetRow, acceso.fechaVencimiento||''));
+  } else {
+    return Promise.reject(new Error('no se reconoce la columna de vencimiento en el Sheet'));
+  }
+  return Promise.all(writes);
+}
+
+/* Persiste un cambio de estatus/vencimiento — DIRECTO en el Sheet (fila
+   real de la solicitud), que es lo que el scanner de guardias valida.
+   accesos_state sólo guarda la metadata que el Sheet no tiene columna
+   para (motivo de rechazo estructurado, quién/cuándo resolvió, qr
+   impreso, ymsQr) — si esa parte falla no se revierte la decisión, que
+   ya quedó escrita en el Sheet. */
 function persistAcceso(acceso){
   var now=new Date().toISOString().slice(0,10);
   var ldap=(SESSION.user&&SESSION.user.ldap)||'';
-  return commitUniqueField(DOC_IDS.accesos,'accesos_state',acceso.id,function(){
-    return {
-      estatus:         acceso.estatus,
-      fechaVencimiento:acceso.fechaVencimiento||'',
-      motivoRechazo:   acceso.motivoRechazo||'',
-      fechaResolucion: now,
-      resueltosPor:    ldap,
-      qr:              acceso.qr||'',
-      ymsQr:           acceso.ymsQr||''
-    };
-  }).then(function(res){
-    if(res.ok){ devLog('✓ persistAcceso OK: '+acceso.id+' → '+acceso.estatus,'info'); return {ok:true}; }
-    devLog('✗ persistAcceso FAIL: '+res.error,'error');
-    showToast('Error al guardar cambio','error_');
+  return writeAccesoToSheet(acceso).then(function(){
+    devLog('✓ persistAcceso OK (Sheet, fila '+acceso._sheetRow+'): '+acceso.id+' → '+acceso.estatus,'info');
+    commitUniqueField(DOC_IDS.accesos,'accesos_state',acceso.id,function(){
+      return {
+        motivoRechazo:   acceso.motivoRechazo||'',
+        fechaResolucion: now,
+        resueltosPor:    ldap,
+        qr:              acceso.qr||'',
+        ymsQr:           acceso.ymsQr||''
+      };
+    }).then(function(res){
+      if(!res.ok) devLog('⚠ persistAcceso: metadata complementaria no guardada ('+res.error+')','warn');
+    });
+    return {ok:true};
+  }).catch(function(err){
+    devLog('✗ persistAcceso FAIL (Sheet): '+err,'error');
+    showToast('Error al guardar cambio en el Sheet','error_');
     return {ok:false};
   });
 }
@@ -1766,6 +1846,29 @@ function truncateToWidth(ctx,text,maxWidth){
 }
 var EXPORT_FONT='-apple-system,BlinkMacSystemFont,"Proxima Nova","Segoe UI",Roboto,sans-serif';
 
+/* Marca de agua del CURP sobre la foto — mismo look que .gafete-photo-wm
+   (CURP repetido, rotado -25°, blanco translúcido). Se llama YA dentro del
+   clip circular de la foto (ver drawGafeteCanvas), por eso no vuelve a
+   clipear: sólo agrega su propia rotación encima. */
+function drawPhotoWatermark(ctx,curp,cx,cy,r){
+  if(!curp) return;
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(-25*Math.PI/180);
+  ctx.font='900 7px '+EXPORT_FONT;
+  ctx.fillStyle='rgba(255,255,255,.28)';
+  ctx.shadowColor='rgba(0,0,0,.4)'; ctx.shadowBlur=1; ctx.shadowOffsetY=1;
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  var unit=curp+'  ';
+  var unitW=ctx.measureText(unit).width||30;
+  var span=r*2*1.5; // cubre de sobra el círculo ya rotado
+  var lineText=unit;
+  while(ctx.measureText(lineText).width<span) lineText+=unit;
+  var lineHeight=7*1.6;
+  for(var y=-span/2; y<span/2; y+=lineHeight){ ctx.fillText(lineText,-span/2,y); }
+  ctx.restore();
+}
+
 /* Carga una imagen (blob:/data:/http — todas same-origin aquí) como
    HTMLImageElement. drawImage() sobre estas fuentes nunca tiñe el canvas. */
 function loadImageEl(src){
@@ -1810,6 +1913,7 @@ function drawGafeteCanvas(s){
     ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.closePath(); ctx.clip();
     if(photoImg) drawImageCover(ctx,photoImg,cx-r,cy-r,r*2,r*2);
     else { ctx.fillStyle='#e8e8e8'; ctx.fillRect(cx-r,cy-r,r*2,r*2); }
+    drawPhotoWatermark(ctx,(s.curp==='—'?'':(s.curp||'')).trim(),cx,cy,r);
     ctx.restore();
     ctx.strokeStyle='#fff'; ctx.lineWidth=4;
     ctx.beginPath(); ctx.arc(cx,cy,r-2,0,Math.PI*2); ctx.stroke();
@@ -2827,11 +2931,16 @@ function parseFecha(str) {
 
 /* ===== Buscar (client-side — sin webhook) ===== */
 function rowToSolicitud(r, idx){
-  var estatusRaw = (r['estatus'] || r['Aceptado o rechazado'] || r['Estado'] || '').toString().trim().toLowerCase();
+  // Fuente de verdad: la columna real del Sheet (misma que lee el scanner
+  // de guardias) — resuelta en loadSolicitudes() y pasada como __estatusRaw,
+  // no un campo fijo "estatus"/"Estado" (ese último es OTRA columna, ver
+  // comentario de SHEET_FIELD_PATTERNS).
+  var estatusRaw = String(r['__estatusRaw']||'').trim().toLowerCase();
   var estatus = /rechaz/i.test(estatusRaw) ? 'rechazado' :
                 /acept/i.test(estatusRaw)  ? 'aceptado'  : 'pendiente';
   return {
     id:               String(r['__uid'] || ('AC-' + String(idx+1).padStart(4,'0'))),
+    _sheetRow:        r['__row'] || null,
     fechaSolicitud:   parseFecha(r['Marca temporal']),
     correo:           r['Correo electrónico'] || '',
     nombre:           r['Nombre']         || '',
@@ -2852,7 +2961,7 @@ function rowToSolicitud(r, idx){
     pasaporteUrl:     r['Pasaporte']      || null,
     estatus:          estatus,
     motivoRechazo:    r['motivoRechazo']    || r['motivo_rechazo']    || r['Rechazo'] || null,
-    fechaVencimiento: r['fechaVencimiento'] || r['fecha_vencimiento'] || r['Fecha de vencimiento'] || null,
+    fechaVencimiento: r['__venceRaw'] || null,
     fechaResolucion:  r['fechaResolucion']  || r['fecha_resolucion']  || null,
     resueltosPor:     r['resueltosPor']     || r['resuelto_por']      || null,
     qr:               r['qr']              || null,
