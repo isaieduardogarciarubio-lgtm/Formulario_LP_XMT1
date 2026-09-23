@@ -1041,11 +1041,12 @@ var ic = (function(){
    cuyo owner tiene el Sheet autorizado (DOC_IDS.usuarios, el mismo que usa el
    scanner de guardias como DOC_ADMIN sobre este libro).
    Arquitectura v5: Sheet (fuente de verdad de la solicitud) + accesos_state bucket
-   (estado mutable: estatus/vencimiento/qr) — JOIN client-side por uniqueid. */
+   (estado mutable: estatus/vencimiento/qr) — JOIN client-side por el qr/credencial
+   real de la fila (columna tipo "Nuevo_QR"), NO un "uniqueid" inventado. */
 var CFG = {
   SHEET_ID:          "1YpDd-1ketJfGu3gyoQ-qU85F3972CyK_tAy9gHoutXA",
   SHEET_RANGE:       "Respuestas de formulario 1",
-  SHEET_RANGE_FOTOS: "Publicados",   // uniqueid -> foto_doc_id/ine_doc_id/pasaporte_doc_id
+  SHEET_RANGE_FOTOS: "Publicados",   // Nuevo_QR -> view_url (+ doc_id opcional)
   STABILITY_MS: 500,   // espera antes del reread de durabilidad (Biblia Grid §5.9)
   MAX_ATTEMPTS: 6       // reintentos del ciclo optimista de escritura
 };
@@ -1108,6 +1109,61 @@ function sheetRowsToObjects(rows){
   return out;
 }
 
+function normHeader(s){ return String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+
+/* Resuelve {campo: índiceDeColumna} agotando cada patrón (en orden de
+   prioridad) contra TODAS las columnas antes de probar el siguiente —
+   idéntico a resolveColumnsByPriority() de Obsidian Scan/control_accesos_obsidian.html.
+   Sin esto, una columna genérica que matchea un patrón laxo (p.ej. "credencial")
+   puede robarle el campo a la columna correcta (p.ej. "Nuevo_QR") si aparece
+   antes en la hoja, aunque exista una columna que matchee un patrón más
+   específico — ese fue el bug real que hizo fallar la búsqueda de fotos. */
+function resolveColumnsByPriority(headerRow, fieldPatterns){
+  var used={}, map={};
+  var headers=headerRow.map(function(h){ return normHeader(h).replace(/_/g,' '); });
+  fieldPatterns.forEach(function(entry){
+    var field=entry[0], patterns=entry[1];
+    for(var p=0;p<patterns.length;p++){
+      var found=-1;
+      for(var j=0;j<headers.length;j++){
+        if(used[j]||!headers[j]) continue;
+        if(patterns[p].test(headers[j])){ found=j; break; }
+      }
+      if(found!==-1){ map[field]=found; used[found]=true; break; }
+    }
+  });
+  return map;
+}
+
+/* Mismo campo "qr" que usa Catalog en el scanner de guardias sobre esta misma
+   hoja ("Respuestas de formulario 1"): la columna real es "Nuevo_QR" (u otro
+   nombre similar), presente desde el envío del Form — es el identificador
+   estable de cada solicitud, no un "uniqueid" inventado. */
+var QR_FIELD_PATTERNS = [['qr', [/\bqr\b/, /c[oó]digo/, /credencial/, /\bid\b/]]];
+
+/* Payload de QR: puede llegar envuelto en URL o JSON (igual normalización
+   que normalizeQR() del scanner) — aquí sobre todo evita mismatches de
+   mayúsculas/espacios entre esta hoja y la pestaña "Publicados". */
+function normalizeQR(raw){
+  var s=String(raw==null?'':raw).trim();
+  if(!s) return '';
+  if(s.charAt(0)==='{'){
+    try{
+      var o=JSON.parse(s);
+      var keys=['qr','id','codigo','code','credencial','uuid'];
+      for(var i=0;i<keys.length;i++){
+        if(o[keys[i]]!=null && String(o[keys[i]]).trim()) return String(o[keys[i]]).trim().toUpperCase();
+      }
+    }catch(e){ /* no era JSON, sigue como texto */ }
+  }
+  if(/^https?:\/\//i.test(s)){
+    var clean=s.split(/[?#]/)[0].replace(/\/+$/,'');
+    var seg=clean.split('/').pop();
+    if(seg) s=seg;
+  }
+  return s.toUpperCase();
+}
+
 var currentTab = 'pendiente';
 var currentSort = {field:'fechaSolicitud', dir:'desc'};
 var SORT_FIELDS=[
@@ -1153,40 +1209,23 @@ var solicitudes = [];
 /* accesosMap = { uniqueid → estado en accesos_state } — se llena junto con solicitudes para JOIN en búsqueda */
 var accesosMap = {};
 
-/* ===== Fotos — pestaña "Publicados" del mismo Sheet, igual patrón que el módulo
-   Photos de Obsidian Scan: se lee una vez por sesión con GridClient.readSheet()
-   y se indexa en memoria — sin webhook, sin copiar nada a un Dataset.
-   uniqueid -> {foto_doc_id, ine_doc_id, pasaporte_doc_id}. Un fallo aquí NO bloquea
-   el arranque: la foto es una ayuda visual, no parte de la decisión de acceso.
-   INE/Pasaporte quedan indexados pero sin UI de carga — próximo feature. */
+/* ===== Fotos — pestaña "Publicados" del mismo Sheet, MISMA pestaña y MISMA
+   clave que usa el módulo Photos del scanner de guardias (control_accesos_
+   obsidian.html): Nuevo_QR -> view_url (+ doc_id opcional). Se lee una vez
+   por sesión con GridClient.readSheet() — sin webhook, sin Dataset.
+   Sólo existe UNA foto por fila ahí (la de verificación/gafete): no hay
+   columnas separadas de INE/Pasaporte en "Publicados" — ésas quedan como
+   próximo feature, sin lectura de documento propia todavía.
+   Un fallo aquí NO bloquea el arranque: la foto es una ayuda visual, no
+   parte de la decisión de acceso. */
 var Photos = (function(){
   var index = null;
   var FIELD_PATTERNS = [
-    ['uniqueid',         [/uniqueid/, /unique.?id/, /\bid\b/]],
-    ['foto_doc_id',      [/foto.*doc.?id/, /doc.?id.*foto/]],
-    ['ine_doc_id',       [/ine.*doc.?id/, /doc.?id.*ine/]],
-    ['pasaporte_doc_id', [/pasaporte.*doc.?id/, /doc.?id.*pasaporte/]]
+    ['qr',       [/\bqr\b/, /c[oó]digo/, /credencial/]],
+    ['view_url', [/view.?url/, /^url$/, /\burl\b/]],
+    ['doc_id',   [/doc.?id/]]
   ];
-  var REQUIRED = ['uniqueid'];
-
-  function normHeader(s){ return String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
-
-  function resolveColumns(headerRow){
-    var used={}, map={};
-    var headers=headerRow.map(function(h){ return normHeader(h).replace(/_/g,' '); });
-    FIELD_PATTERNS.forEach(function(entry){
-      var field=entry[0], patterns=entry[1];
-      for(var p=0;p<patterns.length;p++){
-        var found=-1;
-        for(var j=0;j<headers.length;j++){
-          if(used[j]||!headers[j]) continue;
-          if(patterns[p].test(headers[j])){ found=j; break; }
-        }
-        if(found!==-1){ map[field]=found; used[found]=true; break; }
-      }
-    });
-    return map;
-  }
+  var REQUIRED = ['qr'];
 
   function load(){
     return GridClient.readSheet(CFG.SHEET_ID, DOC_IDS.usuarios, CFG.SHEET_RANGE_FOTOS)
@@ -1195,26 +1234,26 @@ var Photos = (function(){
           devLog('[Photos] la pestaña "'+CFG.SHEET_RANGE_FOTOS+'" no devolvió filas','warn');
           index={}; return 0;
         }
-        var colMap=resolveColumns(rows[0]);
+        var colMap=resolveColumnsByPriority(rows[0], FIELD_PATTERNS);
+        devLog('[Photos] columnas resueltas: '+Object.keys(colMap).map(function(f){return f+'="'+rows[0][colMap[f]]+'"';}).join(', ')||'(ninguna)','info');
         var faltantes=REQUIRED.filter(function(f){ return colMap[f]===undefined; });
         if(faltantes.length){
-          devLog('[Photos] no se reconoce la columna uniqueid en "'+CFG.SHEET_RANGE_FOTOS+'" — encabezados: '+rows[0].join(' | '),'warn');
+          devLog('[Photos] no se reconoce la columna qr en "'+CFG.SHEET_RANGE_FOTOS+'" — encabezados: '+rows[0].join(' | '),'warn');
           index={}; return 0;
         }
-        var newIndex=Object.create(null), n=0;
+        var newIndex=Object.create(null), n=0, sinQr=0;
         for(var i=1;i<rows.length;i++){
           var r=rows[i]||[]; if(!r.length) continue;
-          var uid=imageMappingKey(r[colMap.uniqueid]);
-          if(!uid) continue;
-          newIndex[uid]={
-            foto_doc_id:      colMap.foto_doc_id     !==undefined ? String(r[colMap.foto_doc_id]     ==null?'':r[colMap.foto_doc_id]).trim()      : '',
-            ine_doc_id:       colMap.ine_doc_id       !==undefined ? String(r[colMap.ine_doc_id]       ==null?'':r[colMap.ine_doc_id]).trim()       : '',
-            pasaporte_doc_id: colMap.pasaporte_doc_id !==undefined ? String(r[colMap.pasaporte_doc_id] ==null?'':r[colMap.pasaporte_doc_id]).trim() : ''
+          var qr=normalizeQR(r[colMap.qr]);
+          if(!qr){ sinQr++; continue; }
+          newIndex[qr]={
+            foto_doc_id: colMap.doc_id  !==undefined ? String(r[colMap.doc_id]  ==null?'':r[colMap.doc_id]).trim()  : '',
+            view_url:    colMap.view_url!==undefined ? String(r[colMap.view_url]==null?'':r[colMap.view_url]).trim(): ''
           };
           n++;
         }
         index=newIndex;
-        devLog('✓ Photos: '+n+' filas indexadas desde "'+CFG.SHEET_RANGE_FOTOS+'"','info');
+        devLog('✓ Photos: '+n+' filas indexadas desde "'+CFG.SHEET_RANGE_FOTOS+'" ('+sinQr+' sin qr, de '+(rows.length-1)+' totales)','info');
         return n;
       })
       .catch(function(e){
@@ -1223,10 +1262,9 @@ var Photos = (function(){
         return 0;
       });
   }
-  function lookup(uid){ return index ? (index[imageMappingKey(uid)]||null) : null; }
+  function lookup(qr){ return index ? (index[normalizeQR(qr)]||null) : null; }
   return {load:load, lookup:lookup};
 })();
-function imageMappingKey(value){ return String(value==null?'':value).trim(); }
 function imageMappingFor(value){ return Photos.lookup(value)||{}; }
 
 /* ─── Carga solicitudes directo del Sheet (GridClient.readSheet, sin Dataset,
@@ -1241,22 +1279,34 @@ function loadSolicitudes(onDone) {
     Photos.load()
   ])
   .then(function(results){
-    var sheetRows=sheetRowsToObjects(results[0]);
-    accesosMap=results[1].data||{}; // State Bucket → {uniqueid: {estatus,fechaVencimiento,...}}
+    var rawRows=results[0];
+    var headerRow=rawRows[0]||[];
+    // Misma columna "qr" que usa Catalog en el scanner de guardias sobre esta
+    // misma hoja — es "Nuevo_QR" (u otro nombre similar), NO un "uniqueid"
+    // inventado. Resuelta por NOMBRE de encabezado, no por letra fija.
+    var qrColMap=resolveColumnsByPriority(headerRow, QR_FIELD_PATTERNS);
+    var qrHeaderName=qrColMap.qr!==undefined ? headerRow[qrColMap.qr] : null;
+    if(!qrHeaderName){
+      devLog('✗ No se reconoce ninguna columna de QR/credencial en "'+CFG.SHEET_RANGE+'" — encabezados: '+headerRow.join(' | '),'error');
+    }
+    var sheetRows=sheetRowsToObjects(rawRows);
+    accesosMap=results[1].data||{}; // State Bucket → {uid: {estatus,fechaVencimiento,...}}
     solicitudes=sheetRows.map(function(row,idx){
-      var uid=String(row['uniqueid']||('AC-'+String(idx+1).padStart(4,'0')));
+      var rawUid=qrHeaderName ? row[qrHeaderName] : '';
+      var uid=normalizeQR(rawUid) || ('AC-'+String(idx+1).padStart(4,'0'));
       var csvRow=accesosMap[uid]||{};
       // Merge: campos del Sheet + override con campos de accesos_state (estatus, vencimiento, qr, etc.)
       var merged={};
       Object.keys(row).forEach(function(k){merged[k]=row[k];});
       Object.keys(csvRow).forEach(function(k){if(csvRow[k]!=='') merged[k]=csvRow[k];});
+      merged['__uid']=uid;
       return rowToSolicitud(merged,idx);
     });
-    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' estados)','info');
+    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' estados | col qr="'+qrHeaderName+'")','info');
     if(sheetRows.length>0){
       var r0=sheetRows[0];
       devLog('cols disponibles: '+Object.keys(r0).join(' | '),'info');
-      devLog('fila[0] → sitio=«'+r0['Sitio']+'» uniqueid=«'+r0['uniqueid']+'»','info');
+      devLog('fila[0] → sitio=«'+r0['Sitio']+'» qr=«'+(qrHeaderName?r0[qrHeaderName]:'')+'»','info');
     }
     devLog('activeSite=«'+activeSite+'» | solicitudes[0].sitio=«'+(solicitudes[0]&&solicitudes[0].sitio)+'»','info');
     showToast(solicitudes.length+' solicitudes cargadas','success');
@@ -1732,8 +1782,8 @@ function refreshImages(uniqueid, btn, silent){
           docsSection.innerHTML=
             '<div class="docs">'+
               dThumb('Foto',s.foto,s.fotoUrl,ic.image,imgMap.foto_doc_id)+
-              dThumb('INE',s.ine,s.ineUrl,ic.idCard,imgMap.ine_doc_id)+
-              dThumb('Pasaporte',s.pasaporte,s.pasaporteUrl,ic.globe,imgMap.pasaporte_doc_id)+
+              dThumbDisabled('INE',ic.idCard)+
+              dThumbDisabled('Pasaporte',ic.globe)+
             '</div><button class="btn btn-block btn-secondary" style="width:100%;margin-top:8px" id="btn-refresh-images" onclick="refreshImages(\''+uniqueid+'\', this)">&#8635; Recargar imágenes</button>';
         }
       }
@@ -2284,8 +2334,8 @@ function buildDetail(s){
      '<div class="d-section" id="docs-section-'+esc(s.id)+'">'+
        '<div class="docs">'+
          dThumb('Foto',s.foto,s.fotoUrl,ic.image,imgMap.foto_doc_id)+
-         dThumb('INE',s.ine,s.ineUrl,ic.idCard,imgMap.ine_doc_id)+
-         dThumb('Pasaporte',s.pasaporte,s.pasaporteUrl,ic.globe,imgMap.pasaporte_doc_id)+
+         dThumbDisabled('INE',ic.idCard)+
+         dThumbDisabled('Pasaporte',ic.globe)+
          (s.qr ? qrThumb() : '')+
        '</div>'+
        '<button class="btn btn-block btn-secondary" style="width:100%;margin-top:8px" id="btn-refresh-images" onclick="refreshImages(\''+esc(s.id)+'\', this)">&#8635; Recargar imágenes</button>'+
@@ -2336,6 +2386,17 @@ function dThumb(label,has,url,iconStr,docId){
     style=imgSrc?'padding:0;overflow:hidden;position:relative;':'';
   }
   return '<div class="doc-thumb" style="'+style+'" onclick="openDoc(\''+esc(label)+'\',decodeURIComponent(\''+encodedUrl+'\'),decodeURIComponent(\''+encodedDocId+'\'))">'+inner+'</div>';
+}
+/* Placeholder inerte para INE/Pasaporte — próximo feature, todavía sin fuente
+   de doc_id propia (la pestaña "Publicados" sólo publica la Foto). No es
+   clickeable ni abre el modal de documento, para no simular una función que
+   no existe todavía (aunque el Sheet ya traiga una URL de Drive en esa
+   columna del Form). */
+function dThumbDisabled(label, iconStr){
+  return '<div class="doc-thumb missing" style="opacity:.55;cursor:default" title="Próximamente">'+iconStr+
+    '<span>'+esc(label)+'</span>'+
+    '<span style="font-size:10px;color:var(--text-muted);font-weight:600">Próximamente</span>'+
+  '</div>';
 }
 /* Botón de documento QR — mismo boilerplate que dThumb, abre el modal QR (badge/driver) */
 function qrThumb(){
@@ -2553,7 +2614,7 @@ function rowToSolicitud(r, idx){
   var estatus = /rechaz/i.test(estatusRaw) ? 'rechazado' :
                 /acept/i.test(estatusRaw)  ? 'aceptado'  : 'pendiente';
   return {
-    id:               String(r['uniqueid'] || ('AC-' + String(idx+1).padStart(4,'0'))),
+    id:               String(r['__uid'] || ('AC-' + String(idx+1).padStart(4,'0'))),
     fechaSolicitud:   parseFecha(r['Marca temporal']),
     correo:           r['Correo electrónico'] || '',
     nombre:           r['Nombre']         || '',
