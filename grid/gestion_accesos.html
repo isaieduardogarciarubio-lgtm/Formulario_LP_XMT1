@@ -1728,170 +1728,172 @@ function closeQRModal(){
 }
 
 /* ===== Descarga del gafete completo (foto + QR + datos rápidos) =====
-   El botón "Descargar" antes sólo bajaba el PNG del QR suelto. Ahora
-   rasteriza el documento completo (la tarjeta .gafete-card con foto+QR+
-   pills, o el mini-documento equivalente para drivers) a un solo PNG,
-   vía SVG <foreignObject> + <canvas> — sin librerías externas (no hay
-   html2canvas en /d/_libs/). El <canvas> del QR ya vive como <img> con
-   data URI en vivo (QRCode.js llama a makeImage() al terminar de
-   dibujar), así que clonar el DOM sí conserva su contenido; el <canvas>
-   crudo NO se conserva al clonar/serializar — por eso todo pasa por
-   ese <img> ya convertido, nunca por el <canvas>. */
-var GAFETE_EXPORT_CSS =
-  '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}'+
-  'div{font-family:-apple-system,BlinkMacSystemFont,"Proxima Nova","Segoe UI",Roboto,sans-serif;}'+
-  '.gafete-card{width:260px;background:#fff;border-radius:16px;'+
-    'box-shadow:0 8px 24px rgba(0,0,0,.15),inset 0 0 0 1px rgba(0,0,0,.05);'+
-    'position:relative;display:grid;grid-template-rows:100px 1fr 6px;overflow:hidden;}'+
-  '.gafete-lanyard{position:absolute;top:10px;left:50%;transform:translateX(-50%);'+
-    'width:48px;height:11px;background:#ccc;border-radius:8px;'+
-    'box-shadow:inset 0 2px 5px rgba(0,0,0,.15);z-index:20;}'+
-  '.gafete-hdr{background:#FFD100;}'+
-  '.gafete-photo-wrap{position:absolute;top:100px;left:50%;transform:translate(-50%,-50%);'+
-    'width:110px;height:110px;background:#e8e8e8;border-radius:50%;'+
-    'border:4px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.12);overflow:hidden;z-index:10;}'+
-  '.gafete-photo-wrap img{width:100%;height:100%;object-fit:cover;display:block;}'+
-  '.gafete-photo-wm{position:absolute;top:-10%;left:-10%;width:120%;height:120%;'+
-    'color:rgba(255,255,255,.28);font-size:7px;font-weight:900;line-height:1.6;'+
-    'letter-spacing:.3px;transform:rotate(-25deg);text-shadow:0 1px 2px rgba(0,0,0,.4);'+
-    'pointer-events:none;z-index:15;word-break:break-all;overflow:hidden;padding:4px;}'+
-  '.gafete-body{position:relative;display:flex;flex-direction:column;align-items:center;padding:58px 12px 16px;}'+
-  '.gafete-uname{font-size:14px;font-weight:800;color:#333;line-height:1.1;margin-bottom:3px;text-align:center;}'+
-  '.gafete-uid{font-size:11px;color:#777;font-weight:700;margin-bottom:8px;letter-spacing:.4px;}'+
-  '.gafete-pills{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:4px;'+
-    'background:#f5f5f5;padding:4px 12px;border-radius:16px;font-size:9px;font-weight:800;color:#333;'+
-    'border:1px solid #eaeaea;margin-bottom:12px;max-width:220px;}'+
-  '.gafete-pills span:not(:last-child)::after{content:"•";margin-left:4px;color:#ccc;}'+
-  '.gafete-qz{display:flex;justify-content:center;align-items:center;width:100%;}'+
-  '.gafete-qb{background:#fff;padding:8px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);width:110px;height:110px;}'+
-  '.gafete-qb img,.gafete-qb canvas{width:100%;height:100%;display:block;}'+
-  '.gafete-bar{background:#2968c8;}';
+   El botón "Descargar" antes sólo bajaba el PNG del QR suelto.
+   Primer intento: SVG <foreignObject> + <canvas> (clonar el DOM real y
+   rasterizarlo) — descartado: exige XHTML estrictamente bien formado y
+   sigue fallando entre navegadores incluso arreglando el autocierre de
+   <img>. Segundo intento (éste): dibujar la tarjeta a mano en un <canvas>,
+   sin pasar NUNCA por SVG/XML — sólo drawImage()/fillText() con imágenes
+   ya cargadas (la foto vía blob:, el QR vía el <img> con data URI que
+   QRCode.js ya deja listo tras makeImage()). Ninguna de las dos fuentes
+   tiñe el canvas (blob: del propio origen, data: URI), así que
+   canvas.toDataURL() nunca debería lanzar SecurityError. Sin librerías
+   externas (no hay html2canvas en /d/_libs/). */
 
-/* Convierte una blob: URL (la foto de detalle vive así) a data: URL —
-   evita cualquier duda de resolución de blob: dentro de un SVG serializado
-   como string y vuelto a cargar por separado en un <img>. */
-function blobUrlToDataUrl(blobUrl){
-  return fetch(blobUrl).then(function(r){ return r.blob(); }).then(function(blob){
-    return new Promise(function(resolve,reject){
-      var reader=new FileReader();
-      reader.onload=function(){ resolve(reader.result); };
-      reader.onerror=function(){ reject(new Error('FileReader error')); };
-      reader.readAsDataURL(blob);
-    });
-  });
+function drawRoundedRectPath(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,  x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,  y+h,r);
+  ctx.arcTo(x,  y+h,x,  y,  r);
+  ctx.arcTo(x,  y,  x+w,y,  r);
+  ctx.closePath();
 }
-
-/* Clona la tarjeta .gafete-card ya renderizada (con su QR ya convertido a
-   <img> por QRCode.js) e inlinea la foto como data URL. Si todavía no hay
-   foto cargada, exporta la tarjeta tal cual (con las iniciales). */
-function buildGafeteExportHTML(s){
-  var liveCard=document.querySelector('#qrmBadge .gafete-card');
-  if(!liveCard) return Promise.resolve(buildBadge(s));
-  var clone=liveCard.cloneNode(true);
-  var imgEl=clone.querySelector('.gafete-photo-wrap img');
-  if(!imgEl || imgEl.src.indexOf('blob:')!==0) return Promise.resolve(clone.outerHTML);
-  return blobUrlToDataUrl(imgEl.src).then(function(dataUrl){
-    imgEl.src=dataUrl;
-    return clone.outerHTML;
-  }).catch(function(err){
-    devLog('buildGafeteExportHTML: foto no inlineada ('+err+') — se exporta sin foto','warn');
-    return clone.outerHTML;
-  });
+/* object-fit:cover dentro de un rectángulo destino */
+function drawImageCover(ctx,img,x,y,w,h){
+  var iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height;
+  if(!iw||!ih){ ctx.drawImage(img,x,y,w,h); return; }
+  var ir=iw/ih, tr=w/h, sx,sy,sw,sh;
+  if(ir>tr){ sh=ih; sw=sh*tr; sx=(iw-sw)/2; sy=0; }
+  else     { sw=iw; sh=sw/tr; sx=0; sy=(ih-sh)/2; }
+  ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h);
 }
-
-/* Los drivers no tienen tarjeta con foto (ver openQRModal) — se arma un
-   mini-documento equivalente con los mismos datos rápidos (nombre, sitio,
-   id, QR, estado del QR YMS), en estilos inline propios (sin depender de
-   las variables de tema, que no resuelven dentro del SVG exportado). */
-function buildDriverExportHTML(s){
-  var nombre=((s.nombre||'')+' '+(s.apPaterno||'')+' '+(s.apMaterno||'')).trim().toUpperCase();
-  var qrEl=document.getElementById('qrmQR');
-  var qrImg=qrEl?qrEl.querySelector('img'):null;
-  var qrSrc=qrImg?qrImg.src:'';
-  var ymsLine=s.ymsQr ? ('QR YMS vinculado: '+esc(s.ymsQr)) : 'QR YMS — pendiente de vincular';
-  return Promise.resolve(
-    '<div style="width:280px;background:#fff;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.15);'+
-      'padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px;'+
-      'font-family:-apple-system,BlinkMacSystemFont,\'Proxima Nova\',\'Segoe UI\',Roboto,sans-serif;box-sizing:border-box;">'+
-      '<div style="width:100%;height:6px;background:#FFD100;border-radius:4px;"></div>'+
-      '<div style="font-size:15px;font-weight:800;color:#222;text-align:center;line-height:1.2;">'+esc(nombre)+'</div>'+
-      '<div style="font-size:11px;color:#777;font-weight:700;letter-spacing:.4px;">'+esc(s.sitio||'—')+' · '+esc(s.id)+'</div>'+
-      '<div style="background:#fff;padding:8px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);width:150px;height:150px;'+
-        'display:flex;align-items:center;justify-content:center;box-sizing:border-box;">'+
-        (qrSrc?('<img src="'+qrSrc+'" style="width:100%;height:100%;object-fit:contain;display:block;">'):'')+
-      '</div>'+
-      '<div style="font-size:10px;color:#555;font-weight:600;text-align:center;word-break:break-all;">'+esc(s.qr||'')+'</div>'+
-      '<div style="font-size:10px;color:#777;text-align:center;background:#f5f5f5;border-radius:8px;padding:6px 10px;width:100%;box-sizing:border-box;">'+ymsLine+'</div>'+
-      '<div style="width:100%;height:4px;background:#2968c8;border-radius:4px;"></div>'+
-    '</div>'
-  );
+function truncateToWidth(ctx,text,maxWidth){
+  if(ctx.measureText(text).width<=maxWidth) return text;
+  var t=text;
+  while(t.length>1 && ctx.measureText(t+'…').width>maxWidth) t=t.slice(0,-1);
+  return t+'…';
 }
+var EXPORT_FONT='-apple-system,BlinkMacSystemFont,"Proxima Nova","Segoe UI",Roboto,sans-serif';
 
-/* <foreignObject> exige XHTML bien formado (es XML, no HTML): un elemento
-   vacío como <img ...> SIN la barra de autocierre rompe el parseo del SVG
-   completo (falla en silencio como error de decodificación de imagen).
-   clone.outerHTML / Element.innerHTML de un <img> real JAMÁS incluyen esa
-   barra (es la serialización HTML normal del navegador) — hay que
-   agregarla a mano antes de incrustar el string en el SVG. */
-function xhtmlSelfClose(html){
-  return html.replace(/<(img|br|hr|input|source|area|col|embed|track|wbr)((?:[^>"']|"[^"]*"|'[^']*')*?)\/?>/gi,
-    function(m, tag, attrs){ return '<'+tag+attrs+'/>'; });
-}
-
-/* Mide el documento fuera de pantalla (ya con dimensiones fijas por CSS,
-   no depende de esperar imágenes), lo serializa dentro de un SVG con
-   <foreignObject>, lo carga como imagen y lo dibuja en un <canvas> a
-   escala 3x para impresión/zoom razonable — sin ninguna librería externa. */
-function rasterizeHtmlToPngDataUrl(innerHtml, extraCss){
+/* Carga una imagen (blob:/data:/http — todas same-origin aquí) como
+   HTMLImageElement. drawImage() sobre estas fuentes nunca tiñe el canvas. */
+function loadImageEl(src){
   return new Promise(function(resolve,reject){
-    var probe=document.createElement('div');
-    probe.style.cssText='position:fixed;left:-99999px;top:0;';
-    probe.innerHTML=innerHtml;
-    document.body.appendChild(probe);
-    var target=probe.firstElementChild;
-    var rect=target?target.getBoundingClientRect():{width:0,height:0};
-    var W=Math.ceil(rect.width), H=Math.ceil(rect.height);
-    document.body.removeChild(probe);
-    if(!W||!H){ reject(new Error('no se pudo medir el documento a exportar')); return; }
-
-    var xhtml=xhtmlSelfClose(innerHtml);
-    var SCALE=3;
-    var svg=
-      '<svg xmlns="http://www.w3.org/2000/svg" width="'+(W*SCALE)+'" height="'+(H*SCALE)+'" viewBox="0 0 '+W+' '+H+'">'+
-        '<foreignObject width="100%" height="100%">'+
-          '<div xmlns="http://www.w3.org/1999/xhtml" style="width:'+W+'px;height:'+H+'px;">'+
-            (extraCss?('<style>'+extraCss+'</style>'):'')+
-            xhtml+
-          '</div>'+
-        '</foreignObject>'+
-      '</svg>';
-
-    var blob=new Blob([svg],{type:'image/svg+xml;charset=utf-8'});
-    var url=URL.createObjectURL(blob);
     var img=new Image();
-    img.onload=function(){
-      var canvas=document.createElement('canvas');
-      canvas.width=W*SCALE; canvas.height=H*SCALE;
-      var ctx=canvas.getContext('2d');
-      ctx.drawImage(img,0,0,W*SCALE,H*SCALE);
-      URL.revokeObjectURL(url);
-      try{ resolve(canvas.toDataURL('image/png')); }
-      catch(e){ reject(e); }
-    };
-    img.onerror=function(){ URL.revokeObjectURL(url); reject(new Error('no se pudo rasterizar el documento')); };
-    img.src=url;
+    img.onload=function(){ resolve(img); };
+    img.onerror=function(){ reject(new Error('no se pudo cargar la imagen: '+src)); };
+    img.src=src;
   });
+}
+
+/* Foto ya cargada en el círculo del héroe (loadDetailPhoto ya la trajo al
+   abrir el detalle) — si no hay, exporta sin foto en vez de fallar. */
+function getExportPhotoImage(s){
+  var map=imageMappingFor(s.id);
+  var docId=map.foto_doc_id;
+  if(docId && _docBlobCache[docId]) return loadImageEl(_docBlobCache[docId].url).catch(function(){ return null; });
+  return Promise.resolve(null);
+}
+
+/* Tarjeta con foto (no-drivers) — mismo layout visual que .gafete-card. */
+function drawGafeteCanvas(s){
+  var SCALE=3, W=260, H=372;
+  return getExportPhotoImage(s).then(function(photoImg){
+    var qrImgEl=document.querySelector('#qrmBadge .gafete-qb img');
+    var canvas=document.createElement('canvas');
+    canvas.width=W*SCALE; canvas.height=H*SCALE;
+    var ctx=canvas.getContext('2d');
+    ctx.scale(SCALE,SCALE);
+
+    drawRoundedRectPath(ctx,0,0,W,H,16);
+    ctx.fillStyle='#fff'; ctx.fill();
+    ctx.save();
+    drawRoundedRectPath(ctx,0,0,W,H,16); ctx.clip();
+
+    ctx.fillStyle='#FFD100'; ctx.fillRect(0,0,W,100);
+    ctx.fillStyle='#ccc';
+    drawRoundedRectPath(ctx,W/2-24,10,48,11,5.5); ctx.fill();
+
+    var cx=W/2, cy=100, r=55;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.closePath(); ctx.clip();
+    if(photoImg) drawImageCover(ctx,photoImg,cx-r,cy-r,r*2,r*2);
+    else { ctx.fillStyle='#e8e8e8'; ctx.fillRect(cx-r,cy-r,r*2,r*2); }
+    ctx.restore();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(cx,cy,r-2,0,Math.PI*2); ctx.stroke();
+
+    var nombre=((s.nombre||'')+' '+(s.apPaterno||'')+' '+(s.apMaterno||'')).trim().toUpperCase();
+    ctx.textAlign='center';
+    ctx.fillStyle='#333'; ctx.font='800 14px '+EXPORT_FONT;
+    ctx.fillText(truncateToWidth(ctx,nombre,W-24),W/2,166);
+    ctx.fillStyle='#777'; ctx.font='700 11px '+EXPORT_FONT;
+    ctx.fillText(truncateToWidth(ctx,s.sitio||'—',W-24),W/2,182);
+
+    var pillText=(s.empresa||'—').substring(0,20)+'   •   '+(s.puesto||'—').substring(0,20);
+    ctx.font='800 9px '+EXPORT_FONT;
+    var pillW=Math.min(230,ctx.measureText(pillText).width+24);
+    drawRoundedRectPath(ctx,W/2-pillW/2,196,pillW,20,10);
+    ctx.fillStyle='#f5f5f5'; ctx.fill();
+    ctx.strokeStyle='#eaeaea'; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle='#333';
+    ctx.fillText(truncateToWidth(ctx,pillText,pillW-12),W/2,210);
+
+    var qbSize=110, qbX=W/2-qbSize/2, qbY=232, pad=8;
+    drawRoundedRectPath(ctx,qbX,qbY,qbSize,qbSize,12);
+    ctx.fillStyle='#fff'; ctx.fill();
+    if(qrImgEl) ctx.drawImage(qrImgEl,qbX+pad,qbY+pad,qbSize-pad*2,qbSize-pad*2);
+
+    ctx.fillStyle='#2968c8'; ctx.fillRect(0,H-6,W,6);
+    ctx.restore();
+    return canvas.toDataURL('image/png');
+  });
+}
+
+/* Drivers no tienen foto en este modal (ver openQRModal) — mini-documento
+   equivalente con los mismos datos rápidos (nombre, sitio/id, QR, estado
+   del QR YMS). */
+function drawDriverCanvas(s){
+  var SCALE=3, W=280, H=280;
+  var qrEl=document.getElementById('qrmQR');
+  var qrImgEl=qrEl?qrEl.querySelector('img'):null;
+  var canvas=document.createElement('canvas');
+  canvas.width=W*SCALE; canvas.height=H*SCALE;
+  var ctx=canvas.getContext('2d');
+  ctx.scale(SCALE,SCALE);
+
+  drawRoundedRectPath(ctx,0,0,W,H,16);
+  ctx.fillStyle='#fff'; ctx.fill();
+  ctx.save();
+  drawRoundedRectPath(ctx,0,0,W,H,16); ctx.clip();
+
+  ctx.fillStyle='#FFD100'; ctx.fillRect(0,0,W,6);
+
+  var nombre=((s.nombre||'')+' '+(s.apPaterno||'')+' '+(s.apMaterno||'')).trim().toUpperCase();
+  ctx.textAlign='center';
+  ctx.fillStyle='#222'; ctx.font='800 15px '+EXPORT_FONT;
+  ctx.fillText(truncateToWidth(ctx,nombre,W-32),W/2,34);
+  ctx.fillStyle='#777'; ctx.font='700 11px '+EXPORT_FONT;
+  ctx.fillText(truncateToWidth(ctx,(s.sitio||'—')+' · '+s.id,W-32),W/2,50);
+
+  var qbSize=150, qbX=W/2-qbSize/2, qbY=62, pad=8;
+  drawRoundedRectPath(ctx,qbX,qbY,qbSize,qbSize,12);
+  ctx.fillStyle='#fff'; ctx.fill();
+  if(qrImgEl) ctx.drawImage(qrImgEl,qbX+pad,qbY+pad,qbSize-pad*2,qbSize-pad*2);
+
+  ctx.fillStyle='#555'; ctx.font='600 10px '+EXPORT_FONT;
+  ctx.fillText(truncateToWidth(ctx,s.qr||'',W-32),W/2,qbY+qbSize+16);
+
+  var ymsLine=s.ymsQr ? ('QR YMS vinculado: '+s.ymsQr) : 'QR YMS — pendiente de vincular';
+  var ymsY=qbY+qbSize+30;
+  drawRoundedRectPath(ctx,16,ymsY,W-32,22,8);
+  ctx.fillStyle='#f5f5f5'; ctx.fill();
+  ctx.fillStyle='#777'; ctx.font='600 10px '+EXPORT_FONT;
+  ctx.fillText(truncateToWidth(ctx,ymsLine,W-48),W/2,ymsY+15);
+
+  ctx.fillStyle='#2968c8'; ctx.fillRect(0,H-6,W,6);
+  ctx.restore();
+  return Promise.resolve(canvas.toDataURL('image/png'));
 }
 
 /* Botón "Descargar" del modal QR — documento completo (foto+QR+datos), no
-   sólo el QR suelto. Si algo falla (navegador sin soporte, foto no
-   inlineable, etc.), cae de vuelta al PNG simple del QR con un aviso. */
+   sólo el QR suelto. Si algo falla, cae de vuelta al PNG simple del QR
+   con un aviso — nunca deja al usuario sin nada que descargar. */
 function downloadBadgeImage(){
   var s=_qrModalS; if(!s) return;
-  var htmlPromise = s.esDriver ? buildDriverExportHTML(s) : buildGafeteExportHTML(s);
-  var css = s.esDriver ? '' : GAFETE_EXPORT_CSS;
-  htmlPromise
-    .then(function(html){ return rasterizeHtmlToPngDataUrl(html, css); })
+  var pngPromise = s.esDriver ? drawDriverCanvas(s) : drawGafeteCanvas(s);
+  pngPromise
     .then(function(pngDataUrl){
       var a=document.createElement('a');
       a.href=pngDataUrl;
