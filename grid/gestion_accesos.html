@@ -115,8 +115,8 @@ body,.card,.panel,.modal,.sidebar,.d-section,.search-wrap,
 /* ── Sidebar (oculto en móvil; se activa en el @media de abajo) ─── */
 .sidebar{display:none;}
 
-/* ── Subhead ────────────────────────────────────────────────────── */
-.subhead{padding:14px 16px 6px;background:var(--page);position:sticky;top:62px;z-index:30;}
+/* ── Subhead (consolidado dentro de .app-header, ver ese bloque) ──── */
+.subhead{padding:10px 16px 6px;background:var(--page);}
 .subhead-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
 .subhead-titles{flex:1;min-width:0;}
 .subhead-titles .eyebrow{margin-top:0;}
@@ -135,7 +135,7 @@ body,.card,.panel,.modal,.sidebar,.d-section,.search-wrap,
 /* ── Card (item clickeable) ─────────────────────────────────────── */
 .card{
   background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);
-  padding:16px;cursor:pointer;transition:transform .1s,box-shadow .15s;
+  padding:13px 14px;cursor:pointer;transition:transform .1s,box-shadow .15s;
   box-shadow:0 1px 2px rgba(0,0,0,.04);
 }
 .card:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.09);}
@@ -292,12 +292,25 @@ nav.tabbar button.active{color:var(--primary);}
 }
 .toast{
   background:var(--toast-bg);color:#fff;border-radius:var(--r-md);padding:12px 16px;
-  display:flex;align-items:center;gap:10px;font-size:14px;min-width:200px;max-width:300px;
+  display:flex;flex-direction:column;gap:2px;font-size:14px;min-width:220px;max-width:340px;
   box-shadow:0 4px 16px rgba(0,0,0,.2);pointer-events:auto;animation:toastIn .2s ease;
 }
 .toast.success{background:var(--success);}
 .toast.error_{background:var(--error);}
 .toast.warning{background:var(--warning);color:#1A1A1A;}
+.toast-row{display:flex;align-items:center;gap:10px;}
+.toast-row span{flex:1;}
+.toast-more{
+  background:transparent;border:none;color:inherit;opacity:.85;text-decoration:underline;
+  font-size:11px;font-weight:600;cursor:pointer;padding:2px 0 0;align-self:flex-start;
+}
+.toast-more:hover{opacity:1;}
+.toast-detail{
+  display:none;font-size:11px;font-family:monospace;line-height:1.4;
+  background:rgba(0,0,0,.18);border-radius:6px;padding:6px 8px;margin-top:2px;
+  white-space:pre-wrap;word-break:break-word;max-height:140px;overflow-y:auto;
+}
+.toast-detail.open{display:block;}
 
 /* ── Mini-consola de diagnóstico ────────────────────────────────── */
 #devConsole{
@@ -308,10 +321,10 @@ nav.tabbar button.active{color:var(--primary);}
 }
 #devConsole.open{display:block;}
 #devToggle{
-  position:fixed;bottom:120px;right:12px;z-index:201;
   background:#1A1A1A;color:#00ff88;border:1px solid #00ff88;
-  border-radius:4px;padding:4px 8px;font-size:11px;font-family:monospace;cursor:pointer;
+  border-radius:8px;font-family:monospace;
 }
+#devToggle:hover{background:#000;}
 
 /* ── View Transition: círculo que se expande desde el cursor ─────
    animation:none mata el cross-fade por defecto del navegador, que
@@ -377,11 +390,9 @@ html.vt-running *{transition:none!important;}
     font-size:12px;color:var(--text-muted);margin-top:2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   }
-  .subhead{top:0;}
   .form-row{flex-direction:row;gap:12px;}
   nav.tabbar{display:none;}
   #devConsole{max-width:none;bottom:0;}
-  #devToggle{bottom:190px;}
 }
 /* ══════════ END SHARED ══════════ */
 
@@ -397,14 +408,18 @@ html.vt-running *{transition:none!important;}
   background:var(--page);position:relative;
 }
 main{flex:1;overflow-y:auto;padding:0 16px 90px;}
-.list{display:flex;flex-direction:column;gap:12px;}
+.list{display:flex;flex-direction:column;gap:10px;}
 
-/* ── Mobile header ──────────────────────────────────────────────── */
-.mobile-header{
+/* ── Header consolidado (marca+título + búsqueda/acciones en un solo
+   bloque sticky, en vez de dos barras apiladas cada una con su propio
+   sticky/z-index) ────────────────────────────────────────────────── */
+.app-header{
   position:sticky;top:0;z-index:40;background:var(--card);
   border-top:3px solid var(--yellow);border-bottom:1px solid var(--border);
-  padding:12px 16px;display:flex;align-items:center;gap:12px;
   transition:background-color .25s ease,border-color .25s ease,color .25s ease;
+}
+.mobile-header{
+  padding:10px 16px;display:flex;align-items:center;gap:12px;
 }
 .brand-bar{width:4px;height:34px;background:var(--yellow);border-radius:var(--r-full);flex:none;}
 .header-titles{flex:1;min-width:0;}
@@ -427,7 +442,7 @@ main{flex:1;overflow-y:auto;padding:0 16px 90px;}
 .card-info .name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card-info .company{font-size:13px;color:var(--text-2);margin-top:1px;}
 .card-info .role{font-size:13px;color:var(--text-muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.card-divider{height:1px;background:var(--border);margin:12px 0;}
+.card-divider{height:1px;background:var(--border);margin:9px 0;}
 .meta{display:flex;flex-wrap:wrap;gap:12px;}
 .meta-item{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-2);}
 .card-extra{font-size:13px;margin-top:10px;display:flex;align-items:center;gap:6px;}
@@ -640,14 +655,21 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
   .mobile-header{display:none;}
   .mobile-site-bar{display:none!important;}
   main{padding:0 24px 40px;}
-  .list{max-width:680px;}
+  /* En vez de topar el ancho de la lista a ~700px (deja un colchón enorme
+     vacío junto al sidebar en monitores anchos), se reparte el espacio
+     real en columnas — más tarjetas visibles, cero espacio muerto. */
+  .list{
+    max-width:none;display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+    gap:12px;align-items:start;
+  }
+  .list .empty{grid-column:1/-1;}
   .screen{
     left:auto;right:0;width:480px;max-width:480px;
     border-left:1px solid var(--border);
     box-shadow:-4px 0 24px rgba(0,0,0,.08);
   }
 }
-@media(min-width:1024px){.list{max-width:720px;}}
 </style>
 <script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KVE7FH28YRGXCY3GQ186A71B";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script><script>(function(){function _ok(r,onOk){return r.json().then(function(b){if(!r.ok)throw b;onOk(b);return b;});}window.GRID=window.GRID||{};window.GRID.docId="01KVE7FH28YRGXCY3GQ186A71B";window.GRID._stateUpdatedAt='';window.GRID._stateUpdatedAtByName=window.GRID._stateUpdatedAtByName||{};window.GRID.states={get:function(name){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/states/'+encodeURIComponent(n)).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},set:function(name,data,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/states/'+encodeURIComponent(n),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});},patch:function(name,patchData,ifUpdatedAt){var n=String(name||'').trim();if(!n)return Promise.reject({error:'validation_error',detail:'state name is required'});return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/states/'+encodeURIComponent(n),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAtByName[n]||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAtByName[n]=b.updated_at||'';});});}};window.GRID.state={get:function(){return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/state').then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},set:function(data,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({state:data,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});},patch:function(patchData,ifUpdatedAt){return fetch('/api/v1/documents/'+"01KVE7FH28YRGXCY3GQ186A71B"+'/state',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchData,if_updated_at:(typeof ifUpdatedAt==='string'?ifUpdatedAt:(window.GRID._stateUpdatedAt||''))})}).then(function(r){return _ok(r,function(b){window.GRID._stateUpdatedAt=b.updated_at||'';});});}};}());</script></head>
 <body class="gating">
@@ -731,6 +753,7 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
 
 <!-- ===== Main area ===== -->
 <div id="mainArea">
+  <div class="app-header">
   <header class="mobile-header">
     <div class="brand-bar sb-logo-brand" style="width:34px;height:34px;border-radius:8px;">
       <svg viewBox="0 0 512 512" aria-hidden="true"><use href="#tezcatl"/></svg>
@@ -756,6 +779,7 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
       <button id="selectModeBtn" class="btn btn-secondary" onclick="toggleSelectMode()" style="flex:none" title="Seleccionar varias para eliminar">
         <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="6" height="6" x="3" y="3" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
       </button>
+      <button id="devToggle" class="btn btn-sm" onclick="toggleDev()" style="flex:none;display:none" title="Consola de diagnóstico">DEV</button>
     </div>
     <!-- Barra de selección masiva — visible sólo si selectMode está activo -->
     <div id="bulkBar" style="display:none;align-items:center;gap:10px;margin-bottom:6px;padding:10px 12px;border-radius:var(--r-md);background:var(--primary-bg);border:1px solid var(--primary-light);">
@@ -764,16 +788,12 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
       <button onclick="openBulkDeleteAcceso()" style="padding:8px 12px;border-radius:8px;background:var(--error);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Eliminar</button>
       <button onclick="toggleSelectMode()" style="padding:8px 12px;border-radius:8px;background:transparent;color:var(--text-2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Cancelar</button>
     </div>
-    <!-- Panel de búsqueda a demanda (visible solo en tab Buscar) -->
+    <!-- Panel de búsqueda a demanda (visible solo en tab Buscar) — un solo
+         campo, autodetecta si es CURP / correo / código QR por el valor. -->
     <div id="searchPanel" style="display:none;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-      <select id="searchCampo" style="padding:10px 12px;border:1px solid var(--border-strong);border-radius:8px;background:var(--input-bg);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;outline:none;flex:none">
-        <option value="curp">CURP</option>
-        <option value="email">E-mail</option>
-        <option value="qr">Código QR</option>
-      </select>
       <div class="search-wrap" style="flex:1;margin-bottom:0;min-width:160px">
         <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <input id="searchValor" type="text" placeholder="Valor a buscar…"
+        <input id="searchValor" type="text" placeholder="CURP, correo o código QR…"
                onkeydown="if(event.key==='Enter') buscarAccesos()">
       </div>
       <button id="searchExecBtn" onclick="buscarAccesos()"
@@ -786,6 +806,7 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
     <div id="diag-info" style="font-size:11px;color:var(--primary);padding:4px 2px;font-family:monospace"></div>
     <div class="eyebrow" id="listEyebrow">Solicitudes</div>
     <div id="sortBar"></div>
+  </div>
   </div>
 
   <main><div class="list" id="list"></div></main>
@@ -1059,7 +1080,6 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
 
 <div id="toastArea"></div>
 <div id="devConsole"></div>
-<button id="devToggle" onclick="toggleDev()">DEV</button>
 
 <script>
 /* ===== Lucide icon strings (inline SVG, stroke-based) ===== */
@@ -1451,7 +1471,7 @@ function loadSolicitudes(onDone) {
   })
   .catch(function(err){
     devLog('✗ Error cargando datos: '+err,'error');
-    showToast('Error al cargar datos: '+err,'error_');
+    showToast('No se pudieron cargar los datos. Intenta de nuevo.','error_',err&&err.message||String(err));
     solicitudes=[];
     if(typeof onDone==='function') onDone();
   });
@@ -1681,6 +1701,10 @@ var DEMO_FORCE_GATE = null;
 
 /* --- Estado de sesión resuelto --- */
 var SESSION = { user:null /* /api/v1/me */, usuario:null /* fila de usuarios.csv */ };
+/* La consola DEV expone URLs/params de la API y datos crudos del Sheet —
+   se deja visible solo para el dueño de la app, no para cualquier gestor. */
+var DEV_EMAIL = 'isaieduardo.garciarubio@mercadolibre.com.mx';
+var DEV_ALLOWED = false;
 var activeSite = null; // sitio seleccionado actualmente (filtra los accesos)
 
 /* usuarios.csv se lee en tiempo real desde Grid (DOC_IDS.usuarios). No hay mock. */
@@ -1907,7 +1931,7 @@ function persistAcceso(acceso){
     // Se muestra la causa real (permiso, rate limit, columna/fila no
     // encontrada) en vez de un genérico — así no hace falta abrir DEV
     // cada vez para saber qué pasó.
-    showToast('Error al guardar en el Sheet: '+(err&&err.message||err),'error_');
+    showToast('No se pudo guardar el cambio. Intenta de nuevo.','error_','Error al guardar en el Sheet: '+(err&&err.message||err));
     return {ok:false};
   });
 }
@@ -2265,7 +2289,7 @@ function refreshImages(uniqueid, btn, silent){
     _setPhotoLoading(uniqueid, false);
     if(btn){ btn.disabled=false; btn.innerHTML='&#8635; Recargar imágenes'; }
     devLog('✗ refreshImages FAIL: '+err,'error');
-    if(!silent) showToast('Error al actualizar fotos','error_');
+    if(!silent) showToast('No se pudieron actualizar las fotos.','error_',err&&err.message||String(err));
   });
 }
 /* =====================================================================================
@@ -2280,6 +2304,8 @@ function bootstrap(){
       return showGate('error');
     }
     SESSION.user = user;
+    DEV_ALLOWED = (String(user.email||'').toLowerCase() === DEV_EMAIL);
+    updateDevVisibility();
 
     // Atajo de desarrollo para previsualizar pantallas de gate (queda en null).
     if(DEMO_FORCE_GATE==='register') return showGate('register');
@@ -2360,7 +2386,7 @@ function submitRegistration(){
   };
   saveUsuario(u.ldap, row).then(function(res){
     if(btn){ btn.disabled=false; btn.textContent='Solicitar acceso'; }
-    if(!res||!res.ok){ showToast('Error al enviar solicitud','error_'); return; }
+    if(!res||!res.ok){ showToast('No se pudo enviar la solicitud. Intenta de nuevo.','error_',(res&&res.error)||'sin detalle'); return; }
     SESSION.usuario = row;
     showGate('pending');
   });
@@ -2967,7 +2993,7 @@ function confirmDeleteAcceso(){
   var btn=document.getElementById('btnConfirmDeleteAcceso');
   var originalHtml=btn?btn.innerHTML:'';
   if(btn){ btn.disabled=true; btn.textContent='Eliminando…'; }
-  var ok=0, fail=0;
+  var ok=0, fail=0, errLines=[];
   function next(i){
     if(i>=ids.length){
       solicitudes=solicitudes.filter(function(x){ return ids.indexOf(x.id)===-1; });
@@ -2978,7 +3004,7 @@ function confirmDeleteAcceso(){
       closeDetail();
       render();
       if(fail===0) showToast(ok+' solicitud'+(ok===1?'':'es')+' eliminada'+(ok===1?'':'s')+' del Sheet','success');
-      else showToast(ok+' eliminada'+(ok===1?'':'s')+', '+fail+' con error — revisa DEV','warning');
+      else showToast(ok+' eliminada'+(ok===1?'':'s')+', '+fail+' con error.','warning',errLines.join('\n'));
       if(btn){ btn.disabled=false; btn.innerHTML=originalHtml; }
       return;
     }
@@ -2995,6 +3021,7 @@ function confirmDeleteAcceso(){
       ok++; next(i+1);
     }).catch(function(err){
       fail++;
+      errLines.push(id+': '+(err&&err.message||err));
       devLog('✗ eliminar '+id+' FAIL: '+err,'error');
       next(i+1);
     });
@@ -3156,7 +3183,12 @@ document.querySelectorAll('.overlay').forEach(function(ov){
 });
 
 /* ===== Toast ===== */
-function showToast(msg,type){
+/* mensaje amigable arriba siempre; el detalle técnico (err.message, status,
+   body de la API, etc.) queda detrás de un toggle "Ver más" — nunca se
+   pierde, pero no se le avienta en crudo al usuario a la primera. Abrir el
+   detalle cancela el auto-cierre (se cierra manual con la X/click afuera
+   quedaría complejo, así que simplemente se le da más tiempo). */
+function showToast(msg,type,detail){
   var iconMap={
     success:ic.checkCirc,warning:ic.alertTri,
     error_:ic.xCirc,
@@ -3164,10 +3196,30 @@ function showToast(msg,type){
   };
   var t=document.createElement('div');
   t.className='toast '+(type||'');
-  t.innerHTML=(iconMap[type]||'')+' <span>'+esc(msg)+'</span>';
+  var detailId='td'+(_toastSeq++);
+  var row='<div class="toast-row">'+(iconMap[type]||'')+'<span>'+esc(msg)+'</span></div>';
+  var more='', detailHtml='';
+  if(detail){
+    more='<button type="button" class="toast-more" onclick="_toggleToastDetail(\''+detailId+'\',this)">Ver más</button>';
+    detailHtml='<div class="toast-detail" id="'+detailId+'">'+esc(String(detail))+'</div>';
+  }
+  t.innerHTML=row+more+detailHtml;
   var area=document.getElementById('toastArea');
   area.appendChild(t);
-  setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},3500);
+  var dismissMs=detail?7000:3500;
+  var timer=setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},dismissMs);
+  t._dismissTimer=timer;
+}
+var _toastSeq=0;
+function _toggleToastDetail(id,btn){
+  var el=document.getElementById(id); if(!el) return;
+  var open=el.classList.toggle('open');
+  btn.textContent=open?'Ver menos':'Ver más';
+  var toast=btn.closest('.toast');
+  if(toast && open && toast._dismissTimer){
+    clearTimeout(toast._dismissTimer);
+    toast._dismissTimer=setTimeout(function(){if(toast.parentNode)toast.parentNode.removeChild(toast);},15000);
+  }
 }
 
 /* Arranca el control de acceso (gate). Si el usuario está aceptado, enterApp() -> render(). */
@@ -3285,10 +3337,19 @@ function rowToSolicitud(r, idx){
 /* Búsqueda 100% client-side: loadSolicitudes() ya trae el Sheet completo en
    memoria (sin el límite de 100/tab del viejo Dataset), así que no hace falta
    ningún webhook — ni siquiera para CURP/email. */
+/* Autodetección sintáctica del tipo de campo — reemplaza el dropdown
+   manual CURP/E-mail/QR: "@" en el valor => correo; 18 caracteres
+   alfanuméricos (formato real de una CURP) => curp; cualquier otra cosa
+   se busca como código QR. */
+function detectSearchField(valor){
+  if(valor.indexOf('@')!==-1) return 'email';
+  if(/^[A-Za-z0-9]{18}$/.test(valor.replace(/\s+/g,''))) return 'curp';
+  return 'qr';
+}
 function buscarAccesos(){
-  var campo=document.getElementById('searchCampo').value;
   var valor=(document.getElementById('searchValor').value||'').trim();
   if(!valor){showToast('Ingresa un valor para buscar','warning');return;}
+  var campo=detectSearchField(valor);
 
   var v=valor.toLowerCase();
   searchResults=solicitudes.filter(function(s){
@@ -3298,7 +3359,7 @@ function buscarAccesos(){
     return haystack.toLowerCase().indexOf(v)!==-1;
   });
   render();
-  devLog('✓ búsqueda ('+campo+', client-side): '+searchResults.length+' resultados','info');
+  devLog('✓ búsqueda ('+campo+' autodetectado, client-side): '+searchResults.length+' resultados','info');
   showToast(searchResults.length+' resultado'+(searchResults.length===1?'':'s')+' encontrado'+(searchResults.length===1?'':'s'),
             searchResults.length?'success':'warning');
 }
@@ -3351,8 +3412,17 @@ function devLog(msg, type) {
   if(el){ el.innerHTML = _devLines.join('<br>'); el.scrollTop = el.scrollHeight; }
 }
 function toggleDev(){
+  if(!DEV_ALLOWED) return;
   var el = document.getElementById('devConsole');
   if(el) el.classList.toggle('open');
+}
+function updateDevVisibility(){
+  var btn = document.getElementById('devToggle');
+  if(btn) btn.style.display = DEV_ALLOWED ? '' : 'none';
+  if(!DEV_ALLOWED){
+    var el = document.getElementById('devConsole');
+    if(el) el.classList.remove('open');
+  }
 }
 /* Interceptar fetch para loguear en la miniconsola */
 (function(){
