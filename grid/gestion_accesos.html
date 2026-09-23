@@ -184,6 +184,7 @@ body,.card,.panel,.modal,.sidebar,.d-section,.search-wrap,
 .btn-primary{background:var(--primary);color:#fff;}
 .btn-primary:hover:not(:disabled){background:var(--primary-dark);}
 .btn-secondary{background:var(--primary-bg);color:var(--primary);border:1px solid var(--primary-light);}
+.btn-secondary.active-select{background:var(--primary);color:#fff;border-color:var(--primary);}
 .btn-secondary:hover:not(:disabled){background:var(--primary-light);color:var(--primary-dark);}
 .btn-ghost{background:var(--surface);color:var(--text-2);border:1px solid var(--border-strong);}
 .btn-ghost:hover:not(:disabled){background:var(--border);color:var(--text);}
@@ -752,6 +753,16 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
         <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.66"/></svg>
         Actualizar datos
       </button>
+      <button id="selectModeBtn" class="btn btn-secondary" onclick="toggleSelectMode()" style="flex:none" title="Seleccionar varias para eliminar">
+        <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="6" height="6" x="3" y="3" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
+      </button>
+    </div>
+    <!-- Barra de selección masiva — visible sólo si selectMode está activo -->
+    <div id="bulkBar" style="display:none;align-items:center;gap:10px;margin-bottom:6px;padding:10px 12px;border-radius:var(--r-md);background:var(--primary-bg);border:1px solid var(--primary-light);">
+      <span id="bulkCount" style="flex:1;font-size:13px;font-weight:600;color:var(--primary)">0 seleccionadas</span>
+      <button onclick="selectAllVisible()" style="padding:8px 12px;border-radius:8px;background:transparent;color:var(--primary);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Seleccionar visibles</button>
+      <button onclick="openBulkDeleteAcceso()" style="padding:8px 12px;border-radius:8px;background:var(--error);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Eliminar</button>
+      <button onclick="toggleSelectMode()" style="padding:8px 12px;border-radius:8px;background:transparent;color:var(--text-2);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">Cancelar</button>
     </div>
     <!-- Panel de búsqueda a demanda (visible solo en tab Buscar) -->
     <div id="searchPanel" style="display:none;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
@@ -1034,7 +1045,7 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
     <div class="modal-div"></div>
     <div class="alert-inline" style="border-color:var(--error-bd);background:var(--error-bg);color:var(--error)">
       <svg class="icon icon-sm" style="margin-top:1px" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-      <div>Se borran los datos de esta fila en el Sheet (la fila queda vacía, no se elimina — nada se recorre debajo). El scanner de guardias deja de reconocer este código de inmediato. No se puede deshacer desde esta app.</div>
+      <div>Se borran los datos de cada fila en el Sheet (las filas quedan vacías, no se eliminan — nada se recorre debajo). El scanner de guardias deja de reconocer esos códigos de inmediato. No se puede deshacer desde esta app.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-block btn-ghost" style="flex:none;padding:13px 20px" onclick="closeModal('deleteAccesoModal')">Cancelar</button>
@@ -1296,6 +1307,12 @@ function renderSortBar(){
 var currentDetailId = null;
 var pendingAction = null;
 var searchResults = [];   // resultados del tab Buscar
+
+/* ===== Selección masiva (eliminar varias solicitudes a la vez) =====
+   selectedIds persiste entre tabs a propósito — permite juntar, por
+   ejemplo, rechazados viejos + aceptados vencidos antes de un solo borrado. */
+var selectMode = false;
+var selectedIds = {};
 
 /* solicitudes[] se llena en loadSolicitudes() al entrar a la app. */
 var solicitudes = [];
@@ -2506,8 +2523,10 @@ function setTab(t){
 function accesosDelSitio(){
   return solicitudes.filter(function(s){return !activeSite||s.sitio===activeSite;});
 }
+var _visibleItems = []; // items pintados en el último render() — usado por selectAllVisible()
 function render(){
   updateBadges();
+  updateBulkBar();
   var list=document.getElementById('list');
   var diagEl = document.getElementById('diag-info');
 
@@ -2517,6 +2536,7 @@ function render(){
     document.getElementById('listEyebrow').textContent =
       searchResults.length ? searchResults.length+' RESULTADO'+(searchResults.length===1?'':'S') : 'BUSCAR POR CURP / EMAIL / QR';
     list.innerHTML = searchResults.length ? searchResults.map(cardHTML).join('') : emptyHTML();
+    _visibleItems=searchResults;
     return;
   }
 
@@ -2540,6 +2560,33 @@ function render(){
     (activeSite?(' · '+activeSite):'');
   if(diagEl) diagEl.textContent = 'Dataset: ' + solicitudes.length + ' filas | Tab: ' + currentTab + ' | Sitio: ' + (activeSite||'—');
   list.innerHTML=items.length?items.map(cardHTML).join(''):emptyHTML();
+  _visibleItems=items;
+}
+
+/* ===== Selección masiva ===== */
+function toggleSelectMode(){
+  selectMode=!selectMode;
+  if(!selectMode) selectedIds={};
+  var btn=document.getElementById('selectModeBtn');
+  if(btn) btn.classList.toggle('active-select',selectMode);
+  render();
+}
+function toggleSelect(id){
+  if(selectedIds[id]) delete selectedIds[id];
+  else selectedIds[id]=true;
+  render();
+}
+function selectAllVisible(){
+  _visibleItems.forEach(function(s){ selectedIds[s.id]=true; });
+  render();
+}
+function updateBulkBar(){
+  var bar=document.getElementById('bulkBar');
+  if(!bar) return;
+  bar.style.display = selectMode ? 'flex' : 'none';
+  var count=Object.keys(selectedIds).length;
+  var countEl=document.getElementById('bulkCount');
+  if(countEl) countEl.textContent = count+' seleccionada'+(count===1?'':'s');
 }
 function updateBadges(){
   var base=accesosDelSitio();
@@ -2581,7 +2628,16 @@ function cardHTML(s){
     extra='<div class="card-extra reject">'+ic.alertTri+
           ' <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(s.motivoRechazo||'—')+'</span></div>';
   }
-  return '<div class="card" onclick="openDetail(\''+s.id+'\')">'+
+  var checkbox = selectMode
+    ? '<div style="position:absolute;top:10px;right:10px;z-index:2;width:24px;height:24px;border-radius:7px;'+
+        'display:flex;align-items:center;justify-content:center;'+
+        (selectedIds[s.id]?'background:var(--primary);color:#fff;':'background:var(--surface);border:1.5px solid var(--border-strong);')+'">'+
+        (selectedIds[s.id]?ic.check:'')+
+      '</div>'
+    : '';
+  var cardStyle='position:relative;'+(selectMode&&selectedIds[s.id]?'border-color:var(--primary);background:var(--primary-bg);':'');
+  var cardClick=selectMode ? 'toggleSelect(\''+s.id+'\')' : 'openDetail(\''+s.id+'\')';
+  return '<div class="card" style="'+cardStyle+'" onclick="'+cardClick+'">'+checkbox+
     '<div class="card-top">'+
       '<div class="photo">'+initials(s)+'</div>'+
       '<div class="card-info">'+
@@ -2869,8 +2925,10 @@ function qrThumb(){
 /* ===== Actions ===== */
 function buildActions(s){
   if(s.estatus==='pendiente'){
+    var deleteBtnPend = '<button class="btn btn-block btn-danger-outline" style="flex:none;padding:13px 14px" onclick="openDeleteAcceso(\''+s.id+'\')" title="Eliminar solicitud">'+ic.trash+'</button>';
     return '<button class="btn btn-block btn-danger-outline" onclick="openReject(\''+s.id+'\')">'+ic.x+' Rechazar</button>'+
-           '<button class="btn btn-block btn-primary" onclick="openAccept(\''+s.id+'\')">'+ic.check+' Aceptar</button>';
+           '<button class="btn btn-block btn-primary" onclick="openAccept(\''+s.id+'\')">'+ic.check+' Aceptar</button>'+
+           deleteBtnPend;
   }
   var revertBtn = '<button class="btn btn-block btn-ghost" style="flex:none;padding:13px 14px" onclick="revert(\''+s.id+'\')" title="Revertir a pendiente">'+ic.undo+'</button>';
   var editBtn   = '<button class="btn btn-block btn-secondary" style="flex:1" onclick="openEditExpiry(\''+s.id+'\')">'+ic.editCal+' Editar vencimiento</button>';
@@ -2885,38 +2943,63 @@ function revert(id){
 }
 
 /* ===== Eliminar solicitud (vacía la fila del Sheet, ver clearAccesoRowInSheet) ===== */
+var _pendingDeleteIds=[]; // uno o varios — llenado por openDeleteAcceso/openBulkDeleteAcceso
 function openDeleteAcceso(id){
   var s=getById(id); if(!s) return;
-  pendingAction=id;
+  _pendingDeleteIds=[id];
   document.getElementById('deleteAccesoName').textContent=fullName(s);
   openModal('deleteAccesoModal');
 }
+function openBulkDeleteAcceso(){
+  var ids=Object.keys(selectedIds);
+  if(!ids.length){ showToast('No hay solicitudes seleccionadas','warning'); return; }
+  _pendingDeleteIds=ids;
+  document.getElementById('deleteAccesoName').textContent=ids.length+' solicitud'+(ids.length===1?'':'es')+' seleccionada'+(ids.length===1?'':'s');
+  openModal('deleteAccesoModal');
+}
+/* Limpia las filas UNA A LA VEZ (no en paralelo) — cada una ya implica un
+   par de llamadas al proxy de Sheets (relocalizar fila + limpiar), y una
+   ráfaga en paralelo sube mucho el riesgo de 429 sin ganar nada real
+   (Grid no tiene batch de "clear" para varias filas a la vez). */
 function confirmDeleteAcceso(){
-  var id=pendingAction;
-  var s=getById(id); if(!s) return;
+  var ids=_pendingDeleteIds.slice();
+  if(!ids.length) return;
   var btn=document.getElementById('btnConfirmDeleteAcceso');
   var originalHtml=btn?btn.innerHTML:'';
   if(btn){ btn.disabled=true; btn.textContent='Eliminando…'; }
-  clearAccesoRowInSheet(id).then(function(){
-    devLog('✓ solicitud eliminada (Sheet, fila vaciada): '+id,'info');
-    // Metadata complementaria en accesos_state — best-effort, un null borra
-    // la clave (Biblia §5.2), no pasa por commitUniqueField porque ese
-    // siempre reescribe con _write_id (nunca deja la clave en null).
-    var patch={}; patch[id]=null;
-    return patchStateBucket(DOC_IDS.accesos,'accesos_state',patch,'').catch(function(){});
-  }).then(function(){
-    solicitudes=solicitudes.filter(function(x){ return x.id!==id; });
-    searchResults=searchResults.filter(function(x){ return x.id!==id; });
-    closeModal('deleteAccesoModal');
-    closeDetail();
-    render();
-    showToast('Solicitud eliminada del Sheet','success');
-    if(btn){ btn.disabled=false; btn.innerHTML=originalHtml; }
-  }).catch(function(err){
-    devLog('✗ confirmDeleteAcceso FAIL: '+err,'error');
-    showToast('Error al eliminar: '+(err&&err.message||err),'error_');
-    if(btn){ btn.disabled=false; btn.innerHTML=originalHtml; }
-  });
+  var ok=0, fail=0;
+  function next(i){
+    if(i>=ids.length){
+      solicitudes=solicitudes.filter(function(x){ return ids.indexOf(x.id)===-1; });
+      searchResults=searchResults.filter(function(x){ return ids.indexOf(x.id)===-1; });
+      ids.forEach(function(id){ delete selectedIds[id]; });
+      if(!Object.keys(selectedIds).length) selectMode=false;
+      closeModal('deleteAccesoModal');
+      closeDetail();
+      render();
+      if(fail===0) showToast(ok+' solicitud'+(ok===1?'':'es')+' eliminada'+(ok===1?'':'s')+' del Sheet','success');
+      else showToast(ok+' eliminada'+(ok===1?'':'s')+', '+fail+' con error — revisa DEV','warning');
+      if(btn){ btn.disabled=false; btn.innerHTML=originalHtml; }
+      return;
+    }
+    if(btn && ids.length>1) btn.textContent='Eliminando '+(i+1)+'/'+ids.length+'…';
+    var id=ids[i];
+    clearAccesoRowInSheet(id).then(function(){
+      devLog('✓ solicitud eliminada (Sheet, fila vaciada): '+id,'info');
+      // Metadata complementaria en accesos_state — best-effort, un null borra
+      // la clave (Biblia §5.2), no pasa por commitUniqueField porque ese
+      // siempre reescribe con _write_id (nunca deja la clave en null).
+      var patch={}; patch[id]=null;
+      return patchStateBucket(DOC_IDS.accesos,'accesos_state',patch,'').catch(function(){});
+    }).then(function(){
+      ok++; next(i+1);
+    }).catch(function(err){
+      fail++;
+      devLog('✗ eliminar '+id+' FAIL: '+err,'error');
+      next(i+1);
+    });
+  }
+  next(0);
 }
 
 /* ===== Accept modal ===== */
