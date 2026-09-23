@@ -1109,10 +1109,21 @@ var GridClient = (function(){
     gateUntil=Math.max(gateUntil,Date.now()+ms);
     return ms;
   }
-  function call(path,opts){
+  /* 429 abre el gate global (Retry-After) Y reintenta la MISMA llamada —
+     antes sólo abría el gate para las llamadas futuras y tiraba la actual,
+     lo que hacía fallar guardados/lecturas que un simple reintento hubiera
+     resuelto (Biblia §15.17 regla 8: "429 + Retry-After debe convertirse
+     en gate global", no sólo un aviso). Tope de reintentos para no
+     colgarse si el rate-limit persiste. */
+  function call(path,opts,attempt){
+    attempt=attempt||0;
     return waitGate().then(function(){
       return fetch(path,Object.assign({credentials:'include'},opts||{})).then(function(res){
-        if(res.status===429){ openGate(res); var e=new Error('rate_limited'); e.status=429; throw e; }
+        if(res.status===429){
+          openGate(res);
+          if(attempt<3) return call(path,opts,attempt+1);
+          var e=new Error('rate_limited'); e.status=429; throw e;
+        }
         return res;
       });
     });
@@ -1712,7 +1723,20 @@ function writeSheetCell(colIndex,row,value){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({values:[[value]]})
   }).then(function(res){
-    if(!res.ok){ var e=new Error('sheet_write_'+range+'_'+res.status); e.status=res.status; throw e; }
+    if(!res.ok){
+      // Se lee el cuerpo del error (detail/error de Grid) para saber la
+      // causa real (permiso, rango inválido, etc.) en vez de sólo el status.
+      return res.text().then(function(bodyText){
+        var detail=bodyText;
+        try{ var j=JSON.parse(bodyText); detail=j.detail||j.error||bodyText; }catch(ignore){}
+        var e=new Error('sheet_write_'+range+'_'+res.status+(detail?(': '+detail):''));
+        e.status=res.status; e.range=range; e.detail=detail;
+        throw e;
+      }, function(){
+        var e=new Error('sheet_write_'+range+'_'+res.status); e.status=res.status; e.range=range;
+        throw e;
+      });
+    }
     return res.json().catch(function(){ return {ok:true}; });
   });
 }
@@ -1798,7 +1822,10 @@ function persistAcceso(acceso){
     return {ok:true};
   }).catch(function(err){
     devLog('✗ persistAcceso FAIL (Sheet): '+err,'error');
-    showToast('Error al guardar cambio en el Sheet','error_');
+    // Se muestra la causa real (permiso, rate limit, columna/fila no
+    // encontrada) en vez de un genérico — así no hace falta abrir DEV
+    // cada vez para saber qué pasó.
+    showToast('Error al guardar en el Sheet: '+(err&&err.message||err),'error_');
     return {ok:false};
   });
 }
