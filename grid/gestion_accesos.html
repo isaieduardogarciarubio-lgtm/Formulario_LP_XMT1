@@ -927,8 +927,6 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
       <option>Otro</option>
     </select>
     <div class="field-err" id="rejectErr">Selecciona un motivo.</div>
-    <label class="field-lbl" style="margin-top:14px">Comentario adicional</label>
-    <textarea class="ftextarea" id="rejectComment" placeholder="Opcional…"></textarea>
     <div class="modal-actions">
       <button class="btn btn-block btn-ghost" style="flex:none;padding:13px 20px" onclick="closeModal('rejectModal')">Cancelar</button>
       <button class="btn btn-block btn-danger-outline" onclick="confirmReject()">
@@ -1274,9 +1272,9 @@ function resolveColumnsByPriority(headerRow, fieldPatterns){
    Imagen, IDOF. "uniqueid" es literal — se usa directo, no por patrón (ver
    loadSolicitudes). "Estado" e "Imagen" son otra cosa (no el gate de acceso,
    no la foto publicada); "IDOF" está en vías de deprecarse. Ninguna de las
-   tres se toca. "Rechazo" es un dropdown de motivos fijos (no texto libre)
-   — por ahora NO se lee ni se escribe ahí; motivoRechazo sigue viviendo
-   sólo en accesos_state hasta que se decida mapear los valores del dropdown.
+   tres se toca. "Rechazo" es un dropdown de motivos fijos en el Sheet — el
+   motivo que el gestor elige en esta app (mismo listado fijo, sin
+   comentario libre) se escribe directo ahí, igual que estatus/vencimiento.
    Mismos campos y patrones que usa Catalog en el scanner de guardias sobre
    esta misma hoja — la fuente de verdad de estatus/vencimiento es el Sheet,
    no un bucket aparte: el scanner ya los lee de ahí, así que si esta app
@@ -1289,7 +1287,12 @@ function resolveColumnsByPriority(headerRow, fieldPatterns){
 var SHEET_FIELD_PATTERNS = [
   ['qr',      [/\bqr\b/, /c[oó]digo/, /credencial/, /\bid\b/]],
   ['estatus', [/aceptado.*rechazado/, /aceptad.*o.*rechazad/]],
-  ['vence',   [/venc/, /caduc/, /expira/, /validez/, /valid/]]
+  ['vence',   [/venc/, /caduc/, /expira/, /validez/, /valid/]],
+  // Exacto ("^rechazo$") para no robarle la columna a "estatus" (que ya
+  // contiene "rechazado" en su propio texto) — se resuelve después de
+  // estatus, así que aunque el patrón fuera laxo esa columna ya estaría
+  // marcada como usada.
+  ['rechazo', [/^rechazo$/]]
 ];
 /* Índices de columna resueltos en loadSolicitudes() — se reutilizan al
    escribir de vuelta en persistAcceso()/writeAccesoToSheet(). */
@@ -1477,6 +1480,7 @@ function loadSolicitudes(onDone) {
     var qrHeaderName=SHEET_COLMAP.qr!==undefined ? headerRow[SHEET_COLMAP.qr] : null;
     var estatusHeaderName=SHEET_COLMAP.estatus!==undefined ? headerRow[SHEET_COLMAP.estatus] : null;
     var venceHeaderName=SHEET_COLMAP.vence!==undefined ? headerRow[SHEET_COLMAP.vence] : null;
+    var rechazoHeaderName=SHEET_COLMAP.rechazo!==undefined ? headerRow[SHEET_COLMAP.rechazo] : null;
     if(!qrHeaderName){
       devLog('✗ No se reconoce ninguna columna de QR/credencial en "'+CFG.SHEET_RANGE+'" — encabezados: '+headerRow.join(' | '),'error');
     }
@@ -1506,13 +1510,14 @@ function loadSolicitudes(onDone) {
       merged['__estatusRaw']=estatusHeaderName ? row[estatusHeaderName] : '';
       merged['__venceRaw']=venceHeaderName ? row[venceHeaderName] : '';
       merged['__qrRaw']=qrHeaderName ? row[qrHeaderName] : '';
+      merged['__rechazoRaw']=rechazoHeaderName ? row[rechazoHeaderName] : '';
       return rowToSolicitud(merged,idx);
     });
     // Una fila "eliminada" (ver clearAccesoRowInSheet) queda vacía en el
     // Sheet, no desaparece — sin esto reaparecería como una solicitud
     // "pendiente" fantasma con todo en blanco en el próximo refresco.
     solicitudes=solicitudes.filter(function(s){ return s.nombre || s.correo || s.qr; });
-    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' | col uniqueid nativa, qr(Nuevo_QR)="'+qrHeaderName+'" estatus="'+estatusHeaderName+'" vence="'+venceHeaderName+'")','info');
+    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' | col uniqueid nativa, qr(Nuevo_QR)="'+qrHeaderName+'" estatus="'+estatusHeaderName+'" vence="'+venceHeaderName+'" rechazo="'+rechazoHeaderName+'")','info');
     if(sheetRows.length>0){
       var r0=sheetRows[0];
       devLog('cols disponibles: '+Object.keys(r0).join(' | '),'info');
@@ -1916,6 +1921,12 @@ function writeAccesoToSheet(acceso){
     } else {
       throw new Error('no se reconoce la columna de vencimiento en el Sheet');
     }
+    if(SHEET_COLMAP.rechazo!==undefined){
+      // Se limpia (string vacío) para cualquier estatus que no sea
+      // rechazado — si no, un motivo viejo se queda pegado al aceptar o
+      // revertir a pendiente.
+      writes.push(writeSheetCell(SHEET_COLMAP.rechazo, row, acceso.estatus==='rechazado' ? (acceso.motivoRechazo||'') : ''));
+    }
     return Promise.all(writes);
   });
 }
@@ -1955,13 +1966,11 @@ function clearAccesoRowInSheet(uid){
   });
 }
 
-/* Persiste un cambio de estatus/vencimiento — DIRECTO en el Sheet (fila
-   real de la solicitud), que es lo que el scanner de guardias valida.
-   accesos_state guarda el resto (motivo de rechazo en texto libre — la
-   columna "Rechazo" del Sheet es un dropdown de valores fijos que no se
-   toca por ahora —, quién/cuándo resolvió, qr impreso, ymsQr) — si esa
-   parte falla no se revierte la decisión, que ya quedó escrita en el
-   Sheet. */
+/* Persiste un cambio de estatus/vencimiento/motivo de rechazo — DIRECTO
+   en el Sheet (fila real de la solicitud), que es lo que el scanner de
+   guardias valida. accesos_state guarda sólo el resto (quién/cuándo
+   resolvió, qr impreso, ymsQr) — si esa parte falla no se revierte la
+   decisión, que ya quedó escrita en el Sheet. */
 function persistAcceso(acceso){
   var now=new Date().toISOString().slice(0,10);
   var ldap=(SESSION.user&&SESSION.user.ldap)||'';
@@ -1969,7 +1978,6 @@ function persistAcceso(acceso){
     devLog('✓ persistAcceso OK (Sheet, fila '+acceso._sheetRow+'): '+acceso.id+' → '+acceso.estatus,'info');
     commitUniqueField(DOC_IDS.accesos,'accesos_state',acceso.id,function(){
       return {
-        motivoRechazo:   acceso.motivoRechazo||'',
         fechaResolucion: now,
         resueltosPor:    ldap,
         qr:              acceso.qr||'',
@@ -2255,11 +2263,12 @@ function isMobileDevice(){
    a WhatsApp Web/Desktop (escritorio) según el cliente, sin necesidad de ramificar nosotros la URL.
    Si el navegador bloquea la ventana emergente (o la red bloquea el dominio), avisamos al usuario
    en vez de fallar en silencio. */
+/* Navega la MISMA pestaña en vez de window.open('_blank'): dentro del
+   iframe donde Grid aloja esta app, window.open() se topa con el
+   bloqueador de pop-ups del navegador (o con la política de sandbox del
+   iframe) — con location.href no hay pop-up que bloquear. */
 function shareWhatsApp(texto){
-  var win=window.open('https://wa.me/?text='+encodeURIComponent(texto),'_blank');
-  if(!win){
-    showToast('El navegador bloqueó la ventana de WhatsApp — habilita ventanas emergentes para este sitio.','warning');
-  }
+  window.location.href='https://wa.me/?text='+encodeURIComponent(texto);
 }
 /* Correo: en móvil dispara la app de correo predeterminada (mailto:); en escritorio abre Gmail Web.
    'to' se precarga con el correo de la persona (Datos personales) cuando está disponible. */
@@ -3183,7 +3192,6 @@ function openReject(id){
   pendingAction=id;
   document.getElementById('rejectName').textContent=fullName(getById(id));
   document.getElementById('rejectReason').value='';
-  document.getElementById('rejectComment').value='';
   document.getElementById('rejectErr').classList.remove('show');
   openModal('rejectModal');
 }
@@ -3193,24 +3201,22 @@ function openBulkReject(){
   _bulkIds=ids;
   document.getElementById('rejectName').textContent=ids.length+' solicitud'+(ids.length===1?'':'es')+' pendiente'+(ids.length===1?'':'s')+' seleccionada'+(ids.length===1?'':'s');
   document.getElementById('rejectReason').value='';
-  document.getElementById('rejectComment').value='';
   document.getElementById('rejectErr').classList.remove('show');
   openModal('rejectModal');
 }
 function confirmReject(){
   var reason=document.getElementById('rejectReason').value;
   if(!reason){document.getElementById('rejectErr').classList.add('show');return;}
-  var comment=document.getElementById('rejectComment').value.trim();
   if(_bulkIds){
     var ids=_bulkIds; _bulkIds=null;
     closeModal('rejectModal');
     bulkProcess(ids, function(s){
-      s.estatus='rechazado'; s.motivoRechazo=reason+(comment?' — '+comment:''); s.fechaVencimiento=null;
+      s.estatus='rechazado'; s.motivoRechazo=reason; s.fechaVencimiento=null;
     }, function(n){ return n+' solicitud'+(n===1?'':'es')+' rechazada'+(n===1?'':'s'); }, 'rechazadas', 'rechazado');
     return;
   }
   var s=getById(pendingAction);
-  s.estatus='rechazado';s.motivoRechazo=reason+(comment?' — '+comment:'');s.fechaVencimiento=null;
+  s.estatus='rechazado';s.motivoRechazo=reason;s.fechaVencimiento=null;
   persistAcceso(s); // <<< BACKEND: actualiza fila en accesos.csv
   closeModal('rejectModal');closeDetail();setTab('rechazado');
   showToast('Solicitud rechazada','warning');
@@ -3462,9 +3468,9 @@ function rowToSolicitud(r, idx){
     pasaporte:        !!(r['Pasaporte'] && String(r['Pasaporte']).trim() !== ''),
     pasaporteUrl:     r['Pasaporte']      || null,
     estatus:          estatus,
-    // "Rechazo" en el Sheet es un dropdown de valores fijos — no se lee ni
-    // se escribe ahí por ahora; motivoRechazo vive sólo en accesos_state.
-    motivoRechazo:    r['motivoRechazo'] || r['motivo_rechazo'] || null,
+    // "Rechazo" en el Sheet es la fuente — accesos_state sólo se usa como
+    // fallback para rechazos guardados antes de este cambio.
+    motivoRechazo:    (r['__rechazoRaw']&&String(r['__rechazoRaw']).trim()) || r['motivoRechazo'] || r['motivo_rechazo'] || null,
     fechaVencimiento: parseVencimientoISO(r['__venceRaw']),
     fechaResolucion:  r['fechaResolucion']  || r['fecha_resolucion']  || null,
     resueltosPor:     r['resueltosPor']     || r['resuelto_por']      || null,
