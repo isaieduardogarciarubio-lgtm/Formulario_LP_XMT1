@@ -559,13 +559,8 @@ main{flex:1;overflow-y:auto;padding:0 16px 90px;}
 #qrModal.open{opacity:1;visibility:visible;}
 .qrm-box{background:var(--card);border-radius:var(--r-xl);padding:24px;display:flex;flex-direction:column;align-items:center;gap:14px;max-width:310px;width:90%;position:relative;}
 #qrmBadge .gafete-card{width:100%;max-width:260px;}
-.qrm-yms{width:100%;border-radius:var(--r-md);background:var(--surface);border:1px solid var(--border);padding:10px 12px;text-align:center;}
-.qrm-yms-lbl{font-size:9px;font-weight:700;color:var(--text-muted);letter-spacing:.6px;text-transform:uppercase;margin-bottom:4px;}
-.qrm-yms-val{font-size:12px;font-weight:700;color:var(--text);word-break:break-all;}
-.qrm-yms-pending{font-size:11px;color:var(--text-muted);font-style:italic;}
 .qrm-close{position:absolute;top:12px;right:12px;background:var(--surface);border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;color:var(--text-2);}
 .qrm-name{font-size:14px;font-weight:800;color:var(--text);text-align:center;line-height:1.2;}
-.qrm-qr{width:220px;height:220px;background:#fff;padding:10px;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);}
 .qrm-id{font-size:10px;color:var(--text-2);font-weight:600;letter-spacing:.5px;text-align:center;}
 .qrm-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;width:100%;}
 .qrm-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:var(--r-md);background:var(--surface);border:1px solid var(--border);cursor:pointer;font-size:10px;font-weight:700;color:var(--text-2);}
@@ -967,11 +962,7 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
 <div id="qrModal" onclick="closeQRModal()">
   <div class="qrm-box" onclick="event.stopPropagation()">
     <button class="qrm-close" onclick="closeQRModal()">&#x2715;</button>
-    <div class="qrm-name" id="qrmName"></div>
     <div id="qrmBadge"></div>
-    <div class="qrm-qr" id="qrmQR"></div>
-    <div id="qrmYms"></div>
-    <div class="qrm-id" id="qrmId"></div>
     <div class="qrm-actions">
       <button class="qrm-btn" onclick="downloadBadgeImage()">
         <svg viewBox="0 -960 960 960" fill="currentColor"><path d="M465-339.5q-7-2.5-13-8.5L308-492q-12-12-11.5-28t11.5-28q12-12 28.5-12.5T365-549l75 75v-286q0-17 11.5-28.5T480-800q17 0 28.5 11.5T520-760v286l75-75q12-12 28.5-11.5T652-548q11 12 11.5 28T652-492L508-348q-6 6-13 8.5t-15 2.5q-8 0-15-2.5ZM240-160q-33 0-56.5-23.5T160-240v-80q0-17 11.5-28.5T200-360q17 0 28.5 11.5T240-320v80h480v-80q0-17 11.5-28.5T760-360q17 0 28.5 11.5T800-320v80q0 33-23.5 56.5T720-160H240Z"/></svg>
@@ -2001,43 +1992,21 @@ function openQRModal(e){
   if(e) e.stopPropagation();
   var s=getById(currentDetailId); if(!s||s.estatus!=='aceptado'||!s.qr) return;
   _qrModalS=s;
-  var nameEl=document.getElementById('qrmName');
   var badgeEl=document.getElementById('qrmBadge');
-  var qrEl=document.getElementById('qrmQR');
-  var ymsEl=document.getElementById('qrmYms');
-  var idEl=document.getElementById('qrmId');
-  if(s.esDriver){
-    nameEl.textContent=((s.nombre||'')+' '+(s.apPaterno||'')+' '+(s.apMaterno||'')).trim().toUpperCase();
-    nameEl.style.display='';
-    badgeEl.innerHTML=''; badgeEl.style.display='none';
-    qrEl.innerHTML=''; qrEl.style.display='';
-    idEl.textContent=s.qr; idEl.style.display='';
-    if(s.ymsQr){
-      ymsEl.innerHTML='<div class="qrm-yms-lbl">QR YMS vinculado</div><div class="qrm-yms-val">'+esc(s.ymsQr)+'</div>';
-    } else {
-      ymsEl.innerHTML='<div class="qrm-yms-lbl">QR YMS</div><div class="qrm-yms-pending">Pendiente — app escáner vincula este QR al escanear el YMS</div>';
-    }
-    ymsEl.style.display='';
-    document.getElementById('qrModal').classList.add('open');
-    setTimeout(function(){
-      var el=document.getElementById('qrmQR');
-      if(el) new QRCode(el,{text:s.qr,width:200,height:200,correctLevel:QRCode.CorrectLevel.M});
-    },50);
-  } else {
-    nameEl.style.display='none';
-    qrEl.style.display='none'; idEl.style.display='none'; ymsEl.style.display='none';
-    badgeEl.innerHTML=buildBadge(s); badgeEl.style.display='block';
-    document.getElementById('qrModal').classList.add('open');
-    setTimeout(function(){
-      var qb=badgeEl.querySelector('.gafete-qb');
-      if(qb){qb.innerHTML=''; new QRCode(qb,{text:s.qr,width:94,height:94,correctLevel:QRCode.CorrectLevel.M});}
-      loadDetailPhoto(s.id, s);
-    },50);
-  }
+  // Los drivers ya no tienen un flujo de QR aparte (QR bare + vínculo YMS)
+  // — usan el mismo gafete con foto que cualquier otra solicitud, con
+  // Nuevo_QR, hasta que se retome ese feature.
+  badgeEl.innerHTML=buildBadge(s);
+  document.getElementById('qrModal').classList.add('open');
+  setTimeout(function(){
+    var qb=badgeEl.querySelector('.gafete-qb');
+    if(qb){qb.innerHTML=''; new QRCode(qb,{text:s.qr,width:94,height:94,correctLevel:QRCode.CorrectLevel.M});}
+    loadDetailPhoto(s.id, s);
+  },50);
 }
 function downloadQRPng(){
   var s=_qrModalS; if(!s) return;
-  var container=s.esDriver?document.getElementById('qrmQR'):document.querySelector('#qrmBadge .gafete-qb');
+  var container=document.querySelector('#qrmBadge .gafete-qb');
   var img=container?container.querySelector('img'):null;
   var canvas=container?container.querySelector('canvas'):null;
   var src=img?img.src:(canvas?canvas.toDataURL('image/png'):null);
@@ -2190,58 +2159,12 @@ function drawGafeteCanvas(s){
   });
 }
 
-/* Drivers no tienen foto en este modal (ver openQRModal) — mini-documento
-   equivalente con los mismos datos rápidos (nombre, sitio/id, QR, estado
-   del QR YMS). */
-function drawDriverCanvas(s){
-  var SCALE=3, W=280, H=280;
-  var qrEl=document.getElementById('qrmQR');
-  var qrImgEl=qrEl?qrEl.querySelector('img'):null;
-  var canvas=document.createElement('canvas');
-  canvas.width=W*SCALE; canvas.height=H*SCALE;
-  var ctx=canvas.getContext('2d');
-  ctx.scale(SCALE,SCALE);
-
-  drawRoundedRectPath(ctx,0,0,W,H,16);
-  ctx.fillStyle='#fff'; ctx.fill();
-  ctx.save();
-  drawRoundedRectPath(ctx,0,0,W,H,16); ctx.clip();
-
-  ctx.fillStyle='#FFD100'; ctx.fillRect(0,0,W,6);
-
-  var nombre=((s.nombre||'')+' '+(s.apPaterno||'')+' '+(s.apMaterno||'')).trim().toUpperCase();
-  ctx.textAlign='center';
-  ctx.fillStyle='#222'; ctx.font='800 15px '+EXPORT_FONT;
-  ctx.fillText(truncateToWidth(ctx,nombre,W-32),W/2,34);
-  ctx.fillStyle='#777'; ctx.font='700 11px '+EXPORT_FONT;
-  ctx.fillText(truncateToWidth(ctx,(s.sitio||'—')+' · '+s.id,W-32),W/2,50);
-
-  var qbSize=150, qbX=W/2-qbSize/2, qbY=62, pad=8;
-  drawRoundedRectPath(ctx,qbX,qbY,qbSize,qbSize,12);
-  ctx.fillStyle='#fff'; ctx.fill();
-  if(qrImgEl) ctx.drawImage(qrImgEl,qbX+pad,qbY+pad,qbSize-pad*2,qbSize-pad*2);
-
-  ctx.fillStyle='#555'; ctx.font='600 10px '+EXPORT_FONT;
-  ctx.fillText(truncateToWidth(ctx,s.qr||'',W-32),W/2,qbY+qbSize+16);
-
-  var ymsLine=s.ymsQr ? ('QR YMS vinculado: '+s.ymsQr) : 'QR YMS — pendiente de vincular';
-  var ymsY=qbY+qbSize+30;
-  drawRoundedRectPath(ctx,16,ymsY,W-32,22,8);
-  ctx.fillStyle='#f5f5f5'; ctx.fill();
-  ctx.fillStyle='#777'; ctx.font='600 10px '+EXPORT_FONT;
-  ctx.fillText(truncateToWidth(ctx,ymsLine,W-48),W/2,ymsY+15);
-
-  ctx.fillStyle='#2968c8'; ctx.fillRect(0,H-6,W,6);
-  ctx.restore();
-  return Promise.resolve(canvas.toDataURL('image/png'));
-}
-
 /* Botón "Descargar" del modal QR — documento completo (foto+QR+datos), no
    sólo el QR suelto. Si algo falla, cae de vuelta al PNG simple del QR
    con un aviso — nunca deja al usuario sin nada que descargar. */
 function downloadBadgeImage(){
   var s=_qrModalS; if(!s) return;
-  var pngPromise = s.esDriver ? drawDriverCanvas(s) : drawGafeteCanvas(s);
+  var pngPromise = drawGafeteCanvas(s);
   pngPromise
     .then(function(pngDataUrl){
       var a=document.createElement('a');
