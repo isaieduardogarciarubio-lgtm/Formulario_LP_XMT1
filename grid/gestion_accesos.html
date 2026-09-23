@@ -2799,14 +2799,13 @@ function openAccept(id){
   openModal('acceptModal');
 }
 function setExpire(days){
-  var d=new Date();d.setDate(d.getDate()+days);
-  document.getElementById('expireDate').value=d.toISOString().slice(0,10);
+  document.getElementById('expireDate').value=addDaysLocalISO(days);
   document.getElementById('expireErr').classList.remove('show');
 }
 function confirmAccept(){
   var val=document.getElementById('expireDate').value;
-  var today=new Date().toISOString().slice(0,10);
-  if(!val||val<=today){document.getElementById('expireErr').classList.add('show');return;}
+  var today=todayLocalISO();
+  if(!val||val<today){document.getElementById('expireErr').classList.add('show');return;}
   var s=getById(pendingAction);
   s.estatus='aceptado'; s.fechaVencimiento=val; s.motivoRechazo=null;
   // s.qr viene de "Nuevo_QR" en el Sheet (ya poblado desde el envío del Form) —
@@ -2971,6 +2970,62 @@ function parseFecha(str) {
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
 }
 
+/* "Hoy" en fecha LOCAL del navegador, nunca UTC (GUIA_FECHAS_HORAS.md
+   §Problema 2): new Date().toISOString() da la fecha en UTC, que puede
+   ir un día adelante del calendario local del usuario (ej. 23:00 en
+   México/UTC-6 ya es el día siguiente en UTC) — comparado contra un
+   <input type="date"> (que siempre da fecha LOCAL), eso rechazaba "hoy"
+   y hasta "mañana" como si ya hubieran pasado. */
+function todayLocalISO(){
+  var d=new Date();
+  return d.getFullYear()+'-'+("0"+(d.getMonth()+1)).slice(-2)+'-'+("0"+d.getDate()).slice(-2);
+}
+function addDaysLocalISO(days){
+  var d=new Date(); d.setDate(d.getDate()+days);
+  return d.getFullYear()+'-'+("0"+(d.getMonth()+1)).slice(-2)+'-'+("0"+d.getDate()).slice(-2);
+}
+
+/* Normaliza "Fecha de vencimiento" a "YYYY-MM-DD" tolerando los formatos
+   reales que puede traer la celda del Sheet (ISO, DD/MM/YYYY con o sin
+   hora, serial de Excel) — igual criterio que la Guía de Fechas y Horas.
+   Necesario porque la columna puede traer valores previos a esta app,
+   escritos a mano o con otro formato de celda; lo que ESTA app escribe
+   ya sale limpio en ISO, pero la lectura no puede asumirlo. Nunca
+   conserva hora: la vigencia se calcula por día calendario, no por
+   instante exacto. */
+function parseVencimientoISO(str){
+  var s=String(str==null?'':str).trim();
+  if(!s) return null;
+
+  var iso=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(iso) return iso[1]+'-'+("0"+iso[2]).slice(-2)+'-'+("0"+iso[3]).slice(-2);
+
+  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2}|\d{4})(?:[ T]\d{1,2}:\d{2}(?::\d{2})?\s*[AaPp]?[Mm]?)?$/);
+  if(m){
+    var day=+m[1], month=+m[2];
+    if(month>12 && day<=12){ var t=day; day=month; month=t; } // venía MM/DD
+    var year=m[3].length===2 ? 2000+ +m[3] : +m[3];
+    if(month>=1 && month<=12 && day>=1 && day<=31) return year+'-'+("0"+month).slice(-2)+'-'+("0"+day).slice(-2);
+  }
+
+  if(/^\d{4,6}(\.\d+)?$/.test(s)){ // serial de Excel (días desde 1899-12-30)
+    var serial=Number(s);
+    var ms=Math.round((serial-25569)*86400*1000);
+    if(!isNaN(ms) && ms>0){
+      var d=new Date(ms);
+      return d.getUTCFullYear()+'-'+("0"+(d.getUTCMonth()+1)).slice(-2)+'-'+("0"+d.getUTCDate()).slice(-2);
+    }
+  }
+
+  var fallback=Date.parse(s);
+  if(!isNaN(fallback)){
+    var d2=new Date(fallback);
+    return d2.getFullYear()+'-'+("0"+(d2.getMonth()+1)).slice(-2)+'-'+("0"+d2.getDate()).slice(-2);
+  }
+  devLog('parseVencimientoISO: fecha de vencimiento no reconocida: "'+s+'"','warn');
+  return null;
+}
+
 /* ===== Buscar (client-side — sin webhook) ===== */
 function rowToSolicitud(r, idx){
   // Fuente de verdad: la columna real del Sheet (misma que lee el scanner
@@ -3005,7 +3060,7 @@ function rowToSolicitud(r, idx){
     // "Rechazo" en el Sheet es un dropdown de valores fijos — no se lee ni
     // se escribe ahí por ahora; motivoRechazo vive sólo en accesos_state.
     motivoRechazo:    r['motivoRechazo'] || r['motivo_rechazo'] || null,
-    fechaVencimiento: r['__venceRaw'] || null,
+    fechaVencimiento: parseVencimientoISO(r['__venceRaw']),
     fechaResolucion:  r['fechaResolucion']  || r['fecha_resolucion']  || null,
     resueltosPor:     r['resueltosPor']     || r['resuelto_por']      || null,
     // "Nuevo_QR" ya viene poblado desde el envío del Form (para toda
@@ -3048,14 +3103,13 @@ function openEditExpiry(id){
   openModal('editExpiryModal');
 }
 function setEditExpire(days){
-  var d=new Date(); d.setDate(d.getDate()+days);
-  document.getElementById('editExpiryDate').value = d.toISOString().slice(0,10);
+  document.getElementById('editExpiryDate').value = addDaysLocalISO(days);
   document.getElementById('editExpiryErr').classList.remove('show');
 }
 function confirmEditExpiry(){
   var val = document.getElementById('editExpiryDate').value;
-  var today = new Date().toISOString().slice(0,10);
-  if(!val||val<=today){ document.getElementById('editExpiryErr').classList.add('show'); return; }
+  var today = todayLocalISO();
+  if(!val||val<today){ document.getElementById('editExpiryErr').classList.add('show'); return; }
   // Buscar en solicitudes y en searchResults
   var s = getById(pendingAction) || searchResults.filter(function(x){return x.id===pendingAction;})[0];
   if(!s){ closeModal('editExpiryModal'); return; }
