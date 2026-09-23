@@ -1172,17 +1172,28 @@ function resolveColumnsByPriority(headerRow, fieldPatterns){
   return map;
 }
 
-/* Mismos campos que usa Catalog en el scanner de guardias sobre esta misma
-   hoja ("Respuestas de formulario 1") — la fuente de verdad de estatus y
-   vencimiento es el Sheet, no un bucket aparte: el scanner ya los lee de
+/* Encabezados reales confirmados en la hoja ("Respuestas de formulario 1"):
+   uniqueid, Marca temporal, Correo electrónico, Nombre, Apellido paterno,
+   Apellido materno, Empresa, Puesto, Sitio, CURP, Foto, INE, Correo líder
+   que justifique el ingreso, Nacionalidad, Pasaporte, ¿Eres driver?,
+   Aceptado o rechazado, Rechazo, Fecha de vencimiento, Estado, Nuevo_QR,
+   Imagen, IDOF. "uniqueid" es literal — se usa directo, no por patrón (ver
+   loadSolicitudes). "Estado" e "Imagen"/"IDOF" son otra cosa (no el gate de
+   acceso, no la foto publicada) y esta app no los toca.
+   Mismos campos y patrones que usa Catalog en el scanner de guardias sobre
+   esta misma hoja — la fuente de verdad de estatus/vencimiento/rechazo es
+   el Sheet, no un bucket aparte: el scanner ya lee estatus/vencimiento de
    ahí, así que si esta app los escribiera sólo en Grid State el guardia
-   nunca los vería. qr: columna tipo "Nuevo_QR" (identificador estable,
-   NO un "uniqueid" inventado). estatus/vence: mismos patrones exactos que
-   Catalog usa, para no atarse por accidente a una columna parecida
-   ("Estado" o "Rechazo" también existen en la hoja real). */
+   nunca los vería. qr: "Nuevo_QR" — ya viene poblado desde el envío del
+   Form para TODA solicitud (confirmado), es la credencial física que
+   escanea el guardia; no se genera ni se escribe desde aquí, sólo se lee.
+   estatus/rechazo/vence: patrones que no se atan por accidente a una
+   columna parecida ("Estado" no es "Aceptado o rechazado"; "rechazo" se
+   resuelve DESPUÉS de "estatus" para no robarle la columna). */
 var SHEET_FIELD_PATTERNS = [
   ['qr',      [/\bqr\b/, /c[oó]digo/, /credencial/, /\bid\b/]],
   ['estatus', [/aceptado.*rechazado/, /aceptad.*o.*rechazad/]],
+  ['rechazo', [/^rechazo$/, /motivo/]],
   ['vence',   [/venc/, /caduc/, /expira/, /validez/, /valid/]]
 ];
 /* Índices de columna resueltos en loadSolicitudes() — se reutilizan al
@@ -1336,6 +1347,7 @@ function loadSolicitudes(onDone) {
     var qrHeaderName=SHEET_COLMAP.qr!==undefined ? headerRow[SHEET_COLMAP.qr] : null;
     var estatusHeaderName=SHEET_COLMAP.estatus!==undefined ? headerRow[SHEET_COLMAP.estatus] : null;
     var venceHeaderName=SHEET_COLMAP.vence!==undefined ? headerRow[SHEET_COLMAP.vence] : null;
+    var rechazoHeaderName=SHEET_COLMAP.rechazo!==undefined ? headerRow[SHEET_COLMAP.rechazo] : null;
     if(!qrHeaderName){
       devLog('✗ No se reconoce ninguna columna de QR/credencial en "'+CFG.SHEET_RANGE+'" — encabezados: '+headerRow.join(' | '),'error');
     }
@@ -1345,8 +1357,10 @@ function loadSolicitudes(onDone) {
     var sheetRows=sheetRowsToObjects(rawRows);
     accesosMap=results[1].data||{}; // State Bucket → {uid: {motivoRechazo,fechaResolucion,resueltosPor,qr,ymsQr}}
     solicitudes=sheetRows.map(function(row,idx){
-      var rawUid=qrHeaderName ? row[qrHeaderName] : '';
-      var uid=normalizeQR(rawUid) || ('AC-'+String(idx+1).padStart(4,'0'));
+      // "uniqueid" es una columna real y literal del Sheet — el identificador
+      // interno de la solicitud, distinto de "Nuevo_QR" (la credencial física
+      // que escanea el guardia, ya poblada desde el envío del Form).
+      var uid=String(row['uniqueid']||'').trim() || ('AC-'+String(idx+1).padStart(4,'0'));
       var csvRow=accesosMap[uid]||{};
       // Merge: campos del Sheet + override con metadata de accesos_state
       // (motivoRechazo, quién/cuándo resolvió, qr impreso, ymsQr) — estatus
@@ -1362,13 +1376,15 @@ function loadSolicitudes(onDone) {
       merged['__row']=idx+2; // fila real del Sheet (1 = encabezado, 2 = primera fila de datos)
       merged['__estatusRaw']=estatusHeaderName ? row[estatusHeaderName] : '';
       merged['__venceRaw']=venceHeaderName ? row[venceHeaderName] : '';
+      merged['__rechazoRaw']=rechazoHeaderName ? row[rechazoHeaderName] : '';
+      merged['__qrRaw']=qrHeaderName ? row[qrHeaderName] : '';
       return rowToSolicitud(merged,idx);
     });
-    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' | col qr="'+qrHeaderName+'" estatus="'+estatusHeaderName+'" vence="'+venceHeaderName+'")','info');
+    devLog('✓ solicitudes: '+solicitudes.length+' (Sheet: '+sheetRows.length+' | accesos_state: '+Object.keys(accesosMap).length+' | col uniqueid nativa, qr(Nuevo_QR)="'+qrHeaderName+'" estatus="'+estatusHeaderName+'" vence="'+venceHeaderName+'")','info');
     if(sheetRows.length>0){
       var r0=sheetRows[0];
       devLog('cols disponibles: '+Object.keys(r0).join(' | '),'info');
-      devLog('fila[0] → sitio=«'+r0['Sitio']+'» qr=«'+(qrHeaderName?r0[qrHeaderName]:'')+'»','info');
+      devLog('fila[0] → sitio=«'+r0['Sitio']+'» uniqueid=«'+r0['uniqueid']+'» qr=«'+(qrHeaderName?r0[qrHeaderName]:'')+'»','info');
     }
     devLog('activeSite=«'+activeSite+'» | solicitudes[0].sitio=«'+(solicitudes[0]&&solicitudes[0].sitio)+'»','info');
     showToast(solicitudes.length+' solicitudes cargadas','success');
@@ -1697,12 +1713,15 @@ function writeSheetCell(colIndex,row,value){
   });
 }
 
-/* Escribe estatus + vencimiento DIRECTO en el Sheet — es la fuente que lee
-   el scanner de guardias, no accesos_state. Sin if_updated_at (el proxy de
-   Sheets no lo soporta, a diferencia de State): dos escrituras casi
-   simultáneas sobre la MISMA fila no tienen protección de conflicto. En
-   uso normal (un gestor resolviendo una solicitud a la vez) el riesgo es
-   bajo; no hay forma de detectarlo si ocurre. */
+/* Escribe estatus + vencimiento + motivo de rechazo DIRECTO en el Sheet —
+   es la fuente que lee el scanner de guardias, no accesos_state. Sin
+   if_updated_at (el proxy de Sheets no lo soporta, a diferencia de State):
+   dos escrituras casi simultáneas sobre la MISMA fila no tienen
+   protección de conflicto. En uso normal (un gestor resolviendo una
+   solicitud a la vez) el riesgo es bajo; no hay forma de detectarlo si
+   ocurre. estatus/vencimiento son obligatorias (sin ellas el guardia no
+   puede validar); "Rechazo" es best-effort — si no se reconoce la
+   columna, el motivo igual queda guardado en accesos_state.*/
 function writeAccesoToSheet(acceso){
   if(!acceso._sheetRow){
     return Promise.reject(new Error('sin fila de Sheet para '+acceso.id+' — no se puede escribir'));
@@ -1718,6 +1737,9 @@ function writeAccesoToSheet(acceso){
     writes.push(writeSheetCell(SHEET_COLMAP.vence, acceso._sheetRow, acceso.fechaVencimiento||''));
   } else {
     return Promise.reject(new Error('no se reconoce la columna de vencimiento en el Sheet'));
+  }
+  if(SHEET_COLMAP.rechazo!==undefined){
+    writes.push(writeSheetCell(SHEET_COLMAP.rechazo, acceso._sheetRow, acceso.motivoRechazo||''));
   }
   return Promise.all(writes);
 }
@@ -1754,7 +1776,7 @@ function persistAcceso(acceso){
 var _qrModalS=null;
 function openQRModal(e){
   if(e) e.stopPropagation();
-  var s=getById(currentDetailId); if(!s||!s.qr) return;
+  var s=getById(currentDetailId); if(!s||s.estatus!=='aceptado'||!s.qr) return;
   _qrModalS=s;
   var nameEl=document.getElementById('qrmName');
   var badgeEl=document.getElementById('qrmBadge');
@@ -1883,7 +1905,7 @@ function loadImageEl(src){
 /* Foto ya cargada en el círculo del héroe (loadDetailPhoto ya la trajo al
    abrir el detalle) — si no hay, exporta sin foto en vez de fallar. */
 function getExportPhotoImage(s){
-  var map=imageMappingFor(s.id);
+  var map=imageMappingFor(s.qr);
   var docId=map.foto_doc_id;
   if(docId && _docBlobCache[docId]) return loadImageEl(_docBlobCache[docId].url).catch(function(){ return null; });
   return Promise.resolve(null);
@@ -2052,7 +2074,7 @@ function printGafete(s){
   pa.innerHTML=buildBadge(s);
   var qrEl=pa.querySelector('.gafete-qb');
   if(qrEl){qrEl.innerHTML='';new QRCode(qrEl,{text:s.qr,width:94,height:94,correctLevel:QRCode.CorrectLevel.M});}
-  var map=imageMappingFor(s.id);
+  var map=imageMappingFor(s.qr);
   if(map.foto_doc_id&&_docBlobCache[map.foto_doc_id]){
     var photoEl=pa.querySelector('.gafete-photo-wrap');
     if(photoEl){
@@ -2063,15 +2085,6 @@ function printGafete(s){
     }
   }
   setTimeout(function(){window.print();pa.innerHTML='';},200);
-}
-function patchQR(acceso){
-  commitUniqueField(DOC_IDS.accesos,'accesos_state',acceso.id,function(prev){
-    prev.qr=acceso.qr;
-    return prev;
-  }).then(function(res){
-    if(res.ok) devLog('✓ patchQR OK: '+acceso.id+' → '+acceso.qr,'info');
-    else devLog('✗ patchQR FAIL: '+res.error,'warn');
-  });
 }
 
 /* ===== Recargar fotos — relee la pestaña "Publicados" directo del Sheet =====
@@ -2092,14 +2105,15 @@ function refreshImages(uniqueid, btn, silent){
     if(btn){ btn.disabled=false; btn.innerHTML='&#8635; Recargar imágenes'; }
     if(!silent) showToast('Fotos actualizadas desde el Sheet ('+n+' filas)','success');
     // Cargar foto en el círculo del héroe si ya está publicada
-    loadDetailPhoto(uniqueid);
+    var sHero=getById(uniqueid);
+    loadDetailPhoto(uniqueid, sHero);
     // Refrescar el panel de docs si el detalle está abierto
     if(currentDetailId===uniqueid){
-      var s=getById(uniqueid);
+      var s=sHero;
       if(s){
         var docsSection=document.getElementById('docs-section-'+uniqueid);
         if(docsSection){
-          var imgMap=imageMappingFor(uniqueid);
+          var imgMap=imageMappingFor(s.qr);
           docsSection.innerHTML=
             '<div class="docs">'+
               dThumb('Foto',s.foto,s.fotoUrl,ic.image,imgMap.foto_doc_id)+
@@ -2528,7 +2542,8 @@ function _setPhotoLoading(uniqueid, loading){
    - Si hay foto_doc_id mapeado: carga blob desde Grid (gestor con acceso vía workspace).
    - Si no hay mapeo: sin foto — usar "Recargar imágenes" para sincronizar primero. */
 function loadDetailPhoto(uniqueid, solicitud){
-  var map=imageMappingFor(uniqueid);
+  var s=solicitud||getById(uniqueid);
+  var map=imageMappingFor(s&&s.qr);
   if(map.foto_doc_id){
     // Reutilizar blob cacheado por doc_id (compartido con openDoc)
     if(_docBlobCache[map.foto_doc_id]){
@@ -2591,10 +2606,6 @@ function openDetail(id){
   currentDetailId=id;
   var s=getById(id); if(!s) return;
   document.getElementById('detailBadge').innerHTML='<span class="badge '+s.estatus+'">'+BADGE_CONTENT[s.estatus]()+'</span>';
-  if(s.estatus==='aceptado' && !s.qr){
-    s.qr=s.id+'-'+(s.curp||'').trim();
-    patchQR(s);
-  }
   document.getElementById('detailBody').innerHTML=buildDetail(s);
   document.getElementById('detailActions').innerHTML=buildActions(s);
   document.getElementById('detailScreen').classList.add('open');
@@ -2650,14 +2661,14 @@ function buildDetail(s){
     [ic.building,'Empresa',esc(s.empresa)],
     [ic.mail,'Líder que justifica',esc(s.liderJustifica)]
   ]);
-  var imgMap=imageMappingFor(s.id);
+  var imgMap=imageMappingFor(s.qr);
   h+='<div class="eyebrow" style="margin:20px 2px 8px">Documentos</div>'+
      '<div class="d-section" id="docs-section-'+esc(s.id)+'">'+
        '<div class="docs">'+
          dThumb('Foto',s.foto,s.fotoUrl,ic.image,imgMap.foto_doc_id)+
          dThumbDisabled('INE',ic.idCard)+
          dThumbDisabled('Pasaporte',ic.globe)+
-         (s.qr ? qrThumb() : '')+
+         (s.estatus==='aceptado' && s.qr ? qrThumb() : '')+
        '</div>'+
        '<button class="btn btn-block btn-secondary" style="width:100%;margin-top:8px" id="btn-refresh-images" onclick="refreshImages(\''+esc(s.id)+'\', this)">&#8635; Recargar imágenes</button>'+
      '</div>';
@@ -2769,7 +2780,9 @@ function confirmAccept(){
   if(!val||val<=today){document.getElementById('expireErr').classList.add('show');return;}
   var s=getById(pendingAction);
   s.estatus='aceptado'; s.fechaVencimiento=val; s.motivoRechazo=null;
-  if(!s.qr) s.qr = s.id+'-'+(s.curp||'').trim();
+  // s.qr viene de "Nuevo_QR" en el Sheet (ya poblado desde el envío del Form) —
+  // esta app sólo lo lee, nunca lo inventa ni lo escribe.
+  if(!s.qr) devLog('⚠ confirmAccept: '+s.id+' sin Nuevo_QR en el Sheet — no habrá badge/QR para imprimir','warn');
   persistAcceso(s);
   closeModal('acceptModal'); closeDetail(); setTab('aceptado');
   showToast('Acceso aceptado correctamente','success');
@@ -2960,11 +2973,14 @@ function rowToSolicitud(r, idx){
     pasaporte:        !!(r['Pasaporte'] && String(r['Pasaporte']).trim() !== ''),
     pasaporteUrl:     r['Pasaporte']      || null,
     estatus:          estatus,
-    motivoRechazo:    r['motivoRechazo']    || r['motivo_rechazo']    || r['Rechazo'] || null,
+    motivoRechazo:    r['__rechazoRaw'] || r['motivoRechazo'] || r['motivo_rechazo'] || null,
     fechaVencimiento: r['__venceRaw'] || null,
     fechaResolucion:  r['fechaResolucion']  || r['fecha_resolucion']  || null,
     resueltosPor:     r['resueltosPor']     || r['resuelto_por']      || null,
-    qr:               r['qr']              || null,
+    // "Nuevo_QR" ya viene poblado desde el envío del Form (para toda
+    // solicitud, sin importar su estatus) — sólo se lee, nunca se inventa
+    // ni se escribe desde esta app.
+    qr:               normalizeQR(r['__qrRaw']) || r['qr'] || null,
     ymsQr:            r['ymsQr']           || null
   };
 }
