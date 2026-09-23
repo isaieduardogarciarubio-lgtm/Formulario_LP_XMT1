@@ -649,19 +649,29 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
 .checklist input{width:16px;height:16px;accent-color:var(--primary);cursor:pointer;}
 .gate-card .btn{width:100%;margin-top:22px;justify-content:center;}
 
+/* Toggle de vista (grid/lista) — solo tiene sentido en desktop, donde el
+   grid multi-columna existe; en mobile siempre es una sola columna. */
+#viewModeBtn{display:none;}
+
 /* ── Desktop (768px+) — específico del gestor ───────────────────── */
 @media(min-width:768px){
   #mainArea{max-width:none;flex:1;}
   .mobile-header{display:none;}
   .mobile-site-bar{display:none!important;}
   main{padding:0 24px 40px;}
+  #viewModeBtn{display:inline-flex;}
   /* En vez de topar el ancho de la lista a ~700px (deja un colchón enorme
      vacío junto al sidebar en monitores anchos), se reparte el espacio
-     real en columnas — más tarjetas visibles, cero espacio muerto. */
+     real en columnas — más tarjetas visibles, cero espacio muerto.
+     .view-list (toggle) vuelve a la lista de una sola columna, para quien
+     prefiera esa vista. */
   .list{
     max-width:none;display:grid;
     grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
     gap:12px;align-items:start;
+  }
+  .list.view-list{
+    display:flex;flex-direction:column;max-width:720px;
   }
   .list .empty{grid-column:1/-1;}
   .screen{
@@ -775,6 +785,9 @@ body.gating .sidebar,body.gating #mainArea{display:none!important;}
       <button id="refreshBtn" class="btn btn-secondary" onclick="refrescarDatos(this)" style="flex:none">
         <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.66"/></svg>
         Actualizar datos
+      </button>
+      <button id="viewModeBtn" class="btn btn-secondary" onclick="toggleViewMode()" style="flex:none" title="Cambiar a vista de lista">
+        <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
       </button>
       <button id="selectModeBtn" class="btn btn-secondary" onclick="toggleSelectMode()" style="flex:none" title="Seleccionar varias para eliminar">
         <svg class="icon icon-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="6" height="6" x="3" y="3" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>
@@ -1115,6 +1128,8 @@ var ic = (function(){
     editCal:   mk('<rect width="18" height="18" x="3" y="4" rx="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="m9 16 2 2 4-4"/>'),
     search:    mk('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>'),
     trash:     mk('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>'),
+    list:      mk('<line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/>'),
+    layoutGrid:mk('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>'),
     qrScan:    mk('<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>'),
     /* Large icons for empty states */
     lgInbox:   mkLg('<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>'),
@@ -1333,6 +1348,23 @@ var searchResults = [];   // resultados del tab Buscar
    ejemplo, rechazados viejos + aceptados vencidos antes de un solo borrado. */
 var selectMode = false;
 var selectedIds = {};
+
+/* Vista de lista de solicitudes en desktop: grid (varias columnas, default)
+   vs. lista (una columna ancha, como antes). Solo aplica >=768px — en
+   mobile siempre es una columna, así que el botón se oculta ahí. */
+var listViewMode = false;
+function toggleViewMode(){
+  listViewMode = !listViewMode;
+  updateViewModeUI();
+}
+function updateViewModeUI(){
+  var list = document.getElementById('list');
+  if(list) list.classList.toggle('view-list', listViewMode);
+  var btn = document.getElementById('viewModeBtn');
+  if(!btn) return;
+  btn.innerHTML = listViewMode ? ic.layoutGrid : ic.list;
+  btn.title = listViewMode ? 'Cambiar a vista de cuadrícula' : 'Cambiar a vista de lista';
+}
 
 /* solicitudes[] se llena en loadSolicitudes() al entrar a la app. */
 var solicitudes = [];
@@ -2407,6 +2439,7 @@ function loadAppConfig(onDone){
 function enterApp(row){
   hideAllGates();
   document.body.classList.remove('gating');
+  updateViewModeUI();
 
   var u = SESSION.user || {};
   var init=(u.email||'').split('@')[0].split('.').map(function(p){return p.charAt(0);}).join('').slice(0,2).toUpperCase();
