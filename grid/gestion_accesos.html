@@ -1721,7 +1721,10 @@ function writeSheetCell(colIndex,row,value){
   return GridClient.call('/api/v1/sheets/'+encodeURIComponent(CFG.SHEET_ID)+'?doc_id='+encodeURIComponent(DOC_IDS.usuarios)+'&range='+encodeURIComponent(range),{
     method:'PUT',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({values:[[value]]})
+    // "range" va también en el body (además de la URL) — Grid pasa el
+    // ValueRange de la API real de Sheets, que lo exige ahí (confirmado
+    // por el 422 "body -> range: Field required" al mandarlo sólo en la URL).
+    body:JSON.stringify({range:range, values:[[value]]})
   }).then(function(res){
     if(!res.ok){
       // Se lee el cuerpo del error (detail/error de Grid) para saber la
