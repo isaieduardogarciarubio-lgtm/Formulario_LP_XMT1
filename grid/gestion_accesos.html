@@ -2163,9 +2163,8 @@ function drawGafeteCanvas(s){
    sólo el QR suelto. Si algo falla, cae de vuelta al PNG simple del QR
    con un aviso — nunca deja al usuario sin nada que descargar. */
 function downloadBadgeImage(){
-  var s=_qrModalS; if(!s) return;
-  var pngPromise = drawGafeteCanvas(s);
-  pngPromise
+  var s=_qrModalS; if(!s) return Promise.resolve();
+  return drawGafeteCanvas(s)
     .then(function(pngDataUrl){
       var a=document.createElement('a');
       a.href=pngDataUrl;
@@ -2228,18 +2227,27 @@ function shareEmail(to,subject,body){
     window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(toAddr)+'&su='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body),'_blank');
   }
 }
+/* WhatsApp/correo sólo pueden precargar TEXTO en el link (wa.me/mailto:
+   no dejan adjuntar un archivo por URL) — así que antes de abrir el
+   share se descarga el PNG del gafete, para que ya esté en Descargas y
+   el usuario sólo tenga que adjuntarlo a mano. Se descarga PRIMERO y se
+   espera a que termine (drawGafeteCanvas es async — carga la foto) antes
+   de disparar el share: si fuera al revés, un share que navega la
+   pestaña completa (ver shareWhatsApp) podría cortar la descarga a
+   medias. */
 function shareGafete(type){
   var s=_qrModalS; if(!s) return;
+  if(type==='pdf'){ printGafete(s); return; }
   var nombre=((s.nombre||'')+' '+(s.apPaterno||'')+' '+(s.apMaterno||'')).trim();
-  if(type==='whatsapp'){
-    // WhatsApp: incluye el código como referencia de texto legible para el destinatario
-    shareWhatsApp('Gafete de acceso\nNombre: '+nombre+'\nSitio: '+(s.sitio||'—')+'\nCódigo: '+s.qr);
-  } else if(type==='correo'){
-    // Correo: sin código interno del sistema
-    shareEmail(s.correo||'', 'Gafete de acceso — '+nombre, 'Gafete de acceso\nNombre: '+nombre+'\nSitio: '+(s.sitio||'—'));
-  } else if(type==='pdf'){
-    printGafete(s);
-  }
+  downloadBadgeImage().then(function(){
+    if(type==='whatsapp'){
+      // WhatsApp: incluye el código como referencia de texto legible para el destinatario
+      shareWhatsApp('Gafete de acceso\nNombre: '+nombre+'\nSitio: '+(s.sitio||'—')+'\nCódigo: '+s.qr);
+    } else if(type==='correo'){
+      // Correo: sin código interno del sistema
+      shareEmail(s.correo||'', 'Gafete de acceso — '+nombre, 'Gafete de acceso\nNombre: '+nombre+'\nSitio: '+(s.sitio||'—'));
+    }
+  });
 }
 function printGafete(s){
   var pa=document.getElementById('qrPrintArea');
